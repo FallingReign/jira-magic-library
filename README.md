@@ -2,8 +2,6 @@
 
 Schema-aware helpers for working with the JIRA Server/Data Center REST API. JML converts human-readable payloads into API-ready requests, validates data against live schema metadata, and includes demos for parsing/validation/bulk retries.
 
-> **Status:** v0.1.1 (Epics 1–4 foundations complete). The package is not yet published to npm; consume directly from Git.
-
 ---
 
 ## Contents
@@ -66,7 +64,7 @@ Since the package is not on npm yet, reference the Git repo directly (or via loc
 // your-project/package.json
 {
   "dependencies": {
-    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v0.1.1"
+    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v1.0.0"
   }
 }
 ```
@@ -104,8 +102,8 @@ const jml = new JML({
 ```ts
 const result = await jml.validate({
   data: [
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Prepare sprint board' },
-    { Project: 'ZUL', 'Issue Type': 'Bug', Summary: '' } // missing summary
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Prepare sprint board' },
+    { Project: 'PROJ', 'Issue Type': 'Bug', Summary: '' } // missing summary
   ],
 });
 
@@ -197,26 +195,10 @@ npm run demo          # interactive menu
 
 Notable demos:
 
-- **Schema Validation (E4-S07)** – Run validation across CSV/JSON/YAML without creating issues.
-- **Bulk Import (E4-S04/E4-S05)** – Parse data, create issues, inspect manifests, and retry failed rows.
+- **Schema Validation** – Run validation across CSV/JSON/YAML without creating issues.
+- **Bulk Import** – Parse data, create issues, inspect manifests, and retry failed rows.
 
 Each demo reads the main repo’s `.env` / config manager, so ensure those values point to a safe test project.
-
----
-
-## Development
-
-Key commands in this repo:
-
-| Command | Purpose |
-|---------|---------|
-| `npm run build` | Compile TypeScript to `dist/`. |
-| `npm test -- --coverage` | Run Jest unit/integration suites (coverage must stay ≥95% branches). |
-| `npm run lint` | ESLint across `src/` and `tests/`. |
-| `npm run validate:workflow` | Enforces backlog/story consistency before commits. |
-| `npm run demo` (inside `demo-app/`) | Launch interactive demo. |
-
-See [AGENTS.md](AGENTS.md) for the end-to-end workflow (planning → review).
 
 ---
 
@@ -228,13 +210,3 @@ See [AGENTS.md](AGENTS.md) for the end-to-end workflow (planning → review).
 - [Bulk create with manifest + retry](docs/guides/bulk-manifest-retry.md)
 - [Troubleshooting & common errors](docs/guides/troubleshooting.md)
 
----
-
-## Reference Docs
-
-- [AGENTS.md](AGENTS.md) – Development workflow & validation rules.
-- [docs/backlog.md](docs/backlog.md) – Epic/story status.
-- [README-RDD.md](README-RDD.md) – Original “Readme Driven Development” vision document (legacy / future-looking).
-- API Reference (TypeDoc): After CI runs, published from `gh-pages` at `https://fallingreign.github.io/jira-magic-library/` (auto-updated on pushes to `main`).
-
-Need help wiring the library into another project? Check the FAQ in AGENTS.md or open an issue.
