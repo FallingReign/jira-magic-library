@@ -194,7 +194,7 @@ export class FieldResolver {
    * ```
    */
   private normalizeFieldName(name: string): string {
-    return name.toLowerCase().replace(/[\s_-]/g, '');
+    return name.toLowerCase().replace(/[\s_\/-]/g, '');
   }
 
   /**
@@ -226,12 +226,42 @@ export class FieldResolver {
    */
   private findFieldByName(schema: ProjectSchema, name: string): string | null {
     const normalized = this.normalizeFieldName(name);
+    const entries = Object.entries(schema.fields).map(([fieldId, field]) => ({
+      fieldId,
+      normalizedName: this.normalizeFieldName(field.name),
+    }));
 
-    for (const [fieldId, field] of Object.entries(schema.fields)) {
-      const fieldNameNormalized = this.normalizeFieldName(field.name);
-      if (fieldNameNormalized === normalized) {
-        return fieldId;
-      }
+    // 1) Exact normalized match
+    const exact = entries.find((entry) => entry.normalizedName === normalized);
+    if (exact) {
+      return exact.fieldId;
+    }
+
+    // 2) Prefix/containment match (handles plurals like "fix version/s" vs "fix version")
+    const prefixMatches = entries.filter((entry) => {
+      const lengthDiff = Math.abs(entry.normalizedName.length - normalized.length);
+      return (
+        lengthDiff <= 2 &&
+        (entry.normalizedName.startsWith(normalized) ||
+          normalized.startsWith(entry.normalizedName))
+      );
+    });
+    if (prefixMatches.length === 1) {
+      return prefixMatches[0]!.fieldId;
+    }
+
+    // 3) Containment match (handles shortened inputs like "version" vs "fixversions")
+    const containsMatches = entries.filter((entry) => {
+      const lengthDiff = Math.abs(entry.normalizedName.length - normalized.length);
+      return (
+        normalized.length >= 5 &&
+        lengthDiff <= 4 &&
+        (entry.normalizedName.includes(normalized) ||
+          normalized.includes(entry.normalizedName))
+      );
+    });
+    if (containsMatches.length === 1) {
+      return containsMatches[0]!.fieldId;
     }
 
     return null;

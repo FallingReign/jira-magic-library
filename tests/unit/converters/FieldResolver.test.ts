@@ -55,6 +55,13 @@ describe('FieldResolver', () => {
           required: false,
           schema: { type: 'string', custom: 'com.pyxis.greenhopper.jira:gh-epic-link', customId: 10025 },
         },
+        fixVersions: {
+          id: 'fixVersions',
+          name: 'Fix Version/s',
+          type: 'array',
+          required: false,
+          schema: { type: 'array', items: 'version' },
+        },
       },
     };
 
@@ -351,6 +358,26 @@ describe('FieldResolver', () => {
       expect(result).toEqual({
         description: undefined,
       });
+    });
+
+    it('should resolve plural Fix Version/s when user types Fix Version', async () => {
+      const input = {
+        'Fix Version': ['ZUL_MS7'],
+      };
+
+      const result = await resolver.resolveFields('ENG', 'Bug', input);
+
+      expect(result).toHaveProperty('fixVersions');
+    });
+
+    it('should resolve Fix Version/s when user types Version', async () => {
+      const input = {
+        Version: ['ZUL_MS7'],
+      };
+
+      const result = await resolver.resolveFields('ENG', 'Bug', input);
+
+      expect(result).toHaveProperty('fixVersions');
     });
   });
 
