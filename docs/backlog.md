@@ -38,6 +38,7 @@ Stories outside the active epics but still tracked for delivery.
 
 - ✅ [S1: User Ambiguity Policy Options](stories/BACKLOG-STORY-001-user-ambiguity-policy.md) - 3 points (Commit 2483346c9e0496982e75f9469ed9066cf3780d18)
 - 📋 [S2: User Directory Ambiguity Spike](stories/BACKLOG-STORY-002-user-directory-spike.md) - 5 points
+- 📋 [S3: Fuzzy Field Name Resolution](stories/BACKLOG-STORY-003-fuzzy-field-name-resolution.md) - 5 points
 
 ---
 
