@@ -65,11 +65,38 @@
 - [ ] Support multiple levels: Epic → Story → Subtask → (future sub-subtask levels)
 - [ ] Support parallel branches: `epic-1 → [story-1, story-2, story-3]` created in parallel batches
 - [ ] Preserve batching strategy: Group issues by depth level, batch within level
+- [ ] **Track index mapping**: Map original row indices to sorted batch indices for error reporting
+
+**Index Mapping Example**:
+```javascript
+// Original input order:
+[
+  { uid: 'story-1', Parent: 'epic-1' },  // Original index: 0
+  { uid: 'epic-1' },                      // Original index: 1
+  { uid: 'task-1', Parent: 'story-1' }   // Original index: 2
+]
+
+// After topological sort (sent to API):
+[
+  { uid: 'epic-1' },                      // Batch index: 0 (was original index 1)
+  { uid: 'story-1', Parent: 'epic-1' },  // Batch index: 1 (was original index 0)
+  { uid: 'task-1', Parent: 'story-1' }   // Batch index: 2 (was original index 2)
+]
+
+// Index mapping (for error translation):
+{
+  batchIndexToOriginal: [1, 0, 2],  // Batch index → Original index
+  originalToBatch: [1, 0, 2]         // Original index → Batch index
+}
+
+// When JIRA API returns failedElementNumber: 1 (batch index)
+// We translate to: Original row index 0 (story-1)
+```
 
 **Evidence**: 
 - Unit tests: `tests/unit/bulk/topological-sort.test.ts`
-- Test cases: 2-level hierarchy, 3-level hierarchy, parallel branches
-- Integration test: Create Epic → 3 Stories → 5 Subtasks (verify creation order)
+- Test cases: 2-level hierarchy, 3-level hierarchy, parallel branches, **index mapping verification**
+- Integration test: Create Epic → 3 Stories → 5 Subtasks (verify creation order and error mapping)
 
 ---
 
@@ -91,6 +118,7 @@
 - [ ] Track created keys: `{ 'epic-1': 'PROJ-100', 'story-1': 'PROJ-101' }`
 - [ ] Replace UID references with actual keys before creating dependent issues
 - [ ] Update manifest with UID → Key mapping: `manifest.uidMap = { 'epic-1': 'PROJ-100' }`
+- [ ] **Translate API error indices**: When JIRA returns `failedElementNumber` (batch index), map to original row index
 - [ ] Handle partial success: If parent fails, mark all descendants as failed (dependency failure)
 
 **Example Flow**:
@@ -113,10 +141,41 @@
 }
 ```
 
+**Error Index Translation Example**:
+```javascript
+// Original input (user order):
+[
+  { uid: 'story-1', ..., Parent: 'epic-1' },  // Original row 0
+  { uid: 'epic-1', ... },                      // Original row 1
+]
+
+// After topological sort (API order):
+[
+  { uid: 'epic-1', ... },                      // Batch index 0 (was row 1)
+  { uid: 'story-1', ..., Parent: 'PROJ-100' } // Batch index 1 (was row 0)
+]
+
+// JIRA API response:
+{
+  "errors": [{
+    "failedElementNumber": 1,  // Batch index (story-1)
+    "elementErrors": { "errors": { "parent": "Invalid parent" } }
+  }]
+}
+
+// Library translates failedElementNumber: 1 → Original row index: 0
+// Manifest:
+{
+  failed: [0],  // User sees: Row 0 failed (story-1)
+  errors: { 0: { parent: "Invalid parent" } }
+}
+```
+
 **Evidence**: 
 - Integration test: `tests/integration/bulk-hierarchy.test.ts`
 - Test case: Create Epic → Story → Subtask (verify keys replaced correctly)
 - Test case: Parent creation fails → Children marked as dependency failure
+- **Test case: Topologically sorted batch fails → Error mapped to original row index**
 
 ---
 
@@ -153,7 +212,7 @@ await jml.issues.create([...], { retry: 'bulk-abc123' });
 
 ### ✅ AC7: Ambiguity Policy Configuration
 - [ ] Add `parent` policy to `AmbiguityPolicyConfig` in JMLConfig
-- [ ] Support policies: `'first'` (default), `'error'`, `'score'`
+- [ ] Support policies: `'first'`, `'error'`, `'score'`
 - [ ] Apply policy only for JIRA summary searches (not payload or UID resolution)
 - [ ] Default policy: `'error'` (throw error if multiple JIRA matches)
 - [ ] User can override: `new JML({ ..., ambiguityPolicy: { parent: 'first' } })`
@@ -316,6 +375,7 @@ export interface AmbiguityPolicyConfig {
    - Build graph from UID → Parent references
    - Detect circular dependencies
    - Topological sort using hierarchy levels
+   - **Track index mapping**: Original row index ↔ Batch index for error translation
 
 3. **Parent Reference Resolver** (`src/bulk/ParentReferenceResolver.ts`):
    - Implement 5-level resolution priority
@@ -327,6 +387,7 @@ export interface AmbiguityPolicyConfig {
    - Track UID → Key mappings during creation
    - Replace UID references before dependent creation
    - Update manifest with mappings
+   - **Translate API error indices**: Map `failedElementNumber` (batch index) to original row index using index map from sort
 
 5. **Config Update** (`src/types/config.ts`):
    - Add `parent?: AmbiguityPolicy` to `AmbiguityPolicyConfig`
@@ -339,13 +400,51 @@ export interface AmbiguityPolicyConfig {
 **Topological Sort Algorithm**:
 ```typescript
 // Pseudocode
-function topologicalSort(issues: Issue[]): Issue[] {
+function topologicalSort(issues: Issue[]): SortResult {
   1. Build graph: UID → Parent UID dependencies
   2. Detect cycles (DFS with visited/recursion stack)
   3. Assign depth level: root=0, child=parent.depth+1
   4. Group by depth level: [level0, level1, level2]
-  5. Return flattened: [...level0, ...level1, ...level2]
+  5. Create index mapping: Track original index → batch index
+  6. Return {
+       sortedIssues: [...level0, ...level1, ...level2],
+       indexMap: { batchIndexToOriginal: [...], originalToBatch: [...] }
+     }
 }
+```
+
+**Index Mapping Implementation**:
+```typescript
+interface SortResult {
+  sortedIssues: Issue[];
+  indexMap: {
+    batchIndexToOriginal: number[];  // Map batch index → original row index
+    originalToBatch: number[];        // Map original row index → batch index
+  };
+}
+
+// Example:
+const { sortedIssues, indexMap } = topologicalSort([
+  { uid: 'story-1', Parent: 'epic-1' },  // Original index: 0
+  { uid: 'epic-1' },                      // Original index: 1
+  { uid: 'task-1', Parent: 'story-1' }   // Original index: 2
+]);
+
+// Result:
+sortedIssues = [
+  { uid: 'epic-1' },                      // Batch index: 0
+  { uid: 'story-1', Parent: 'epic-1' },  // Batch index: 1
+  { uid: 'task-1', Parent: 'story-1' }   // Batch index: 2
+];
+
+indexMap = {
+  batchIndexToOriginal: [1, 0, 2],  // Batch 0 = Original 1, Batch 1 = Original 0, etc.
+  originalToBatch: [1, 0, 2]         // Original 0 = Batch 1, Original 1 = Batch 0, etc.
+};
+
+// When JIRA API returns failedElementNumber: 1
+const originalIndex = indexMap.batchIndexToOriginal[1]; // 0
+// Report error to user: "Row 0 failed (story-1)"
 ```
 
 **UID Resolution During Creation**:
