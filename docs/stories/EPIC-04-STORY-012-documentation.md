@@ -62,6 +62,16 @@
 
 **Evidence**: 
 
+### ✅ AC6: Document Hierarchy with UIDs (E4-S13)
+- [ ] Show: Creating Epic → Story → Subtask with UIDs in one call
+- [ ] Show: Parent reference formats (UID, key, summary)
+- [ ] Show: CSV with numeric UIDs (row numbers)
+- [ ] Show: Retry after partial hierarchy failure
+- [ ] Explain: UID resolution priority (explicit UID → key → local summary → JIRA summary)
+- [ ] Explain: Ambiguity policy configuration for parent references
+
+**Evidence**: 
+
 ---
 
 ## Technical Notes
@@ -79,7 +89,7 @@
 
 ## Related Stories
 
-- **Depends On**: E4-S01 through E4-S11 (documents all bulk operation features)
+- **Depends On**: E4-S01 through E4-S13 (documents all bulk operation features including UID hierarchy support)
 - **Blocks**: None
 - **Related**: None
 

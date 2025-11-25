@@ -16,7 +16,7 @@ This backlog contains all epics and high-level user stories for the JIRA Magic L
 | **Epic 1** | [Basic Issue Creation](#epic-1-basic-issue-creation) | 📁 Archived 2025-10-13 | 13 (63/63 pts) | HIGH | None |
 | **Epic 2** | [Core Field Types](#epic-2-core-field-types) | 📁 Archived 2025-10-23 | 14 (68/68 pts) | HIGH | Epic 1 ✅ |
 | **Epic 3** | [Issue Hierarchy & Complex Types](#epic-3-issue-hierarchy--complex-types) | 📁 Archived 2025-11-11 | 16 (66/74 pts) | HIGH | Epic 2 ✅ |
-| **Epic 4** | [Bulk Operations](#epic-4-bulk-operations) | ⏳ In Progress | 12 (66 pts) | HIGH | Epic 2 ✅ |
+| **Epic 4** | [Bulk Operations](#epic-4-bulk-operations) | ⏳ In Progress | 13 (74 pts) | HIGH | Epic 2 ✅ |
 | **Epic 5** | [Issue Updates & Transitions](#epic-5-issue-updates--transitions) | 📋 Planned | 7 (38 pts) | MEDIUM | Epic 2 ✅ |
 | **Epic 6** | [Advanced Features](#epic-6-advanced-features) | 📋 Planned | 10 (48 pts) | LOW | Epic 3, 5 |
 | **Epic 7** | [CLI Interface](#epic-7-cli-interface) | 📋 Planned | 5 (23 pts) | LOW | Epic 4 |
@@ -280,9 +280,10 @@ Stories outside the active epics but still tracked for delivery.
 | E4-S10 | [Incremental Validation Research](stories/EPIC-04-STORY-010-incremental-validation-research.md) | L (8) | P2 | 📋 Ready |
 | E4-S11 | [Performance Testing & Optimization](stories/EPIC-04-STORY-011-performance-testing.md) | M (5) | P1 | 📋 Ready |
 | E4-S12 | [Bulk Operations Documentation](stories/EPIC-04-STORY-012-documentation.md) | S (3) | P1 | 📋 Ready |
+| E4-S13 | [Hierarchy Support with UID References](stories/EPIC-04-STORY-013-hierarchy-uid-references.md) | L (8) | P0 | 📋 Ready |
 
-**Total Story Points**: 66 points  
-**Completed**: 34 points (52%)  
+**Total Story Points**: 74 points  
+**Completed**: 34 points (46%)  
 **Status**: ⏳ In Progress
 
 ---

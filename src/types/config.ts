@@ -18,6 +18,15 @@ export interface AmbiguityPolicyConfig {
    * - `score`: pick the highest-confidence candidate deterministically
    */
   user?: AmbiguityPolicy;
+
+  /**
+   * Policy for resolving ambiguous parent references (E4-S13 AC7).
+   * Applies only when summary search in JIRA returns multiple matches.
+   * - `error` (default): throw AmbiguityError if multiple matches
+   * - `first`: use first match from JIRA search results
+   * - `score`: rank matches by relevance (exact match, issue type, project, recency)
+   */
+  parent?: AmbiguityPolicy;
 }
 
 /**
