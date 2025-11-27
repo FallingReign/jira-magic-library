@@ -59,17 +59,18 @@ for (const level of batch.levels) {
 ## Acceptance Criteria
 
 ### AC1: Create Preprocessing Utility
-- [ ] Implement `preprocessHierarchyRecords(records)` in `src/operations/bulk/HierarchyPreprocessor.ts`
+- [ ] Implement `preprocessHierarchyRecords(records, projectKey, schema)` in `src/operations/bulk/HierarchyPreprocessor.ts`
 - [ ] Detect UIDs using existing `UidDetector.ts` (saved from previous implementation)
 - [ ] Automatically strip `uid` field from all records (library-internal field, not sent to JIRA)
 - [ ] If no UIDs: Return single level (backward compatible)
 - [ ] If UIDs found: Use JPO hierarchy discovery to determine creation order
   - Use `JPOHierarchyDiscovery.getHierarchy()` to get hierarchy structure
-  - Map issue types to JPO levels (id 0 = lowest/bottom, increasing = up)
+  - **Issue Type Name→ID Resolution**: Use `SchemaDiscovery.getIssueTypesForProject(projectKey)` to get mapping
+  - Match each record's `Issue Type` name to ID, then find corresponding JPO level via `issueTypeIds[]`
   - Group issues by JPO level for bottom-up creation (level 0 first, then 1, then 2, etc.)
   - Fallback: If JPO not available (returns null), use BFS algorithm (from saved `HierarchyLevels.ts`)
 - [ ] Return structure: `{ levels: HierarchyLevel[], uidMap?: Map<string, number> }`
-- [ ] Pure function (no side effects except hierarchy lookup)
+- [ ] Note: Not a pure function - requires `schema` and `hierarchy` discovery (async)
 
 **Important JPO Hierarchy Ordering:**
 - JPO uses level id 0 as LOWEST (bottom of hierarchy)
@@ -77,6 +78,13 @@ for (const level of batch.levels) {
 - Example: Sub-task (0) → Task (1) → Epic (2) → Super Epic (3) → Container (4) → Initiative (5)
 - Creation order: Create from BOTTOM to TOP (level 0 first, then 1, then 2, etc.)
 - This is OPPOSITE of typical parent-first thinking but matches JIRA's dependency structure
+
+**Issue Type Resolution Flow:**
+1. Input record has `"Issue Type": "Task"` (name)
+2. Call `SchemaDiscovery.getIssueTypesForProject("PROJ")` → `[{ id: "10001", name: "Task" }, ...]`
+3. Find ID: `"Task"` → `"10001"`
+4. Find JPO level where `issueTypeIds.includes("10001")` → level 1
+5. Group record into level 1 batch
 
 **Evidence:** (To be added upon completion)
 
