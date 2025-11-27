@@ -11,6 +11,8 @@ import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
 import { ManifestStorage } from './ManifestStorage.js';
 import { JiraBulkApiWrapper } from './JiraBulkApiWrapper.js';
 import { RedisCache } from '../cache/RedisCache.js';
+import { UidReplacer } from './bulk/UidReplacer.js';
+import type { HierarchyLevel } from './bulk/HierarchyLevels.js';
 
 /**
  * Input type for unified create() method
@@ -650,6 +652,203 @@ export class IssueOperations {
         })),
         // Validation failures (before API call)
         ...validationErrors.map(({ index, error }) => ({
+          index,
+          success: false as const,
+          error: { status: 400, errors: { validation: error.message } },
+        })),
+      ],
+    };
+  }
+
+  /**
+   * Create issues with hierarchy using level-based batching
+   * 
+   * Story: E4-S13 - AC2: Level-Based Handler Method
+   * 
+   * Processes hierarchy levels sequentially:
+   * 1. Create Level 0 issues (roots/epics)
+   * 2. Replace Parent UIDs with actual keys
+   * 3. Create Level 1 issues (children of roots)
+   * 4. Continue for all levels...
+   * 
+   * This enables efficient parallel creation within each level
+   * while maintaining parent-before-child dependencies.
+   * 
+   * @param levels - Hierarchy levels from preprocessHierarchyRecords()
+   * @param uidMap - Initial UID to index mapping (for tracking)
+   * @param existingMappings - Existing UID→Key mappings (for retry)
+   * @returns BulkResult with all created issues and UID mappings
+   * 
+   * @private
+   */
+  async createBulkHierarchy(
+    levels: HierarchyLevel[],
+    _uidMap?: Record<string, number>, // Preserved for future retry index mapping
+    existingMappings?: Record<string, string>
+  ): Promise<BulkResult> {
+    // Ensure bulk dependencies are available
+    if (!this.manifestStorage || !this.bulkApiWrapper) {
+      throw new Error('Bulk operations require cache to be configured');
+    }
+
+    const uidReplacer = new UidReplacer();
+    
+    // Load existing mappings for retry scenarios
+    if (existingMappings) {
+      uidReplacer.loadExistingMappings(existingMappings);
+    }
+
+    // Track all results across levels
+    const allCreated: Array<{ index: number; key: string }> = [];
+    const allFailed: Array<{ index: number; status: number; errors: Record<string, string> }> = [];
+    const allValidationErrors: Array<{ index: number; error: Error }> = [];
+    let totalIssues = 0;
+
+    // Process each level sequentially
+    for (const level of levels) {
+      totalIssues += level.issues.length;
+
+      // Build payloads for this level (with UID replacement)
+      const payloadResults = await Promise.allSettled(
+        level.issues.map(async (issue) => {
+          try {
+            // Replace UIDs with actual keys from previous levels
+            const recordWithReplacedUids = uidReplacer.replaceUids({ ...issue.record });
+            
+            // Build JIRA payload using validate mode
+            const payload = await this.createSingle(recordWithReplacedUids, { validate: true });
+            return {
+              index: issue.index,
+              success: true as const,
+              payload: { fields: payload.fields as Record<string, unknown> },
+              uid: (issue.record.uid as string) || undefined,
+            };
+          } catch (error) {
+            return {
+              index: issue.index,
+              success: false as const,
+              error: error as Error,
+            };
+          }
+        })
+      );
+
+      // Separate successful payloads from validation failures
+      const validPayloads: Array<{ 
+        index: number; 
+        payload: { fields: Record<string, unknown> }; 
+        uid?: string;
+      }> = [];
+      
+      payloadResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const value = result.value;
+          if (value.success) {
+            validPayloads.push({ 
+              index: value.index, 
+              payload: value.payload,
+              uid: value.uid,
+            });
+          } else {
+            allValidationErrors.push({ index: value.index, error: value.error });
+          }
+        } else {
+          // Promise rejection (shouldn't happen with try/catch)
+          allValidationErrors.push({ 
+            index: level.issues[0]?.index ?? 0, 
+            error: new Error(`Unexpected validation failure: ${result.reason}`) 
+          });
+        }
+      });
+
+      // Skip API call if no valid payloads for this level
+      if (validPayloads.length === 0) {
+        continue;
+      }
+
+      // Call bulk API for this level
+      const apiResult = await this.bulkApiWrapper.createBulk(
+        validPayloads.map(vp => vp.payload)
+      );
+
+      // Process results and record UID→Key mappings
+      apiResult.created.forEach((item) => {
+        const validPayload = validPayloads[item.index];
+        if (validPayload) {
+          // Remap to original index
+          allCreated.push({ 
+            index: validPayload.index, 
+            key: item.key 
+          });
+          
+          // Record UID→Key mapping for next level
+          if (validPayload.uid) {
+            uidReplacer.recordCreation(validPayload.uid, item.key);
+          }
+        }
+      });
+
+      // Collect failures (remap indices)
+      apiResult.failed.forEach((item) => {
+        const validPayload = validPayloads[item.index];
+        if (validPayload) {
+          allFailed.push({
+            index: validPayload.index,
+            status: item.status,
+            errors: item.errors,
+          });
+        }
+      });
+    }
+
+    // Build manifest with UID mappings
+    const manifestId = `bulk-hier-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const createdMap: Record<number, string> = {};
+    const errorsMap: Record<number, { status: number; errors: Record<string, string> }> = {};
+
+    allCreated.forEach(item => {
+      createdMap[item.index] = item.key;
+    });
+
+    allFailed.forEach(item => {
+      errorsMap[item.index] = { status: item.status, errors: item.errors };
+    });
+
+    allValidationErrors.forEach(({ index, error }) => {
+      errorsMap[index] = { status: 400, errors: { validation: error.message } };
+    });
+
+    const manifest: BulkManifest = {
+      id: manifestId,
+      timestamp: Date.now(),
+      total: totalIssues,
+      succeeded: allCreated.map(item => item.index),
+      failed: [...allFailed.map(item => item.index), ...allValidationErrors.map(ve => ve.index)],
+      created: createdMap,
+      errors: errorsMap,
+      uidMap: uidReplacer.getUidMap(), // Include UID mappings for retry
+    };
+
+    // Store manifest
+    await this.manifestStorage.storeManifest(manifest);
+
+    return {
+      manifest,
+      total: totalIssues,
+      succeeded: allCreated.length,
+      failed: allFailed.length + allValidationErrors.length,
+      results: [
+        ...allCreated.map(item => ({
+          index: item.index,
+          success: true as const,
+          key: item.key,
+        })),
+        ...allFailed.map(item => ({
+          index: item.index,
+          success: false as const,
+          error: { status: item.status, errors: item.errors },
+        })),
+        ...allValidationErrors.map(({ index, error }) => ({
           index,
           success: false as const,
           error: { status: 400, errors: { validation: error.message } },
