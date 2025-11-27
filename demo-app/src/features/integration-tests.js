@@ -48,10 +48,11 @@ export async function runIntegrationTests(config) {
       name: 'tests',
       message: 'Select tests to run:',
       choices: [
-        { name: '1️⃣  2-Level Hierarchy (Epic → Task)', value: 'two-level', checked: true },
-        { name: '2️⃣  3-Level Hierarchy (Epic → Task → Sub-task)', value: 'three-level', checked: true },
-        { name: '3️⃣  Multiple Issues Per Level (parallel batching)', value: 'parallel', checked: true },
-        { name: '4️⃣  Backward Compatibility (no UIDs)', value: 'no-uid', checked: true },
+        { name: '1️⃣  2-Level Hierarchy (Epic → Task)', value: 'two-level', checked: false },
+        { name: '2️⃣  3-Level Hierarchy (Epic → Task → Sub-task)', value: 'three-level', checked: false },
+        { name: '3️⃣  Multiple Issues Per Level (6 issues)', value: 'parallel', checked: false },
+        { name: '4️⃣  Backward Compatibility (no UIDs)', value: 'no-uid', checked: false },
+        { name: '5️⃣  Large-Scale Hierarchy (30 issues) ⭐', value: 'large-scale', checked: true },
       ],
     },
   ]);
@@ -103,6 +104,10 @@ export async function runIntegrationTests(config) {
 
     if (tests.includes('no-uid')) {
       await runNoUidTest(jml, projectKey, createdIssues, results);
+    }
+
+    if (tests.includes('large-scale')) {
+      await runLargeScaleTest(jml, projectKey, createdIssues, results);
     }
 
     // Show summary
@@ -449,6 +454,161 @@ async function runNoUidTest(jml, projectKey, createdIssues, results) {
     spinner.fail(`Error: ${err.message}`);
     results.failed++;
     results.errors.push(`No-UID: ${err.message}`);
+  }
+
+  console.log('\n');
+}
+
+/**
+ * Test 5: Large-Scale Hierarchy (30 issues)
+ * Structure: 3 Epics → 9 Tasks (3 per Epic) → 18 Sub-tasks (2 per Task)
+ */
+async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('5️⃣  Test: Large-Scale Hierarchy (30 issues)');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+  const timestamp = Date.now();
+  
+  // Build the hierarchy: 3 Epics → 9 Tasks → 18 Sub-tasks = 30 total
+  const input = [];
+  
+  // Level 0: 3 Epics
+  for (let e = 1; e <= 3; e++) {
+    input.push({
+      uid: `epic-${e}`,
+      Project: projectKey,
+      'Issue Type': 'Epic',
+      Summary: `[E4-S13-Test] Large Epic ${e} - ${timestamp}`,
+      'Epic Name': `Large Epic ${e} - ${timestamp}`,
+    });
+  }
+  
+  // Level 1: 9 Tasks (3 per Epic)
+  for (let e = 1; e <= 3; e++) {
+    for (let t = 1; t <= 3; t++) {
+      const taskNum = (e - 1) * 3 + t;
+      input.push({
+        uid: `task-${taskNum}`,
+        Project: projectKey,
+        'Issue Type': 'Task',
+        Summary: `[E4-S13-Test] Task ${taskNum} under Epic ${e}`,
+        Parent: `epic-${e}`,
+      });
+    }
+  }
+  
+  // Level 2: 18 Sub-tasks (2 per Task)
+  for (let t = 1; t <= 9; t++) {
+    for (let s = 1; s <= 2; s++) {
+      const subtaskNum = (t - 1) * 2 + s;
+      input.push({
+        uid: `subtask-${subtaskNum}`,
+        Project: projectKey,
+        'Issue Type': 'Sub-task',
+        Summary: `[E4-S13-Test] Sub-task ${subtaskNum} under Task ${t}`,
+        Parent: `task-${t}`,
+      });
+    }
+  }
+
+  info('Structure:');
+  info('  Level 0: 3 Epics');
+  info('  Level 1: 9 Tasks (3 per Epic)');
+  info('  Level 2: 18 Sub-tasks (2 per Task)');
+  info('  Total: 30 issues');
+  info('  Expected: 3 API calls (not 30 sequential calls)\n');
+
+  const spinner = ora('Creating 30-issue hierarchy...').start();
+
+  try {
+    const startTime = Date.now();
+    const result = await jml.issues.create(input);
+    const duration = Date.now() - startTime;
+    const avgPerIssue = Math.round(duration / result.total);
+
+    // Track created issues
+    result.results.forEach(r => {
+      if (r.success && r.key) {
+        createdIssues.push(r.key);
+      }
+    });
+
+    spinner.succeed(`Created ${result.succeeded}/${result.total} issues in ${duration}ms`);
+    
+    // Show breakdown by level
+    const epicResults = result.results.filter((_, i) => i < 3);
+    const taskResults = result.results.filter((_, i) => i >= 3 && i < 12);
+    const subtaskResults = result.results.filter((_, i) => i >= 12);
+    
+    console.log(`\n   📊 By Level:`);
+    console.log(`      Epics: ${epicResults.filter(r => r.success).length}/3 succeeded`);
+    console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/9 succeeded`);
+    console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/18 succeeded`);
+    
+    console.log(`\n   ⏱️  Performance:`);
+    console.log(`      Total: ${duration}ms`);
+    console.log(`      Avg per issue: ${avgPerIssue}ms`);
+    
+    // Performance rating
+    if (avgPerIssue < 200) {
+      success('      🚀 Excellent batching efficiency!');
+    } else if (avgPerIssue < 400) {
+      success('      ✓ Good batching efficiency');
+    } else if (avgPerIssue < 600) {
+      warning('      ⚠️  Moderate efficiency');
+    } else {
+      warning('      ⚠️  Slower than expected');
+    }
+    
+    // Sequential comparison
+    const estimatedSequential = result.total * 800; // ~800ms per issue sequentially
+    const speedup = Math.round(estimatedSequential / duration * 10) / 10;
+    console.log(`\n   📈 Estimated speedup vs sequential: ${speedup}x faster`);
+    console.log(`      (Sequential estimate: ~${Math.round(estimatedSequential / 1000)}s)`);
+
+    // Show sample created keys
+    if (result.succeeded > 0) {
+      console.log(`\n   ✓ Sample created keys:`);
+      // Show one from each level
+      const samples = [
+        result.results[0], // Epic
+        result.results[3], // Task
+        result.results[12], // Sub-task
+      ];
+      samples.forEach((r, i) => {
+        if (r?.success) {
+          const labels = ['Epic', 'Task', 'Sub-task'];
+          console.log(`      ${labels[i]}: ${input[r.index].uid} → ${r.key}`);
+        }
+      });
+    }
+
+    // Show failures if any
+    const failures = result.results.filter(r => !r.success);
+    if (failures.length > 0) {
+      console.log(`\n   ✗ Failures (${failures.length}):`);
+      failures.slice(0, 3).forEach(r => {
+        console.log(`      ${input[r.index].uid}: ${JSON.stringify(r.error)}`);
+      });
+      if (failures.length > 3) {
+        console.log(`      ... and ${failures.length - 3} more`);
+      }
+    }
+
+    // Pass/fail criteria
+    if (result.succeeded >= 20 && duration < 30000) {
+      results.passed++;
+      success('\n   ✓ Large-scale hierarchy test passed');
+    } else {
+      results.failed++;
+      results.errors.push(`Large-scale: ${result.succeeded}/30 in ${duration}ms`);
+    }
+
+  } catch (err) {
+    spinner.fail(`Error: ${err.message}`);
+    results.failed++;
+    results.errors.push(`Large-scale: ${err.message}`);
   }
 
   console.log('\n');
