@@ -13,6 +13,7 @@ import { JiraBulkApiWrapper } from './JiraBulkApiWrapper.js';
 import { RedisCache } from '../cache/RedisCache.js';
 import { UidReplacer } from './bulk/UidReplacer.js';
 import type { HierarchyLevel } from './bulk/HierarchyLevels.js';
+import { preprocessHierarchyRecords } from './bulk/HierarchyPreprocessor.js';
 
 /**
  * Input type for unified create() method
@@ -528,10 +529,27 @@ export class IssueOperations {
       records = parseResult.data;
     }
 
+    // E4-S13 AC3: Detect hierarchy and route accordingly
+    const preprocessResult = await preprocessHierarchyRecords(records);
+    
+    if (preprocessResult.hasHierarchy && preprocessResult.levels.length > 1) {
+      // Route to hierarchy-based creation
+      return this.createBulkHierarchy(
+        preprocessResult.levels,
+        preprocessResult.uidMap
+      );
+    }
+    
+    // No hierarchy or single level - use existing bulk creation logic
+    // If preprocessed, use records from level 0 (uid field already stripped)
+    const recordsToProcess = preprocessResult.hasHierarchy && preprocessResult.levels[0]
+      ? preprocessResult.levels[0].issues.map(i => i.record)
+      : records;
+
     // Build JIRA payloads for each record (use dry-run mode to get payloads without API calls)
     // Handle validation errors gracefully - collect both successes and failures
     const payloadResults = await Promise.allSettled(
-      records.map(async (record, index) => {
+      recordsToProcess.map(async (record, index) => {
         try {
           const issue = await this.createSingle(record, { validate: true });
           return { 
@@ -621,7 +639,7 @@ export class IssueOperations {
     const manifest: BulkManifest = {
       id: manifestId,
       timestamp: Date.now(),
-      total: records.length,
+      total: recordsToProcess.length,
       succeeded: remappedCreated.map(item => item.index),
       failed: [...remappedFailed.map(item => item.index), ...validationErrors.map(ve => ve.index)],
       created: createdMap,
@@ -634,7 +652,7 @@ export class IssueOperations {
     // Return unified result
     return {
       manifest,
-      total: records.length,
+      total: recordsToProcess.length,
       succeeded: remappedCreated.length,
       failed: remappedFailed.length + validationErrors.length,
       results: [

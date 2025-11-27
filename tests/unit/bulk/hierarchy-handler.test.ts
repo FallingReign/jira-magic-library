@@ -7,6 +7,7 @@
 
 import { UidReplacer } from '../../../src/operations/bulk/UidReplacer.js';
 import { HierarchyLevel } from '../../../src/operations/bulk/HierarchyLevels.js';
+import { preprocessHierarchyRecords } from '../../../src/operations/bulk/HierarchyPreprocessor.js';
 
 describe('createBulkHierarchy', () => {
   // Note: createBulkHierarchy is a private method in IssueOperations.
@@ -327,6 +328,67 @@ describe('createBulkHierarchy', () => {
       expect(capturedRecords[1][0].Parent).toBe('PROJ-100'); // task-1 → epic-1
       expect(capturedRecords[1][1].Parent).toBe('PROJ-101'); // task-2 → epic-2
       expect(capturedRecords[1][2].Parent).toBe('PROJ-100'); // task-3 → epic-1
+    });
+  });
+
+  describe('AC3: Routing logic', () => {
+    describe('preprocessHierarchyRecords routing detection', () => {
+      it('should return hasHierarchy=false for records without UIDs', async () => {
+        const records = [
+          { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 1' },
+          { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 2' },
+        ];
+
+        const result = await preprocessHierarchyRecords(records);
+
+        expect(result.hasHierarchy).toBe(false);
+        expect(result.levels.length).toBe(1);
+      });
+
+      it('should return hasHierarchy=true for records with UIDs', async () => {
+        const records = [
+          { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+          { uid: 'task-1', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
+        ];
+
+        const result = await preprocessHierarchyRecords(records);
+
+        expect(result.hasHierarchy).toBe(true);
+        expect(result.levels.length).toBe(2); // Epic at level 0, Task at level 1
+      });
+
+      it('should detect single level hierarchy (no children)', async () => {
+        const records = [
+          { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+          { uid: 'epic-2', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 2' },
+        ];
+
+        const result = await preprocessHierarchyRecords(records);
+
+        expect(result.hasHierarchy).toBe(true);
+        expect(result.levels.length).toBe(1); // All at level 0 (no parents)
+      });
+
+      it('should strip uid field from all records', async () => {
+        const records = [
+          { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+          { uid: 'task-1', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
+        ];
+
+        const result = await preprocessHierarchyRecords(records);
+
+        // uid should be stripped from all returned records
+        result.levels.forEach(level => {
+          level.issues.forEach(issue => {
+            expect(issue.record.uid).toBeUndefined();
+          });
+        });
+
+        // But uidMap should still have the mappings
+        expect(result.uidMap).toBeDefined();
+        expect(result.uidMap!['epic-1']).toBe(0);
+        expect(result.uidMap!['task-1']).toBe(1);
+      });
     });
   });
 });
