@@ -81,6 +81,9 @@ export async function showMainMenu() {
         { name: '📚 Field Type Reference (Browse Converters)', value: 'field-reference' },
         { name: '💡 User Ambiguity Policy Explorer', value: 'user-ambiguity' },
         new inquirer.Separator(),
+        { name: '🧪 Integration Tests', value: null, disabled: true },
+        { name: '   🏗️  Hierarchy Bulk Creation (E4-S13)', value: 'integration-hierarchy' },
+        new inquirer.Separator(),
         { name: '🔧 Infrastructure Demos', value: null, disabled: true },
         { name: '   💾 Bulk Manifest Storage (E4-S02)', value: 'manifest-storage' },
         { name: '   🔗 JIRA Bulk API Wrapper (E4-S03)', value: 'bulk-api-wrapper' },
@@ -92,7 +95,7 @@ export async function showMainMenu() {
         { name: '🔧 Manage Credentials', value: 'manage-credentials' },
         { name: '❌ Exit', value: 'exit' },
       ],
-      pageSize: 15,
+      pageSize: 18,
     },
   ]);
 

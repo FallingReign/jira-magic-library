@@ -21,6 +21,7 @@ import { runSchemaValidationDemo } from './features/schema-validation.js';
 import { runManifestStorageDemo } from './features/manifest-storage-demo.js';
 import { runBulkApiWrapperDemo } from './features/bulk-api-wrapper-demo.js';
 import { runUserAmbiguityDemo } from './features/user-ambiguity-demo.js';
+import { runIntegrationTests } from './features/integration-tests.js';
 
 async function main() {
   clear();
@@ -116,6 +117,12 @@ async function main() {
       case 'user-ambiguity':
         clear();
         await runUserAmbiguityDemo(config);
+        clear();
+        break;
+
+      case 'integration-hierarchy':
+        clear();
+        await runIntegrationTests(config);
         clear();
         break;
 
