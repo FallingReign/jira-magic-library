@@ -52,7 +52,7 @@ export async function runIntegrationTests(config) {
         { name: '2️⃣  3-Level Hierarchy (Epic → Task → Sub-task)', value: 'three-level', checked: false },
         { name: '3️⃣  Multiple Issues Per Level (6 issues)', value: 'parallel', checked: false },
         { name: '4️⃣  Backward Compatibility (no UIDs)', value: 'no-uid', checked: false },
-        { name: '5️⃣  Large-Scale Hierarchy (30 issues) ⭐', value: 'large-scale', checked: true },
+        { name: '5️⃣  Full JPO Hierarchy (31 issues, 5 levels) ⭐', value: 'large-scale', checked: true },
       ],
     },
   ]);
@@ -460,34 +460,63 @@ async function runNoUidTest(jml, projectKey, createdIssues, results) {
 }
 
 /**
- * Test 5: Large-Scale Hierarchy (30 issues)
- * Structure: 3 Epics → 9 Tasks (3 per Epic) → 18 Sub-tasks (2 per Task)
+ * Test 5: Full JPO Hierarchy (31 issues across 5 levels)
+ * Structure: Container → Super Epic → Epic → Task → Sub-task
  */
 async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('5️⃣  Test: Large-Scale Hierarchy (30 issues)');
+  console.log('5️⃣  Test: Full JPO Hierarchy (31 issues across 5 levels)');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   const timestamp = Date.now();
   
-  // Build the hierarchy: 3 Epics → 9 Tasks → 18 Sub-tasks = 30 total
+  // Full JPO Hierarchy Structure:
+  // Level 0: 1 Container
+  // Level 1: 2 Super Epics (under Container)
+  // Level 2: 4 Epics (2 per Super Epic)
+  // Level 3: 8 Tasks (2 per Epic)
+  // Level 4: 16 Sub-tasks (2 per Task)
+  // Total: 1 + 2 + 4 + 8 + 16 = 31 issues
   const input = [];
   
-  // Level 0: 3 Epics
-  for (let e = 1; e <= 3; e++) {
+  // Level 0: 1 Container (top of JPO hierarchy)
+  input.push({
+    uid: 'container-1',
+    Project: projectKey,
+    'Issue Type': 'Container',
+    Summary: `[E4-S13-Test] JPO Container - ${timestamp}`,
+  });
+  
+  // Level 1: 2 Super Epics (under Container)
+  for (let se = 1; se <= 2; se++) {
     input.push({
-      uid: `epic-${e}`,
+      uid: `super-epic-${se}`,
       Project: projectKey,
-      'Issue Type': 'Epic',
-      Summary: `[E4-S13-Test] Large Epic ${e} - ${timestamp}`,
-      'Epic Name': `Large Epic ${e} - ${timestamp}`,
+      'Issue Type': 'Super Epic',
+      Summary: `[E4-S13-Test] Super Epic ${se} - ${timestamp}`,
+      Parent: 'container-1',
     });
   }
   
-  // Level 1: 9 Tasks (3 per Epic)
-  for (let e = 1; e <= 3; e++) {
-    for (let t = 1; t <= 3; t++) {
-      const taskNum = (e - 1) * 3 + t;
+  // Level 2: 4 Epics (2 per Super Epic)
+  for (let se = 1; se <= 2; se++) {
+    for (let e = 1; e <= 2; e++) {
+      const epicNum = (se - 1) * 2 + e;
+      input.push({
+        uid: `epic-${epicNum}`,
+        Project: projectKey,
+        'Issue Type': 'Epic',
+        Summary: `[E4-S13-Test] Epic ${epicNum} under SE${se} - ${timestamp}`,
+        'Epic Name': `Epic ${epicNum} - ${timestamp}`,
+        Parent: `super-epic-${se}`,
+      });
+    }
+  }
+  
+  // Level 3: 8 Tasks (2 per Epic)
+  for (let e = 1; e <= 4; e++) {
+    for (let t = 1; t <= 2; t++) {
+      const taskNum = (e - 1) * 2 + t;
       input.push({
         uid: `task-${taskNum}`,
         Project: projectKey,
@@ -498,8 +527,8 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
     }
   }
   
-  // Level 2: 18 Sub-tasks (2 per Task)
-  for (let t = 1; t <= 9; t++) {
+  // Level 4: 16 Sub-tasks (2 per Task)
+  for (let t = 1; t <= 8; t++) {
     for (let s = 1; s <= 2; s++) {
       const subtaskNum = (t - 1) * 2 + s;
       input.push({
@@ -512,14 +541,16 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
     }
   }
 
-  info('Structure:');
-  info('  Level 0: 3 Epics');
-  info('  Level 1: 9 Tasks (3 per Epic)');
-  info('  Level 2: 18 Sub-tasks (2 per Task)');
-  info('  Total: 30 issues');
-  info('  Expected: 3 API calls (not 30 sequential calls)\n');
+  info('Full JPO Hierarchy Structure:');
+  info('  Level 0: 1 Container');
+  info('  Level 1: 2 Super Epics');
+  info('  Level 2: 4 Epics');
+  info('  Level 3: 8 Tasks');
+  info('  Level 4: 16 Sub-tasks');
+  info('  Total: 31 issues');
+  info('  Expected: 5 API calls (not 31 sequential calls)\n');
 
-  const spinner = ora('Creating 30-issue hierarchy...').start();
+  const spinner = ora('Creating 31-issue full JPO hierarchy...').start();
 
   try {
     const startTime = Date.now();
@@ -536,26 +567,30 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
 
     spinner.succeed(`Created ${result.succeeded}/${result.total} issues in ${duration}ms`);
     
-    // Show breakdown by level
-    const epicResults = result.results.filter((_, i) => i < 3);
-    const taskResults = result.results.filter((_, i) => i >= 3 && i < 12);
-    const subtaskResults = result.results.filter((_, i) => i >= 12);
+    // Show breakdown by level (indices based on structure)
+    const containerResults = result.results.filter((_, i) => i < 1);
+    const superEpicResults = result.results.filter((_, i) => i >= 1 && i < 3);
+    const epicResults = result.results.filter((_, i) => i >= 3 && i < 7);
+    const taskResults = result.results.filter((_, i) => i >= 7 && i < 15);
+    const subtaskResults = result.results.filter((_, i) => i >= 15);
     
     console.log(`\n   📊 By Level:`);
-    console.log(`      Epics: ${epicResults.filter(r => r.success).length}/3 succeeded`);
-    console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/9 succeeded`);
-    console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/18 succeeded`);
+    console.log(`      Containers: ${containerResults.filter(r => r.success).length}/1 succeeded`);
+    console.log(`      Super Epics: ${superEpicResults.filter(r => r.success).length}/2 succeeded`);
+    console.log(`      Epics: ${epicResults.filter(r => r.success).length}/4 succeeded`);
+    console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/8 succeeded`);
+    console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/16 succeeded`);
     
     console.log(`\n   ⏱️  Performance:`);
     console.log(`      Total: ${duration}ms`);
     console.log(`      Avg per issue: ${avgPerIssue}ms`);
     
     // Performance rating
-    if (avgPerIssue < 200) {
+    if (avgPerIssue < 300) {
       success('      🚀 Excellent batching efficiency!');
-    } else if (avgPerIssue < 400) {
+    } else if (avgPerIssue < 500) {
       success('      ✓ Good batching efficiency');
-    } else if (avgPerIssue < 600) {
+    } else if (avgPerIssue < 700) {
       warning('      ⚠️  Moderate efficiency');
     } else {
       warning('      ⚠️  Slower than expected');
@@ -567,19 +602,20 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
     console.log(`\n   📈 Estimated speedup vs sequential: ${speedup}x faster`);
     console.log(`      (Sequential estimate: ~${Math.round(estimatedSequential / 1000)}s)`);
 
-    // Show sample created keys
+    // Show sample created keys (one from each level)
     if (result.succeeded > 0) {
       console.log(`\n   ✓ Sample created keys:`);
-      // Show one from each level
       const samples = [
-        result.results[0], // Epic
-        result.results[3], // Task
-        result.results[12], // Sub-task
+        { idx: 0, label: 'Container' },
+        { idx: 1, label: 'Super Epic' },
+        { idx: 3, label: 'Epic' },
+        { idx: 7, label: 'Task' },
+        { idx: 15, label: 'Sub-task' },
       ];
-      samples.forEach((r, i) => {
+      samples.forEach(({ idx, label }) => {
+        const r = result.results[idx];
         if (r?.success) {
-          const labels = ['Epic', 'Task', 'Sub-task'];
-          console.log(`      ${labels[i]}: ${input[r.index].uid} → ${r.key}`);
+          console.log(`      ${label}: ${input[r.index].uid} → ${r.key}`);
         }
       });
     }
@@ -588,27 +624,27 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
     const failures = result.results.filter(r => !r.success);
     if (failures.length > 0) {
       console.log(`\n   ✗ Failures (${failures.length}):`);
-      failures.slice(0, 3).forEach(r => {
+      failures.slice(0, 5).forEach(r => {
         console.log(`      ${input[r.index].uid}: ${JSON.stringify(r.error)}`);
       });
-      if (failures.length > 3) {
-        console.log(`      ... and ${failures.length - 3} more`);
+      if (failures.length > 5) {
+        console.log(`      ... and ${failures.length - 5} more`);
       }
     }
 
-    // Pass/fail criteria
-    if (result.succeeded >= 20 && duration < 30000) {
+    // Pass/fail criteria (more lenient due to 5 levels)
+    if (result.succeeded >= 20 && duration < 45000) {
       results.passed++;
-      success('\n   ✓ Large-scale hierarchy test passed');
+      success('\n   ✓ Full JPO hierarchy test passed');
     } else {
       results.failed++;
-      results.errors.push(`Large-scale: ${result.succeeded}/30 in ${duration}ms`);
+      results.errors.push(`JPO Hierarchy: ${result.succeeded}/31 in ${duration}ms`);
     }
 
   } catch (err) {
     spinner.fail(`Error: ${err.message}`);
     results.failed++;
-    results.errors.push(`Large-scale: ${err.message}`);
+    results.errors.push(`JPO Hierarchy: ${err.message}`);
   }
 
   console.log('\n');

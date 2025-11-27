@@ -280,8 +280,8 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
     });
   });
 
-  describe('AC4.5: Large-scale hierarchy (30 issues)', () => {
-    it('should create 30 issues across 3 levels in a single payload', async () => {
+  describe('AC4.5: Full JPO hierarchy (Container → Super Epic → Epic → Task → Sub-task)', () => {
+    it('should create issues across all 5 JPO hierarchy levels', async () => {
       if (!client) {
         console.warn('⚠️  Skipping test: client not configured');
         return;
@@ -289,26 +289,54 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
 
       const timestamp = Date.now();
       
-      // Structure: 3 Epics → 9 Tasks (3 per Epic) → 18 Sub-tasks (2 per Task)
-      // Total: 3 + 9 + 18 = 30 issues
-      // Expected: 3 API calls (one per level), not 30 sequential calls
+      // Full JPO Hierarchy Structure:
+      // Level 0: 1 Container
+      // Level 1: 2 Super Epics (under Container)
+      // Level 2: 4 Epics (2 per Super Epic)
+      // Level 3: 8 Tasks (2 per Epic)
+      // Level 4: 16 Sub-tasks (2 per Task)
+      // Total: 1 + 2 + 4 + 8 + 16 = 31 issues
+      // Expected: 5 API calls (one per level), not 31 sequential calls
       const input: Array<Record<string, string>> = [];
       
-      // Level 0: 3 Epics
-      for (let e = 1; e <= 3; e++) {
+      // Level 0: 1 Container (top of JPO hierarchy)
+      input.push({
+        uid: 'container-1',
+        Project: projectKey,
+        'Issue Type': 'Container',
+        Summary: `[E4-S13-AC4] JPO Container - ${timestamp}`,
+      });
+      
+      // Level 1: 2 Super Epics (under Container)
+      for (let se = 1; se <= 2; se++) {
         input.push({
-          uid: `epic-${e}`,
+          uid: `super-epic-${se}`,
           Project: projectKey,
-          'Issue Type': 'Epic',
-          Summary: `[E4-S13-AC4] Large Epic ${e} - ${timestamp}`,
-          'Epic Name': `Large Epic ${e} - ${timestamp}`,
+          'Issue Type': 'Super Epic',
+          Summary: `[E4-S13-AC4] Super Epic ${se} - ${timestamp}`,
+          Parent: 'container-1',
         });
       }
       
-      // Level 1: 9 Tasks (3 per Epic)
-      for (let e = 1; e <= 3; e++) {
-        for (let t = 1; t <= 3; t++) {
-          const taskNum = (e - 1) * 3 + t;
+      // Level 2: 4 Epics (2 per Super Epic)
+      for (let se = 1; se <= 2; se++) {
+        for (let e = 1; e <= 2; e++) {
+          const epicNum = (se - 1) * 2 + e;
+          input.push({
+            uid: `epic-${epicNum}`,
+            Project: projectKey,
+            'Issue Type': 'Epic',
+            Summary: `[E4-S13-AC4] Epic ${epicNum} under SE${se} - ${timestamp}`,
+            'Epic Name': `Epic ${epicNum} - ${timestamp}`,
+            Parent: `super-epic-${se}`,
+          });
+        }
+      }
+      
+      // Level 3: 8 Tasks (2 per Epic)
+      for (let e = 1; e <= 4; e++) {
+        for (let t = 1; t <= 2; t++) {
+          const taskNum = (e - 1) * 2 + t;
           input.push({
             uid: `task-${taskNum}`,
             Project: projectKey,
@@ -319,8 +347,8 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
         }
       }
       
-      // Level 2: 18 Sub-tasks (2 per Task)
-      for (let t = 1; t <= 9; t++) {
+      // Level 4: 16 Sub-tasks (2 per Task)
+      for (let t = 1; t <= 8; t++) {
         for (let s = 1; s <= 2; s++) {
           const subtaskNum = (t - 1) * 2 + s;
           input.push({
@@ -333,12 +361,14 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
         }
       }
 
-      console.log('\n5️⃣  Creating large-scale hierarchy (30 issues)...');
-      console.log('    Level 0: 3 Epics');
-      console.log('    Level 1: 9 Tasks (3 per Epic)');
-      console.log('    Level 2: 18 Sub-tasks (2 per Task)');
-      console.log('    Total: 30 issues');
-      console.log('    Expected: 3 API calls (not 30 sequential calls)');
+      console.log('\n5️⃣  Creating full JPO hierarchy (31 issues across 5 levels)...');
+      console.log('    Level 0: 1 Container');
+      console.log('    Level 1: 2 Super Epics');
+      console.log('    Level 2: 4 Epics');
+      console.log('    Level 3: 8 Tasks');
+      console.log('    Level 4: 16 Sub-tasks');
+      console.log('    Total: 31 issues');
+      console.log('    Expected: 5 API calls (not 31 sequential calls)');
 
       const startTime = Date.now();
       const result = await client.issues.create(input) as BulkResult;
@@ -348,15 +378,19 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
       console.log(`\n   ✅ Result: ${result.succeeded}/${result.total} succeeded`);
       console.log(`   ⏱️  Duration: ${duration}ms (${avgPerIssue}ms avg per issue)`);
       
-      // Show breakdown by level
-      const epicResults = result.results.filter((_, i) => i < 3);
-      const taskResults = result.results.filter((_, i) => i >= 3 && i < 12);
-      const subtaskResults = result.results.filter((_, i) => i >= 12);
+      // Show breakdown by level (indices based on structure above)
+      const containerResults = result.results.filter((_, i) => i < 1);
+      const superEpicResults = result.results.filter((_, i) => i >= 1 && i < 3);
+      const epicResults = result.results.filter((_, i) => i >= 3 && i < 7);
+      const taskResults = result.results.filter((_, i) => i >= 7 && i < 15);
+      const subtaskResults = result.results.filter((_, i) => i >= 15);
       
       console.log(`\n   📊 By Level:`);
-      console.log(`      Epics: ${epicResults.filter(r => r.success).length}/3 succeeded`);
-      console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/9 succeeded`);
-      console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/18 succeeded`);
+      console.log(`      Containers: ${containerResults.filter(r => r.success).length}/1 succeeded`);
+      console.log(`      Super Epics: ${superEpicResults.filter(r => r.success).length}/2 succeeded`);
+      console.log(`      Epics: ${epicResults.filter(r => r.success).length}/4 succeeded`);
+      console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/8 succeeded`);
+      console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/16 succeeded`);
 
       // Track created issues for cleanup
       result.results.forEach(r => {
@@ -368,13 +402,13 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
       // Show some created keys
       if (result.succeeded > 0) {
         console.log(`\n   ✓ Sample created keys:`);
-        result.results.slice(0, 5).forEach((r, i) => {
+        result.results.slice(0, 7).forEach((r, i) => {
           if (r.success) {
             console.log(`      ${input[i].uid} → ${r.key}`);
           }
         });
-        if (result.succeeded > 5) {
-          console.log(`      ... and ${result.succeeded - 5} more`);
+        if (result.succeeded > 7) {
+          console.log(`      ... and ${result.succeeded - 7} more`);
         }
       }
 
@@ -388,18 +422,18 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
       }
 
       // Performance expectations:
-      // - Sequential would be ~30 * 500ms = 15000ms minimum
-      // - Batched should be ~3 * 2000ms = 6000ms or less
-      // - Allow up to 30 seconds for slow connections
-      expect(duration).toBeLessThan(30000);
+      // - Sequential would be ~31 * 500ms = 15500ms minimum
+      // - Batched should be ~5 * 2000ms = 10000ms or less
+      // - Allow up to 45 seconds for slow connections (5 levels)
+      expect(duration).toBeLessThan(45000);
       expect(result.succeeded).toBeGreaterThan(20); // At least 2/3 should succeed
       
       // If all succeeded, verify the efficiency gain
-      if (result.succeeded === 30) {
+      if (result.succeeded === 31) {
         console.log(`\n   🚀 Performance: ${avgPerIssue}ms avg per issue`);
-        if (avgPerIssue < 300) {
+        if (avgPerIssue < 400) {
           console.log(`      ✓ Excellent batching efficiency!`);
-        } else if (avgPerIssue < 500) {
+        } else if (avgPerIssue < 600) {
           console.log(`      ✓ Good batching efficiency`);
         } else {
           console.log(`      ⚠️  Slower than expected`);
