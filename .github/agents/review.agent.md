@@ -2,7 +2,7 @@
 name: Review
 description: Final review, documentation, demo decision, and task completion
 tools: ['runCommands', 'runTasks', 'edit', 'runNotebooks', 'search', 'new', 'extensions', 'todos', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo']
-model: Claude Sonnet 4
+model: Claude Opus 4.5 (Preview)
 handoffs:
   - label: Start New Task
     agent: Plan

@@ -3,10 +3,10 @@
 **Epic**: Epic 4 - Bulk Operations  
 **Size**: Medium (5 points)  
 **Priority**: P0  
-**Status**: 📋 Ready for Development  
-**Assignee**: -  
+**Status**: ⏳ In Progress  
+**Assignee**: GitHub Copilot  
 **PR**: -  
-**Started**: -  
+**Started**: 2025-11-27  
 **Completed**: -
 
 ---
@@ -86,6 +86,12 @@ for (const level of batch.levels) {
 4. Find JPO level where `issueTypeIds.includes("10001")` → level 1
 5. Group record into level 1 batch
 
+**BFS Fallback Behavior (when JPO unavailable):**
+- Use Parent UID references to build dependency graph
+- Infer hierarchy from issue type names where possible (e.g., "Sub-task" always below other types)
+- Goal: Achieve user intent even without JPO - create parents before children
+- BFS walks the graph to determine creation order
+
 **Evidence:** (To be added upon completion)
 
 ---
@@ -110,6 +116,11 @@ for (const level of batch.levels) {
 - [ ] After parsing input, call `preprocessHierarchyRecords()`
 - [ ] If single level returned: Use existing `createBulk()` path
 - [ ] If multiple levels returned: Use new `createBulkHierarchy()` path
+- [ ] **Multi-project batches**: If input contains issues for multiple projects:
+  - Group by `Project` field first
+  - Process each project independently (separate preprocessing, separate hierarchy creation)
+  - Merge results from all projects into single `BulkResult`
+  - Each project uses its own JPO hierarchy (hierarchies may differ between projects)
 - [ ] Preserve backward compatibility (no UIDs = existing behavior)
 
 **Evidence:** (To be added upon completion)
@@ -119,6 +130,9 @@ for (const level of batch.levels) {
 ### AC4: Performance Validation with Full Hierarchy
 - [ ] Create integration test with complete JIRA hierarchy structure from JPO
 - [ ] Query JPO hierarchy: Use `JPOHierarchyDiscovery.getHierarchy()` to get actual hierarchy
+- [ ] **Verify JPO ordering assumption**: Confirm that level id 0 = lowest (bottom) by inspecting JPO response
+  - Log hierarchy structure in test for verification
+  - Assert that Sub-task types appear at lower level ids than Epic types
 - [ ] Test hierarchy based on JPO response:
   - JPO returns levels with id (0 = lowest/bottom, increasing = going up)
   - Use actual issue types from JPO `issueTypeIds` at each level

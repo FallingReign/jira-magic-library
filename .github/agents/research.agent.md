@@ -2,7 +2,7 @@
 name: Research
 description: Deep investigation of existing codebase for reusable patterns (use as subagent or standalone)
 tools: ['search', 'usages', 'fetch', 'githubRepo', 'problems', 'changes']
-model: Claude Sonnet 4
+model: Claude Opus 4.5 (Preview)
 ---
 
 # Research Agent

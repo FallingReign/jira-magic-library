@@ -280,7 +280,7 @@ Stories outside the active epics but still tracked for delivery.
 | E4-S10 | [Incremental Validation Research](stories/EPIC-04-STORY-010-incremental-validation-research.md) | L (8) | P2 | 📋 Ready |
 | E4-S11 | [Performance Testing & Optimization](stories/EPIC-04-STORY-011-performance-testing.md) | M (5) | P1 | 📋 Ready |
 | E4-S12 | [Bulk Operations Documentation](stories/EPIC-04-STORY-012-documentation.md) | S (3) | P1 | 📋 Ready |
-| E4-S13 | [Hierarchy Support with Level-Based Batching](stories/EPIC-04-STORY-013-hierarchy-level-batching.md) | M (5) | P0 | 📋 Ready |
+| E4-S13 | [Hierarchy Support with Level-Based Batching](stories/EPIC-04-STORY-013-hierarchy-level-batching.md) | M (5) | P0 | ⏳ In Progress *(GitHub Copilot, started 2025-11-27)* |
 
 **Total Story Points**: 71 points (reduced from 74: E4-S13 changed from 8 to 5 points)  
 **Completed**: 34 points (48%)  

@@ -2,7 +2,7 @@
 name: Implement
 description: Write tests and code following TDD principles
 tools: ['runCommands', 'runTasks', 'edit', 'runNotebooks', 'search', 'new', 'extensions', 'todos', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo']
-model: Claude Sonnet 4
+model: Claude Opus 4.5 (Preview)
 handoffs:
   - label: Run Validation
     agent: Validate
