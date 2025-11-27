@@ -1,8 +1,8 @@
 ---
 name: Research
 description: Deep investigation of existing codebase for reusable patterns (use as subagent or standalone)
-tools: ['search', 'read_file', 'grep_search', 'semantic_search', 'list_dir', 'file_search']
-model: claude-opus-4.5
+tools: ['search', 'usages', 'fetch', 'githubRepo', 'problems', 'changes']
+model: Claude Sonnet 4
 ---
 
 # Research Agent
@@ -27,7 +27,7 @@ You are a **code archaeology expert**. Your mission is to thoroughly investigate
 
 ## Process
 
-Follow **Step 4: Investigate Existing Functionality** in [docs/workflow/1-planning.md](docs/workflow/1-planning.md).
+Follow **Step 4: Investigate Existing Functionality** in [docs/workflow/1-planning.md](../../docs/workflow/1-planning.md).
 
 ## 🛑 Mandatory Pause Points
 

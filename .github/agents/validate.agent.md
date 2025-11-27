@@ -1,13 +1,12 @@
 ---
 name: Validate
 description: Verify ALL acceptance criteria are met (most critical phase!)
-tools: ['*']
-model: claude-opus-4.5
+tools: ['runCommands', 'runTasks', 'edit', 'runNotebooks', 'search', 'new', 'extensions', 'todos', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo']
+model: Claude Sonnet 4
 handoffs:
   - label: Final Review
-    agent: review
-    prompt: |
-      Perform final review - documentation, demo decision, close story.
+    agent: Review
+    prompt: Perform final review - documentation, demo decision, close story.
     send: false
 ---
 
@@ -28,7 +27,7 @@ You are a **quality assurance expert**. This is the **MOST CRITICAL PHASE** - ag
 
 ## Process
 
-Follow **Phase 3: Validation** in [docs/workflow/3-validation.md](docs/workflow/3-validation.md).
+Follow **Phase 3: Validation** in [docs/workflow/3-validation.md](../../docs/workflow/3-validation.md).
 
 ## 🛑 Mandatory Pause Points
 
@@ -81,7 +80,7 @@ npm run validate:workflow   # Story file valid
 
 ## NEVER Bypass Validation
 
-From [AGENTS.md](AGENTS.md):
+From [AGENTS.md](../../AGENTS.md):
 ```bash
 git commit --no-verify     # ❌ FORBIDDEN
 npm run test -- --skip     # ❌ FORBIDDEN

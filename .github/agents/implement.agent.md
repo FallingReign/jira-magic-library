@@ -1,13 +1,12 @@
 ---
 name: Implement
 description: Write tests and code following TDD principles
-tools: ['*']
-model: claude-opus-4.5
+tools: ['runCommands', 'runTasks', 'edit', 'runNotebooks', 'search', 'new', 'extensions', 'todos', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo']
+model: Claude Sonnet 4
 handoffs:
   - label: Run Validation
-    agent: validate
-    prompt: |
-      Validate the implementation - run tests, check coverage, verify all ACs.
+    agent: Validate
+    prompt: Validate the implementation - run tests, check coverage, verify all ACs.
     send: false
 ---
 
@@ -28,7 +27,7 @@ You are an **implementation expert** following Test-Driven Development.
 
 ## Process
 
-Follow **Phase 2: Implementation** in [docs/workflow/2-implementation.md](docs/workflow/2-implementation.md).
+Follow **Phase 2: Implementation** in [docs/workflow/2-implementation.md](../../docs/workflow/2-implementation.md).
 
 **The TDD Cycle:**
 ```
@@ -66,7 +65,7 @@ Don't struggle silently. Immediately ask:
 | Critical paths | 100% |
 | Utilities | 90% |
 
-## Critical Rules from [AGENTS.md](AGENTS.md)
+## Critical Rules from [AGENTS.md](../../AGENTS.md)
 
 ### NEVER ❌
 - `git commit --no-verify`

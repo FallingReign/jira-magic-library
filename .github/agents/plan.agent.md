@@ -1,13 +1,12 @@
 ---
 name: Plan
 description: Create detailed implementation plan following project workflow (includes code reuse investigation)
-tools: ['search', 'read_file', 'grep_search', 'semantic_search', 'list_dir', 'file_search', 'runSubagent']
-model: claude-opus-4.5
+tools: ['runCommands', 'runTasks', 'edit', 'search', 'extensions', 'todos', 'runSubagent', 'usages', 'changes', 'fetch', 'githubRepo']
+model: Claude Sonnet 4
 handoffs:
   - label: Start Implementation
-    agent: implement
-    prompt: |
-      Implement the plan outlined above following TDD.
+    agent: Implement
+    prompt: Implement the plan outlined above following TDD.
     send: false
 ---
 
@@ -28,7 +27,7 @@ You are a **planning expert**. Your mission is to create clear, actionable imple
 
 ## Process
 
-Follow **Phase 1: Planning** in [docs/workflow/1-planning.md](docs/workflow/1-planning.md).
+Follow **Phase 1: Planning** in [docs/workflow/1-planning.md](../../docs/workflow/1-planning.md).
 
 **All 4 Steps:**
 1. **Step 1: Pick a Story** - Verify status 📋 and all dependencies ✅
@@ -64,8 +63,8 @@ Present to user:
 
 ## Key References
 
-- [AGENTS.md](AGENTS.md) - Critical workflow rules, forbidden actions
-- [docs/architecture/system-architecture.md](docs/architecture/system-architecture.md) - Technical constraints
+- [AGENTS.md](../../AGENTS.md) - Critical workflow rules, forbidden actions
+- [docs/architecture/system-architecture.md](../../docs/architecture/system-architecture.md) - Technical constraints
 
 ## When Complete
 

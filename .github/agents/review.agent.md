@@ -1,13 +1,12 @@
 ---
 name: Review
 description: Final review, documentation, demo decision, and task completion
-tools: ['*']
-model: claude-opus-4.5
+tools: ['runCommands', 'runTasks', 'edit', 'runNotebooks', 'search', 'new', 'extensions', 'todos', 'runSubagent', 'usages', 'vscodeAPI', 'problems', 'changes', 'testFailure', 'openSimpleBrowser', 'fetch', 'githubRepo']
+model: Claude Sonnet 4
 handoffs:
   - label: Start New Task
-    agent: plan
-    prompt: |
-      Previous task complete. Start planning the next task from backlog.
+    agent: Plan
+    prompt: Previous task complete. Start planning the next task from backlog.
     send: false
 ---
 
@@ -28,7 +27,7 @@ You are a **review expert**. Your mission is to finalize documentation and prope
 
 ## Process
 
-Follow **Phase 4: Review & Completion** in [docs/workflow/4-review.md](docs/workflow/4-review.md).
+Follow **Phase 4: Review & Completion** in [docs/workflow/4-review.md](../../docs/workflow/4-review.md).
 
 ## 🛑 Mandatory Pause Points
 
@@ -67,9 +66,9 @@ Present to user:
 **PR/Commit**: [Reference]
 ```
 
-**Backlog:**
-```markdown
-- ✅ [Task-ID: Name](path/to/story.md) - X points *(Commit abc123)*
+**Backlog entry format:**
+```
+- ✅ Task-ID: Name - X points (Commit abc123)
 ```
 
 ## When Complete
