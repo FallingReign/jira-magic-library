@@ -8,6 +8,7 @@
 
 import { detectUids, UidDetectionResult } from './UidDetector.js';
 import { buildHierarchyLevels, HierarchyLevel } from './HierarchyLevels.js';
+import { ValidationError } from '../../errors/index.js';
 
 /**
  * Result of preprocessing
@@ -32,6 +33,76 @@ export interface PreprocessResult {
 function stripUidField(record: Record<string, unknown>): Record<string, unknown> {
   const { uid, ...rest } = record;
   return rest;
+}
+
+/**
+ * Detects circular dependencies in parent-child relationships.
+ * Uses DFS to find back edges (cycles) in the dependency graph.
+ * 
+ * @param records - Array of records with uid and Parent fields
+ * @throws {ValidationError} If a cycle is detected, includes cycle path in message
+ */
+function detectCycles(records: Array<Record<string, unknown>>): void {
+  // Build adjacency map: child uid -> parent uid
+  const parentMap = new Map<string, string>();
+  const allUids = new Set<string>();
+
+  for (const record of records) {
+    const uid = record.uid as string | undefined;
+    const parent = record.Parent as string | undefined;
+    
+    if (uid) {
+      allUids.add(uid);
+      if (parent && typeof parent === 'string') {
+        parentMap.set(uid, parent);
+      }
+    }
+  }
+
+  // DFS state: 0 = unvisited, 1 = visiting, 2 = visited
+  const state = new Map<string, number>();
+  
+  // Track path for error message
+  function findCycle(uid: string, path: string[]): string[] | null {
+    const currentState = state.get(uid) ?? 0;
+    
+    if (currentState === 1) {
+      // Found a cycle - return path from cycle start
+      const cycleStart = path.indexOf(uid);
+      return [...path.slice(cycleStart), uid];
+    }
+    
+    if (currentState === 2) {
+      // Already fully processed
+      return null;
+    }
+    
+    // Mark as visiting
+    state.set(uid, 1);
+    path.push(uid);
+    
+    // Follow parent edge
+    const parent = parentMap.get(uid);
+    if (parent && allUids.has(parent)) {
+      const cycle = findCycle(parent, path);
+      if (cycle) {
+        return cycle;
+      }
+    }
+    
+    // Mark as visited
+    state.set(uid, 2);
+    path.pop();
+    return null;
+  }
+
+  // Check each node
+  for (const uid of allUids) {
+    const cycle = findCycle(uid, []);
+    if (cycle) {
+      throw new ValidationError(`Circular dependency detected: ${cycle.join(' → ')}`);
+    }
+  }
 }
 
 /**
@@ -89,7 +160,10 @@ export async function preprocessHierarchyRecords(
     };
   }
 
-  // Step 3: Build hierarchy levels using BFS algorithm
+  // Step 3: Detect cycles before building hierarchy (fail fast)
+  detectCycles(records);
+
+  // Step 4: Build hierarchy levels using BFS algorithm
   // The BFS algorithm uses uid and Parent fields to determine levels
   const levels = buildHierarchyLevels(records);
 

@@ -196,4 +196,52 @@ describe('HierarchyPreprocessor', () => {
       expect(result.levels[2].depth).toBe(2);
     });
   });
+
+  describe('AC7: Circular dependency detection', () => {
+    it('should throw ValidationError for simple cycle (A → B → A)', async () => {
+      const records = [
+        { uid: 'a', Project: 'TEST', 'Issue Type': 'Task', Summary: 'A', Parent: 'b' },
+        { uid: 'b', Project: 'TEST', 'Issue Type': 'Task', Summary: 'B', Parent: 'a' },
+      ];
+
+      await expect(preprocessHierarchyRecords(records)).rejects.toThrow(/[Cc]ircular/);
+    });
+
+    it('should throw ValidationError for longer cycle (A → B → C → A)', async () => {
+      const records = [
+        { uid: 'a', Project: 'TEST', 'Issue Type': 'Task', Summary: 'A', Parent: 'c' },
+        { uid: 'b', Project: 'TEST', 'Issue Type': 'Task', Summary: 'B', Parent: 'a' },
+        { uid: 'c', Project: 'TEST', 'Issue Type': 'Task', Summary: 'C', Parent: 'b' },
+      ];
+
+      await expect(preprocessHierarchyRecords(records)).rejects.toThrow(/[Cc]ircular/);
+    });
+
+    it('should throw ValidationError for self-reference (A → A)', async () => {
+      const records = [
+        { uid: 'a', Project: 'TEST', 'Issue Type': 'Task', Summary: 'A', Parent: 'a' },
+      ];
+
+      await expect(preprocessHierarchyRecords(records)).rejects.toThrow(/[Cc]ircular/);
+    });
+
+    it('should include cycle path in error message', async () => {
+      const records = [
+        { uid: 'epic', Project: 'TEST', 'Issue Type': 'Epic', Summary: 'Epic', Parent: 'task' },
+        { uid: 'task', Project: 'TEST', 'Issue Type': 'Task', Summary: 'Task', Parent: 'epic' },
+      ];
+
+      await expect(preprocessHierarchyRecords(records)).rejects.toThrow(/epic.*task|task.*epic/);
+    });
+
+    it('should not throw for valid hierarchy (no cycles)', async () => {
+      const records = [
+        { uid: 'epic', Project: 'TEST', 'Issue Type': 'Epic', Summary: 'Epic' },
+        { uid: 'task', Project: 'TEST', 'Issue Type': 'Task', Summary: 'Task', Parent: 'epic' },
+        { uid: 'subtask', Project: 'TEST', 'Issue Type': 'Sub-task', Summary: 'Subtask', Parent: 'task' },
+      ];
+
+      await expect(preprocessHierarchyRecords(records)).resolves.toBeDefined();
+    });
+  });
 });
