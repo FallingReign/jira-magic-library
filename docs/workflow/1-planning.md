@@ -16,6 +16,7 @@ Planning phase ensures you:
 - ✅ Pick the right story (dependencies met)
 - ✅ Understand all acceptance criteria
 - ✅ Know the architectural context
+- ✅ Investigate existing code for reuse opportunities
 - ✅ Have all information needed to implement
 
 **Don't skip planning!** 30 minutes of planning saves hours of rework.
@@ -219,6 +220,164 @@ cat tests/unit/converters/types/NumberConverter.test.ts
 
 ---
 
+## Step 4: Investigate Existing Functionality
+
+**Goal**: Maximize code reuse by systematically investigating what already exists in the codebase.
+
+**Why This Matters**: As projects grow, significant functionality accumulates. Agents and developers often waste time reimplementing existing features. 15 minutes of investigation can save hours of redundant work.
+
+### A. Review Completed Work
+
+Check what has already been built:
+
+```bash
+# List all completed stories/tasks
+grep -r "✅ Done\|✅ Complete" docs/backlog.md docs/stories/ 2>/dev/null
+
+# Check archived work (if archives exist)
+ls docs/archive/ 2>/dev/null && cat docs/archive/*/SUMMARY.md 2>/dev/null
+
+# Review changelog or release notes
+cat CHANGELOG.md 2>/dev/null | head -100
+```
+
+**What to look for:**
+- Stories with similar patterns to your current task
+- Technical notes about reusable components
+- Lessons learned from previous implementations
+
+### B. Explore Source Code Structure
+
+Understand what modules and components exist:
+
+```bash
+# Get overview of source structure
+find src -type f -name "*.ts" -o -name "*.js" -o -name "*.py" | head -50
+
+# List main exports (entry point)
+cat src/index.ts 2>/dev/null || cat src/index.js 2>/dev/null || cat src/main.py 2>/dev/null
+
+# Find all exported classes/functions
+grep -r "export class\|export function\|export const\|export default" src/ | head -30
+```
+
+**Build a mental map of:**
+- Core modules and their responsibilities
+- Utility functions available
+- Shared types/interfaces
+- Error handling patterns
+
+### C. Search for Similar Patterns
+
+Use semantic and text search to find relevant existing code:
+
+```bash
+# Search for keywords related to your story
+grep -ri "keyword1\|keyword2\|keyword3" src/ --include="*.ts" --include="*.js"
+
+# Find similar class/function names
+grep -r "class.*Similar\|function.*similar" src/
+
+# Search test files for usage examples
+grep -ri "describe.*keyword\|it.*should" tests/ --include="*.test.*"
+```
+
+**Search strategies:**
+- **By concept**: Search for domain terms (e.g., "validation", "cache", "converter")
+- **By pattern**: Search for design patterns (e.g., "factory", "registry", "handler")
+- **By type**: Search for similar data types or interfaces
+- **By test**: Tests often show correct usage patterns
+
+### D. Identify Reusable Components
+
+For each component you might need, classify as:
+
+| Category | Description | Action |
+|----------|-------------|--------|
+| **Direct Reuse** | Exact functionality exists | Import and use as-is |
+| **Extend** | Base class/interface exists | Extend or implement |
+| **Adapt** | Similar pattern exists | Copy pattern, modify for your needs |
+| **New** | Nothing similar exists | Implement from scratch |
+
+### E. Document Your Findings
+
+Create a brief reuse analysis (can be mental notes or written):
+
+```markdown
+## Reuse Analysis for [Story ID]
+
+### Direct Reuse
+- `src/utils/validator.ts` - Input validation helpers
+- `src/errors/CustomError.ts` - Base error class
+
+### Extend/Implement
+- `src/converters/BaseConverter.ts` - Extend for new converter
+
+### Pattern to Follow
+- `src/services/UserService.ts` - Similar service pattern
+- `tests/unit/services/UserService.test.ts` - Test structure to follow
+
+### New Code Required
+- Business logic specific to this story
+- Story-specific validation rules
+```
+
+### F. Quick Investigation Commands
+
+**For TypeScript/JavaScript projects:**
+```bash
+# Find all classes
+grep -r "export class" src/
+
+# Find all interfaces/types
+grep -r "export interface\|export type" src/
+
+# Find utility functions
+ls src/utils/ 2>/dev/null && grep -r "export function" src/utils/
+
+# Find existing tests for patterns
+ls tests/ && find tests -name "*.test.*" | head -20
+```
+
+**For Python projects:**
+```bash
+# Find all classes
+grep -r "^class " src/ --include="*.py"
+
+# Find all functions
+grep -r "^def \|^async def " src/ --include="*.py"
+
+# Find tests
+find tests -name "test_*.py" -o -name "*_test.py"
+```
+
+**Universal approaches:**
+```bash
+# Search by semantic meaning (if AI tools available)
+# "Find all code related to user authentication"
+
+# Check documentation
+ls docs/ && find docs -name "*.md" | xargs grep -l "keyword"
+
+# Review recent commits for context
+git log --oneline -20
+git log --oneline --all -- "*keyword*"
+```
+
+### Investigation Checklist
+
+Before proceeding, verify:
+
+- [ ] Reviewed completed stories for similar work
+- [ ] Explored source code structure
+- [ ] Searched for similar patterns/keywords
+- [ ] Identified components to reuse vs. create new
+- [ ] Documented reuse plan (at least mentally)
+
+**Time limit**: 15 minutes. If you haven't found relevant code by then, proceed with implementation—the codebase may genuinely not have what you need.
+
+---
+
 ## Red Flags
 
 **Stop and ask for clarification if**:
@@ -283,15 +442,20 @@ Before proceeding to Phase 2 (Implementation):
 - [ ] **Context Read**
   - [ ] Architecture doc (relevant sections)
   - [ ] Full story file (all ACs understood)
-  - [ ] JIRA field types (if applicable)
   - [ ] Related stories (for patterns)
   - [ ] Dependency code (if exists)
+
+- [ ] **Existing Functionality Investigated**
+  - [ ] Reviewed completed work for similar patterns
+  - [ ] Explored source code structure
+  - [ ] Searched for reusable components
+  - [ ] Documented reuse plan (direct reuse / extend / adapt / new)
 
 - [ ] **Ready to Implement**
   - [ ] Understand WHAT to build (ACs)
   - [ ] Understand WHY (user story)
   - [ ] Understand WHERE (file structure)
-  - [ ] Understand HOW (technical notes, patterns)
+  - [ ] Understand HOW (technical notes, patterns, reuse plan)
   - [ ] No ambiguities or blockers
 
 ---
@@ -409,6 +573,7 @@ git commit -m "EX-SYY: Start work on story"
 - ✅ Story selected and dependencies verified
 - ✅ All acceptance criteria understood
 - ✅ Architectural context reviewed
+- ✅ Existing functionality investigated for reuse
 - ✅ Technical approach planned
 - ✅ Status updated to "⏳ In Progress"
 
