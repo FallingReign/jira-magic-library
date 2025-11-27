@@ -76,3 +76,105 @@ Priority: P4 - Low
 Epic Name: UI Improvements`
   };
 }
+
+/**
+ * Generate hierarchy example data with UIDs (E4-S13)
+ * 
+ * Demonstrates level-based batching:
+ * - uid: Temporary identifier for parent references
+ * - Parent: UID reference (not JIRA key) for parent-child links
+ * - Library creates parents first, then children (in 2-3 API calls, not N)
+ * 
+ * @param {string} projectKey - JIRA project key
+ * @returns {Object} Object with csv, json, yaml properties for hierarchy data
+ */
+export function getHierarchyExampleData(projectKey) {
+  const timestamp = new Date().toISOString().split('T')[0];
+  
+  return {
+    csv: `uid,Project,Issue Type,Summary,Description,Parent,Epic Name
+epic-1,${projectKey},Epic,Q4 Release Planning,Epic for Q4 2025 features,,Q4 Release ${timestamp}
+task-1,${projectKey},Task,Authentication Service,Implement OAuth 2.0 login,epic-1,
+task-2,${projectKey},Task,User Dashboard,Build dashboard with widgets,epic-1,
+subtask-1,${projectKey},Sub-task,Google OAuth,Add Google provider,task-1,
+subtask-2,${projectKey},Sub-task,GitHub OAuth,Add GitHub provider,task-1,`,
+
+    json: `[
+  {
+    "uid": "epic-1",
+    "Project": "${projectKey}",
+    "Issue Type": "Epic",
+    "Summary": "Q4 Release Planning",
+    "Description": "Epic for Q4 2025 features",
+    "Epic Name": "Q4 Release ${timestamp}"
+  },
+  {
+    "uid": "task-1",
+    "Project": "${projectKey}",
+    "Issue Type": "Task",
+    "Summary": "Authentication Service",
+    "Description": "Implement OAuth 2.0 login",
+    "Parent": "epic-1"
+  },
+  {
+    "uid": "task-2",
+    "Project": "${projectKey}",
+    "Issue Type": "Task",
+    "Summary": "User Dashboard",
+    "Description": "Build dashboard with widgets",
+    "Parent": "epic-1"
+  },
+  {
+    "uid": "subtask-1",
+    "Project": "${projectKey}",
+    "Issue Type": "Sub-task",
+    "Summary": "Google OAuth",
+    "Description": "Add Google provider",
+    "Parent": "task-1"
+  },
+  {
+    "uid": "subtask-2",
+    "Project": "${projectKey}",
+    "Issue Type": "Sub-task",
+    "Summary": "GitHub OAuth",
+    "Description": "Add GitHub provider",
+    "Parent": "task-1"
+  }
+]`,
+
+    yaml: `uid: epic-1
+Project: ${projectKey}
+Issue Type: Epic
+Summary: Q4 Release Planning
+Description: Epic for Q4 2025 features
+Epic Name: Q4 Release ${timestamp}
+---
+uid: task-1
+Project: ${projectKey}
+Issue Type: Task
+Summary: Authentication Service
+Description: Implement OAuth 2.0 login
+Parent: epic-1
+---
+uid: task-2
+Project: ${projectKey}
+Issue Type: Task
+Summary: User Dashboard
+Description: Build dashboard with widgets
+Parent: epic-1
+---
+uid: subtask-1
+Project: ${projectKey}
+Issue Type: Sub-task
+Summary: Google OAuth
+Description: Add Google provider
+Parent: task-1
+---
+uid: subtask-2
+Project: ${projectKey}
+Issue Type: Sub-task
+Summary: GitHub OAuth
+Description: Add GitHub provider
+Parent: task-1`
+  };
+}

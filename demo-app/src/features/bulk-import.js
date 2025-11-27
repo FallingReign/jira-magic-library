@@ -1,11 +1,12 @@
 /**
- * Bulk Import Demo (E4-S04)
+ * Bulk Import Demo (E4-S04 + E4-S13)
  * 
  * Demonstrates the unified create() method:
  * - Parse CSV, JSON, or YAML data
  * - Create issues in bulk using jml.issues.create()
  * - Show manifest with success/failure tracking
  * - Demonstrate both single issue and bulk creation paths
+ * - NEW (E4-S13): Hierarchy creation with UIDs and level-based batching
  */
 
 import inquirer from 'inquirer';
@@ -13,7 +14,7 @@ import ora from 'ora';
 import { parseInput } from 'jira-magic-library';
 import { showHeader, success, error, info, showCode, pause, warning } from '../ui/display.js';
 import { confirm } from '../ui/prompts.js';
-import { getExampleData } from '../fixtures/test-data.js';
+import { getExampleData, getHierarchyExampleData } from '../fixtures/test-data.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -21,10 +22,30 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export async function runBulkImportDemo(config) {
-  showHeader('Bulk Import Demo (E4-S04)');
+  showHeader('Bulk Import Demo (E4-S04 + E4-S13)');
 
   info('Parse CSV, JSON, or YAML data and create issues in bulk.');
   info('The unified create() method handles both single and bulk creation.\n');
+
+  // Choose between flat bulk or hierarchy demo
+  const { demoType } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'demoType',
+      message: 'Select demo type:',
+      choices: [
+        { name: '📥 Flat Bulk Import (no parent-child)', value: 'flat' },
+        { name: '🏗️  Hierarchy Import with UIDs (E4-S13)', value: 'hierarchy' },
+      ],
+    },
+  ]);
+
+  if (demoType === 'hierarchy') {
+    await runHierarchyBulkDemo(config);
+    return;
+  }
+
+  // Original flat bulk import demo continues below...
 
   // Prompt user for project key with default from config
   const { projectKey } = await inquirer.prompt([
@@ -567,4 +588,280 @@ async function retryFailedIssues(jml, previousResult, originalData, config) {
       }
     }
   }
+}
+
+/**
+ * Hierarchy Bulk Import Demo (E4-S13)
+ * 
+ * Demonstrates level-based batching for parent-child hierarchies:
+ * - Use uid field for temporary identifiers
+ * - Parent field references UIDs (not JIRA keys)
+ * - Library creates parents first, then children
+ * - All issues created in 2-3 API calls (not N sequential calls)
+ * 
+ * @param {object} config Configuration with baseUrl, token, etc.
+ */
+async function runHierarchyBulkDemo(config) {
+  console.log('\n');
+  info('🏗️  Hierarchy Bulk Import (E4-S13)\n');
+  info('Create parent-child hierarchies in bulk using temporary UIDs.');
+  info('The library automatically:');
+  info('  • Groups issues by hierarchy level (Epic → Task → Sub-task)');
+  info('  • Creates parents first, then children');
+  info('  • Replaces UID references with real JIRA keys');
+  info('  • Uses level-based batching (2-3 API calls, not N sequential)\n');
+
+  // Prompt user for project key
+  const { projectKey } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'projectKey',
+      message: 'Enter the JIRA project key:',
+      default: config.defaultProjectKey || config.projectKey || 'ZUL',
+      validate: (input) => {
+        if (!input || input.trim().length === 0) {
+          return 'Project key is required';
+        }
+        if (!/^[A-Z][A-Z0-9]*$/.test(input.trim())) {
+          return 'Project key must start with a letter and contain only uppercase letters and numbers';
+        }
+        return true;
+      },
+    },
+  ]);
+
+  // Get hierarchy example data
+  const HIERARCHY_EXAMPLES = getHierarchyExampleData(projectKey);
+
+  // Step 1: Select format
+  const { format } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'format',
+      message: 'Select input format:',
+      choices: [
+        { name: '📄 CSV (Comma-Separated Values)', value: 'csv' },
+        { name: '📦 JSON (JavaScript Object Notation)', value: 'json' },
+        { name: '📝 YAML (YAML Ain\'t Markup Language)', value: 'yaml' },
+      ],
+    },
+  ]);
+
+  // Step 2: Show example hierarchy data
+  console.log('\n📋 Example ' + format.toUpperCase() + ' data with UIDs:\n');
+  console.log('```' + format);
+  console.log(HIERARCHY_EXAMPLES[format]);
+  console.log('```\n');
+
+  info('📍 Key fields:');
+  info('  • uid: Temporary identifier (e.g., "epic-1", "task-1")');
+  info('  • Parent: UID reference to parent issue (not JIRA key)\n');
+
+  // Step 3: Parse the example data
+  showCode('parseInput() call:',
+    `const result = await jml.parseInput({\n  data: hierarchyData,\n  format: '${format}'\n});`
+  );
+
+  const parseSpinner = ora('Parsing hierarchy data...').start();
+  
+  const { parseInput } = await import('jira-magic-library');
+  const parseResult = await parseInput({ data: HIERARCHY_EXAMPLES[format], format });
+  
+  parseSpinner.succeed(`Parsed ${parseResult.data.length} issues with hierarchy`);
+
+  // Step 4: Show parsed structure
+  console.log('\n📊 Parsed Hierarchy Structure:\n');
+  
+  // Group by level for display
+  const epics = parseResult.data.filter(r => !r.Parent);
+  const children = parseResult.data.filter(r => r.Parent);
+  
+  epics.forEach(epic => {
+    console.log(`📦 ${epic.uid}: ${epic['Issue Type']} - "${epic.Summary}"`);
+    
+    const directChildren = children.filter(c => c.Parent === epic.uid);
+    directChildren.forEach(child => {
+      console.log(`   └── ${child.uid}: ${child['Issue Type']} - "${child.Summary}"`);
+      
+      const grandchildren = children.filter(gc => gc.Parent === child.uid);
+      grandchildren.forEach(gc => {
+        console.log(`       └── ${gc.uid}: ${gc['Issue Type']} - "${gc.Summary}"`);
+      });
+    });
+  });
+  console.log('');
+
+  info('🔄 Level-based batching will create:');
+  info('   Level 0: Epics (no parents) - 1 API call');
+  info('   Level 1: Tasks (parent = epic-1) - 1 API call');
+  info('   Level 2: Sub-tasks (parent = task-1) - 1 API call');
+  info('   Total: 3 API calls for 5 issues (not 5 sequential calls)\n');
+
+  // Step 5: Ask if user wants to create
+  warning('⚠️  This will create real issues in your JIRA instance!\n');
+  
+  const { shouldCreate } = await inquirer.prompt([
+    {
+      type: 'confirm',
+      name: 'shouldCreate',
+      message: `Create ${parseResult.data.length} hierarchical issues in JIRA?`,
+      default: false,
+    },
+  ]);
+
+  if (!shouldCreate) {
+    info('\n✋ Skipping issue creation. Demo complete.\n');
+    
+    // Show code example anyway
+    showCode('How it would work:',
+      `// Your hierarchy data with UIDs
+const data = [
+  { uid: 'epic-1', Project: '${projectKey}', 'Issue Type': 'Epic', Summary: 'My Epic' },
+  { uid: 'task-1', Project: '${projectKey}', 'Issue Type': 'Task', Summary: 'My Task', Parent: 'epic-1' },
+  { uid: 'subtask-1', Project: '${projectKey}', 'Issue Type': 'Sub-task', Summary: 'My Subtask', Parent: 'task-1' },
+];
+
+// Just call create() - library handles everything!
+const result = await jml.issues.create(data);
+
+// Result includes:
+// - result.succeeded / result.failed counts
+// - result.results[] with success/failure per issue
+// - result.manifest.uidMap mapping UIDs to JIRA keys:
+//   { 'epic-1': 'PROJ-100', 'task-1': 'PROJ-101', 'subtask-1': 'PROJ-102' }`
+    );
+    
+    await pause();
+    return;
+  }
+
+  // Step 6: Create hierarchy using unified create()
+  showCode('Unified create() with hierarchy:',
+    `const result = await jml.issues.create(parsedData);
+// Library auto-detects UIDs and uses level-based batching`
+  );
+
+  const createSpinner = ora('Creating hierarchy (level-based batching)...').start();
+  
+  try {
+    const { JML } = await import('jira-magic-library');
+    const jml = new JML({
+      baseUrl: config.baseUrl,
+      auth: { token: config.token },
+      apiVersion: config.apiVersion || 'v2',
+      redis: config.redis,
+    });
+    
+    const startTime = Date.now();
+    const createResult = await jml.issues.create(parseResult.data);
+    const duration = Date.now() - startTime;
+    
+    createSpinner.succeed(`Created ${createResult.succeeded}/${createResult.total} issues in ${duration}ms`);
+
+    // Step 7: Show results
+    console.log('\n📊 Creation Results:\n');
+    
+    success(`✅ Succeeded: ${createResult.succeeded}`);
+    if (createResult.failed > 0) {
+      error(`❌ Failed: ${createResult.failed}`);
+    }
+    info(`📊 Total: ${createResult.total}`);
+    info(`⏱️  Duration: ${duration}ms`);
+    info(`📂 Manifest ID: ${createResult.manifest.id}\n`);
+
+    // Show UID → Key mappings
+    if (createResult.manifest.uidMap && Object.keys(createResult.manifest.uidMap).length > 0) {
+      console.log('🔗 UID → JIRA Key Mappings:\n');
+      for (const [uid, key] of Object.entries(createResult.manifest.uidMap)) {
+        console.log(`   ${uid} → ${key}`);
+      }
+      console.log('');
+    }
+
+    // Show created hierarchy
+    if (createResult.succeeded > 0) {
+      console.log('✅ Created Hierarchy:\n');
+      
+      // Rebuild hierarchy display with real keys
+      const uidMap = createResult.manifest.uidMap || {};
+      const resultsMap = new Map(createResult.results.map((r, i) => [i, r]));
+      
+      parseResult.data.forEach((record, idx) => {
+        const result = resultsMap.get(idx);
+        if (result?.success) {
+          const indent = record.Parent ? (children.find(c => c.uid === record.Parent)?.Parent ? '       ' : '   ') : '';
+          const prefix = record.Parent ? '└── ' : '';
+          console.log(`${indent}${prefix}${result.key}: ${record['Issue Type']} - "${record.Summary}"`);
+        }
+      });
+      console.log('');
+    }
+
+    // Show failures if any
+    if (createResult.failed > 0) {
+      console.log('❌ Failed Issues:\n');
+      createResult.results.forEach((result, idx) => {
+        if (!result.success) {
+          const record = parseResult.data[idx];
+          console.log(`  ${record.uid || idx + 1}. ${record.Summary}`);
+          if (result.error) {
+            const errorMsg = result.error.errors?.validation 
+              || Object.values(result.error.errors || {}).join(', ')
+              || JSON.stringify(result.error);
+            console.log(`     Error: ${errorMsg}`);
+          }
+        }
+      });
+      console.log('');
+    }
+
+    // Show manifest with uidMap
+    showCode('Manifest with UID mappings:', JSON.stringify({
+      id: createResult.manifest.id,
+      total: createResult.manifest.total,
+      succeeded: createResult.manifest.succeeded,
+      failed: createResult.manifest.failed,
+      uidMap: createResult.manifest.uidMap || {},
+      note: 'uidMap enables retry with partial hierarchy - failed children can find their parents'
+    }, null, 2));
+
+    // Generate JQL link
+    if (createResult.succeeded > 0) {
+      const createdKeys = Object.values(createResult.manifest.created || {});
+      if (createdKeys.length > 0) {
+        const jqlQuery = `key in (${createdKeys.join(', ')})`;
+        const jqlLink = `${config.baseUrl}/issues/?jql=${encodeURIComponent(jqlQuery)}`;
+        
+        info('\n🔍 View all created issues:');
+        info(`   ${jqlLink}\n`);
+      }
+    }
+
+    info('\n💡 What just happened:');
+    info('  • Library detected uid fields and Parent UID references');
+    info('  • Grouped issues by hierarchy level using BFS algorithm');
+    info('  • Created Level 0 (Epics) first → Got real JIRA keys');
+    info('  • Replaced UID references with real keys → Created Level 1 (Tasks)');
+    info('  • Repeated for Level 2 (Sub-tasks)');
+    info('  • Total: 3 API calls instead of 5 sequential calls');
+    info('  • Manifest includes uidMap for retry/resume capability\n');
+
+    success('✅ Hierarchy bulk import demo complete!');
+
+  } catch (err) {
+    createSpinner.fail('Hierarchy creation failed');
+    error(`\n❌ Error: ${err.message}`);
+    
+    if (err.name === 'ValidationError' && err.message.includes('Circular')) {
+      warning('\n💡 Tip: Check for circular parent references (A → B → C → A)');
+    } else if (err.name === 'ConfigurationError') {
+      warning('\n💡 Tip: Check your JIRA connection settings');
+    } else if (err.name === 'AuthenticationError') {
+      warning('\n💡 Tip: Verify your JIRA credentials and permissions');
+    }
+    
+    console.error(err);
+  }
+
+  await pause();
 }
