@@ -37,6 +37,15 @@ export interface BulkManifest {
     /** Map of field name to error message */
     errors: Record<string, string>;
   }>;
+
+  /**
+   * Map of UID to created issue key (E4-S13: Hierarchy Support)
+   * 
+   * Tracks UID→Key mappings for hierarchy creation and retry support.
+   * When retrying with a manifest, these mappings allow child issues
+   * to reference parents created in previous attempts.
+   */
+  uidMap?: Record<string, string>;
 }
 
 /**
