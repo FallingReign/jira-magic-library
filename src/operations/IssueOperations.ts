@@ -198,6 +198,16 @@ export class IssueOperations {
     // eslint-disable-next-line no-console
     console.log(`🔄 Retrying ${filteredInput.length} failed rows from manifest ${manifestId}`);
 
+    // E4-S13 AC8: Check if this was a hierarchy operation
+    // If uidMap exists, route to hierarchy-aware retry
+    if (manifest.uidMap && Object.keys(manifest.uidMap).length > 0) {
+      return this.retryWithHierarchy(
+        filteredInput,
+        failedRowIndices,
+        manifest
+      );
+    }
+
     // AC3: Process filtered rows (same pattern as createBulk)
     // Build JIRA payloads for each filtered record
     const payloadResults = await Promise.allSettled(
@@ -398,9 +408,13 @@ export class IssueOperations {
     input: Record<string, unknown>,
     options?: CreateIssueOptions
   ): Promise<Issue> {
+    // Strip library-internal fields that shouldn't go to JIRA
+    // uid is used for hierarchy tracking in bulk operations
+    const { uid: _uid, ...cleanInput } = input;
+    
     // Extract required fields (case-insensitive)
-    const projectInput = input['Project'] || input['project'];
-    const issueType = input['Issue Type'] || input['issuetype'] || input['issueType'];
+    const projectInput = cleanInput['Project'] || cleanInput['project'];
+    const issueType = cleanInput['Issue Type'] || cleanInput['issuetype'] || cleanInput['issueType'];
 
     // Validate required fields
     if (!projectInput || typeof projectInput !== 'string') {
@@ -436,7 +450,7 @@ export class IssueOperations {
     // Update input with resolved project value so converter receives the correct format
     // This ensures the final payload has { project: { key: "PROJ" } } not { project: "Zulu" }
     const inputWithResolvedProject = {
-      ...input,
+      ...cleanInput,
       'Project': projectResolved, // Replace with resolved { key: "..." }
       'project': projectResolved, // Also set lowercase version for consistency
     };
@@ -675,6 +689,288 @@ export class IssueOperations {
           error: { status: 400, errors: { validation: error.message } },
         })),
       ],
+    };
+  }
+
+  /**
+   * Retry hierarchy operation with UID mappings
+   * 
+   * Story: E4-S13 - AC8: Retry Hierarchy Awareness
+   * 
+   * When retrying a failed hierarchy operation:
+   * 1. Load existing UID→Key mappings from manifest
+   * 2. Preprocess failed records to rebuild hierarchy levels
+   * 3. Replace UIDs with keys from previous successful creations
+   * 4. Create remaining issues level by level
+   * 
+   * @param filteredInput - Failed records to retry
+   * @param failedRowIndices - Original indices of failed records
+   * @param manifest - Original manifest with uidMap
+   * @returns Combined BulkResult
+   * 
+   * @private
+   */
+  private async retryWithHierarchy(
+    filteredInput: Array<Record<string, unknown>>,
+    failedRowIndices: number[],
+    manifest: BulkManifest
+  ): Promise<BulkResult> {
+    // Preprocess failed records to rebuild hierarchy
+    const preprocessResult = await preprocessHierarchyRecords(filteredInput);
+    
+    // If no hierarchy in retry set, fall back to flat bulk
+    if (!preprocessResult.hasHierarchy || preprocessResult.levels.length <= 1) {
+      // Use flat bulk retry by calling createBulkHierarchy with single level
+      // and existing mappings for UID resolution
+      const uidReplacer = new UidReplacer();
+      uidReplacer.loadExistingMappings(manifest.uidMap || {});
+      
+      // Replace UIDs in records before processing
+      const recordsWithReplacedUids = filteredInput.map(record => {
+        return uidReplacer.replaceUids({ ...record });
+      });
+
+      // Build payloads and call bulk API
+      const payloadResults = await Promise.allSettled(
+        recordsWithReplacedUids.map(async (record, filteredIndex) => {
+          try {
+            const issue = await this.createSingle(record, { validate: true });
+            const originalRecord = filteredInput[filteredIndex];
+            return {
+              index: filteredIndex,
+              success: true as const,
+              payload: { fields: issue.fields as Record<string, unknown> },
+              uid: originalRecord ? (originalRecord.uid as string) || undefined : undefined,
+            };
+          } catch (error) {
+            return {
+              index: filteredIndex,
+              success: false as const,
+              error: error as Error,
+            };
+          }
+        })
+      );
+
+      // Process results
+      const validPayloads: Array<{ index: number; payload: { fields: Record<string, unknown> }; uid?: string }> = [];
+      const validationErrors: Array<{ index: number; error: Error }> = [];
+
+      payloadResults.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          const value = result.value;
+          if (value.success) {
+            validPayloads.push({ index: value.index, payload: value.payload, uid: value.uid });
+          } else {
+            validationErrors.push({ index: value.index, error: value.error });
+          }
+        } else {
+          validationErrors.push({
+            index: 0,
+            error: new Error(`Unexpected validation failure: ${result.reason}`)
+          });
+        }
+      });
+
+      // Call bulk API
+      const apiResult = validPayloads.length > 0
+        ? await this.bulkApiWrapper!.createBulk(validPayloads.map(vp => vp.payload))
+        : { created: [], failed: [] };
+
+      // Remap results back to original indices and update manifest
+      return this.mergeRetryResultsIntoManifest(
+        apiResult,
+        validPayloads,
+        validationErrors,
+        failedRowIndices,
+        manifest,
+        uidReplacer
+      );
+    }
+
+    // Multi-level hierarchy retry: call createBulkHierarchy with existing mappings
+    const hierarchyResult = await this.createBulkHierarchy(
+      preprocessResult.levels,
+      preprocessResult.uidMap,
+      manifest.uidMap // Pass existing UID→Key mappings
+    );
+
+    // Merge hierarchy results into original manifest
+    // Map filtered indices back to original indices
+    const updatedManifest: BulkManifest = {
+      id: manifest.id,
+      timestamp: manifest.timestamp,
+      total: manifest.total,
+      succeeded: [...manifest.succeeded],
+      failed: [...manifest.failed],
+      created: { ...manifest.created },
+      errors: { ...manifest.errors },
+      uidMap: { ...manifest.uidMap, ...hierarchyResult.manifest.uidMap }, // Merge UID maps
+    };
+
+    // Update with retry results
+    hierarchyResult.results.forEach(result => {
+      // Map back to original index
+      const filteredIndex = result.index;
+      const originalIndex = failedRowIndices[filteredIndex];
+      
+      if (originalIndex === undefined) return;
+
+      if (result.success) {
+        // Add to succeeded
+        if (!updatedManifest.succeeded.includes(originalIndex)) {
+          updatedManifest.succeeded.push(originalIndex);
+        }
+        // Remove from failed
+        updatedManifest.failed = updatedManifest.failed.filter(idx => idx !== originalIndex);
+        // Add key
+        updatedManifest.created[originalIndex] = result.key!;
+        // Remove error
+        delete updatedManifest.errors[originalIndex];
+      } else {
+        // Update error
+        updatedManifest.errors[originalIndex] = result.error!;
+      }
+    });
+
+    // Store updated manifest
+    await this.manifestStorage!.storeManifest(updatedManifest);
+
+    // Build complete results array
+    const results = [];
+    for (let i = 0; i < manifest.total; i++) {
+      if (updatedManifest.succeeded.includes(i)) {
+        results.push({
+          index: i,
+          success: true as const,
+          key: updatedManifest.created[i]
+        });
+      } else if (updatedManifest.failed.includes(i)) {
+        const error = updatedManifest.errors[i];
+        if (error) {
+          results.push({
+            index: i,
+            success: false as const,
+            error: { status: error.status, errors: error.errors }
+          });
+        }
+      }
+    }
+
+    return {
+      total: updatedManifest.total,
+      succeeded: updatedManifest.succeeded.length,
+      failed: updatedManifest.failed.length,
+      manifest: updatedManifest,
+      results
+    };
+  }
+
+  /**
+   * Merge retry results into original manifest
+   * 
+   * @private
+   */
+  private async mergeRetryResultsIntoManifest(
+    apiResult: { created: Array<{ index: number; key: string }>; failed: Array<{ index: number; status: number; errors: Record<string, string> }> },
+    validPayloads: Array<{ index: number; payload: { fields: Record<string, unknown> }; uid?: string }>,
+    validationErrors: Array<{ index: number; error: Error }>,
+    failedRowIndices: number[],
+    manifest: BulkManifest,
+    uidReplacer: UidReplacer
+  ): Promise<BulkResult> {
+    const updatedManifest: BulkManifest = {
+      id: manifest.id,
+      timestamp: manifest.timestamp,
+      total: manifest.total,
+      succeeded: [...manifest.succeeded],
+      failed: [...manifest.failed],
+      created: { ...manifest.created },
+      errors: { ...manifest.errors },
+      uidMap: { ...manifest.uidMap },
+    };
+
+    // Process API successes
+    apiResult.created.forEach(item => {
+      const validPayload = validPayloads[item.index];
+      if (!validPayload) return;
+      
+      const filteredIndex = validPayload.index;
+      const originalIndex = failedRowIndices[filteredIndex];
+      if (originalIndex === undefined) return;
+
+      // Update succeeded/failed arrays
+      if (!updatedManifest.succeeded.includes(originalIndex)) {
+        updatedManifest.succeeded.push(originalIndex);
+      }
+      updatedManifest.failed = updatedManifest.failed.filter(idx => idx !== originalIndex);
+      
+      // Add key
+      updatedManifest.created[originalIndex] = item.key;
+      delete updatedManifest.errors[originalIndex];
+
+      // Record UID mapping if present
+      if (validPayload.uid) {
+        uidReplacer.recordCreation(validPayload.uid, item.key);
+      }
+    });
+
+    // Process API failures
+    apiResult.failed.forEach(item => {
+      const validPayload = validPayloads[item.index];
+      if (!validPayload) return;
+      
+      const filteredIndex = validPayload.index;
+      const originalIndex = failedRowIndices[filteredIndex];
+      if (originalIndex === undefined) return;
+
+      updatedManifest.errors[originalIndex] = { status: item.status, errors: item.errors };
+    });
+
+    // Process validation errors
+    validationErrors.forEach(({ index: filteredIndex, error }) => {
+      const originalIndex = failedRowIndices[filteredIndex];
+      if (originalIndex === undefined) return;
+
+      updatedManifest.errors[originalIndex] = { status: 400, errors: { validation: error.message } };
+    });
+
+    // Update uidMap with new mappings
+    updatedManifest.uidMap = {
+      ...updatedManifest.uidMap,
+      ...uidReplacer.getUidMap()
+    };
+
+    // Store updated manifest
+    await this.manifestStorage!.storeManifest(updatedManifest);
+
+    // Build results array
+    const results = [];
+    for (let i = 0; i < manifest.total; i++) {
+      if (updatedManifest.succeeded.includes(i)) {
+        results.push({
+          index: i,
+          success: true as const,
+          key: updatedManifest.created[i]
+        });
+      } else if (updatedManifest.failed.includes(i)) {
+        const error = updatedManifest.errors[i];
+        if (error) {
+          results.push({
+            index: i,
+            success: false as const,
+            error: { status: error.status, errors: error.errors }
+          });
+        }
+      }
+    }
+
+    return {
+      total: updatedManifest.total,
+      succeeded: updatedManifest.succeeded.length,
+      failed: updatedManifest.failed.length,
+      manifest: updatedManifest,
+      results
     };
   }
 

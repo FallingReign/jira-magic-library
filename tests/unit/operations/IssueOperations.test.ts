@@ -1066,4 +1066,189 @@ describe('IssueOperations', () => {
       });
     });
   });
+
+  describe('E4-S13: Hierarchy Bulk Creation', () => {
+    let issueOpsWithCache: IssueOperations;
+    let mockCacheForHierarchy: jest.Mocked<LookupCache>;
+
+    beforeEach(() => {
+      mockCacheForHierarchy = {
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn().mockResolvedValue(undefined),
+      } as any;
+
+      // Mock project lookup for all hierarchy tests
+      (mockClient.get as jest.Mock).mockResolvedValue({
+        id: '10000',
+        key: 'ENG',
+        name: 'Engineering',
+      });
+
+      issueOpsWithCache = new IssueOperations(
+        mockClient,
+        mockSchema,
+        mockResolver,
+        mockConverter,
+        mockCacheForHierarchy
+      );
+    });
+
+    describe('AC3: Hierarchy routing', () => {
+      it('should route to createBulkHierarchy when UIDs detected', async () => {
+        // Arrange: Input with UID references
+        const input = [
+          { uid: 'epic-1', Project: 'ENG', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+          { uid: 'task-1', Project: 'ENG', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
+        ];
+
+        // Mock schema for all issue types
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'ENG',
+          issueType: 'Epic',
+          fields: {
+            summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } }
+          }
+        });
+
+        mockResolver.resolveFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Epic' },
+          summary: 'Epic 1'
+        });
+
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Epic' },
+          summary: 'Epic 1'
+        });
+
+        // Mock bulk API responses for each level
+        mockClient.post.mockResolvedValueOnce({
+          issues: [{ id: '100', key: 'ENG-100', self: 'https://...' }],
+          errors: []
+        }).mockResolvedValueOnce({
+          issues: [{ id: '101', key: 'ENG-101', self: 'https://...' }],
+          errors: []
+        });
+
+        // Act
+        const result = await issueOpsWithCache.create(input);
+
+        // Assert: Should return BulkResult
+        expect(result).toHaveProperty('total');
+        expect(result).toHaveProperty('succeeded');
+        expect(result).toHaveProperty('manifest');
+      });
+
+      it('should use flat bulk when no hierarchy detected', async () => {
+        // Arrange: Input without UID references
+        const input = [
+          { Project: 'ENG', 'Issue Type': 'Task', Summary: 'Task 1' },
+          { Project: 'ENG', 'Issue Type': 'Task', Summary: 'Task 2' },
+        ];
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'ENG',
+          issueType: 'Task',
+          fields: {
+            summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } }
+          }
+        });
+
+        mockResolver.resolveFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Task' },
+          summary: 'Task 1'
+        });
+
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Task' },
+          summary: 'Task 1'
+        });
+
+        // Mock single bulk API response (not two levels)
+        mockClient.post.mockResolvedValue({
+          issues: [
+            { id: '100', key: 'ENG-100', self: 'https://...' },
+            { id: '101', key: 'ENG-101', self: 'https://...' }
+          ],
+          errors: []
+        });
+
+        // Act
+        const result = await issueOpsWithCache.create(input);
+
+        // Assert: Should return BulkResult with all succeeded
+        expect(result).toHaveProperty('total', 2);
+        expect((result as any).manifest).not.toHaveProperty('uidMap'); // No uidMap for flat bulk
+      });
+    });
+
+    describe('AC8: Retry hierarchy awareness', () => {
+      it('should use hierarchy retry when manifest has uidMap', async () => {
+        // Arrange: Manifest with uidMap (indicates previous hierarchy operation)
+        const manifest = {
+          id: 'bulk-hier-123',
+          timestamp: Date.now(),
+          total: 2,
+          succeeded: [0], // Epic succeeded
+          failed: [1],    // Task failed
+          created: { 0: 'ENG-100' },
+          errors: { 1: { status: 400, errors: { parent: 'Invalid parent' } } },
+          uidMap: { 'epic-1': 'ENG-100' }, // This indicates hierarchy operation
+        };
+
+        // Mock manifest storage
+        mockCacheForHierarchy.get.mockImplementation(async (key: string) => {
+          if (key.includes('bulk-hier-123')) {
+            return JSON.stringify(manifest);
+          }
+          return null;
+        });
+
+        // Input with hierarchy
+        const input = [
+          { uid: 'epic-1', Project: 'ENG', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+          { uid: 'task-1', Project: 'ENG', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
+        ];
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'ENG',
+          issueType: 'Task',
+          fields: {
+            summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } }
+          }
+        });
+
+        mockResolver.resolveFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Task' },
+          summary: 'Task 1',
+          parent: { key: 'ENG-100' } // UID replaced with key
+        });
+
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Task' },
+          summary: 'Task 1',
+          parent: { key: 'ENG-100' }
+        });
+
+        // Mock bulk API success for retry
+        mockClient.post.mockResolvedValue({
+          issues: [{ id: '101', key: 'ENG-101', self: 'https://...' }],
+          errors: []
+        });
+
+        // Act
+        const result = await issueOpsWithCache.create(input, { retry: 'bulk-hier-123' });
+
+        // Assert: Should succeed with merged manifest
+        expect(result).toHaveProperty('succeeded');
+        expect(result).toHaveProperty('manifest');
+        // The retry should use existing UID mappings
+      });
+    });
+  });
 });

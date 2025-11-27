@@ -59,12 +59,12 @@ describe('HierarchyPreprocessor', () => {
 
       const result = await preprocessHierarchyRecords(records);
 
-      // The record in the result should NOT have the uid field
-      expect(result.levels[0].issues[0].record).not.toHaveProperty('uid');
+      // The record preserves uid for UID→Key tracking (stripped later in createSingle)
+      expect(result.levels[0].issues[0].record).toHaveProperty('uid', 'task-1');
       expect(result.levels[0].issues[0].record).toHaveProperty('Summary', 'Task 1');
     });
 
-    it('should preserve uid in uidMap even after stripping from record', async () => {
+    it('should preserve uid in uidMap and in record for tracking', async () => {
       const records = [
         { uid: 'epic-1', Project: 'TEST', 'Issue Type': 'Epic', Summary: 'Epic 1' },
       ];
@@ -72,7 +72,8 @@ describe('HierarchyPreprocessor', () => {
       const result = await preprocessHierarchyRecords(records);
 
       expect(result.uidMap).toEqual({ 'epic-1': 0 });
-      expect(result.levels[0].issues[0].record).not.toHaveProperty('uid');
+      // uid preserved in record for createBulkHierarchy to track UID→Key mappings
+      expect(result.levels[0].issues[0].record).toHaveProperty('uid', 'epic-1');
     });
   });
 

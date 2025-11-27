@@ -649,4 +649,304 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       expect(result.failed).toBe(0);
     });
   });
+
+  // E4-S13 AC8: Hierarchy-aware retry
+  describe('E4-S13 AC8: Hierarchy-aware Retry', () => {
+    const hierarchyInput = [
+      { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+      { uid: 'task-1', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
+      { uid: 'task-2', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task 2', Parent: 'epic-1' },
+    ];
+
+    it('should route to hierarchy retry when manifest has uidMap', async () => {
+      const manifestId = 'bulk-hier-123';
+      // Manifest with uidMap indicates previous hierarchy operation
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 3,
+        succeeded: [0],      // Epic succeeded
+        failed: [1, 2],      // Tasks failed
+        created: { '0': 'ZUL-100' },
+        errors: {
+          '1': { status: 400, errors: { parent: 'Invalid parent' } },
+          '2': { status: 400, errors: { parent: 'Invalid parent' } },
+        },
+        uidMap: { 'epic-1': 'ZUL-100' }, // This triggers hierarchy retry
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      // Mock bulk API success for retry
+      mockClient.post.mockResolvedValueOnce({
+        issues: [
+          { key: 'ZUL-101', id: '10101', self: 'https://...' },
+          { key: 'ZUL-102', id: '10102', self: 'https://...' }
+        ],
+        errors: []
+      });
+
+      const result = await issueOps.create(hierarchyInput, { retry: manifestId }) as BulkResult;
+
+      // Should succeed with merged manifest
+      expect(result.succeeded).toBe(3); // Epic + 2 tasks
+      expect(result.failed).toBe(0);
+      expect(result.manifest.uidMap).toBeDefined();
+      expect(result.manifest.uidMap!['epic-1']).toBe('ZUL-100');
+    });
+
+    it('should use existing UID mappings when retrying hierarchy', async () => {
+      const manifestId = 'bulk-hier-456';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 2,
+        succeeded: [0],
+        failed: [1],
+        created: { '0': 'ZUL-200' },
+        errors: {
+          '1': { status: 500, errors: { server: 'Temporary error' } },
+        },
+        uidMap: { 'epic-1': 'ZUL-200' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      // Mock bulk success for the child task
+      mockClient.post.mockResolvedValueOnce({
+        issues: [{ key: 'ZUL-201', id: '10201', self: 'https://...' }],
+        errors: []
+      });
+
+      const result = await issueOps.create(hierarchyInput.slice(0, 2), { retry: manifestId }) as BulkResult;
+
+      // UID replacement should use existing mapping
+      expect(result.manifest.uidMap!['epic-1']).toBe('ZUL-200');
+      expect(result.manifest.uidMap!['task-1']).toBe('ZUL-201');
+    });
+
+    it('should handle partial failure during hierarchy retry', async () => {
+      const manifestId = 'bulk-hier-789';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 3,
+        succeeded: [0],
+        failed: [1, 2],
+        created: { '0': 'ZUL-300' },
+        errors: {
+          '1': { status: 500, errors: { server: 'Error' } },
+          '2': { status: 500, errors: { server: 'Error' } },
+        },
+        uidMap: { 'epic-1': 'ZUL-300' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      // Mock partial failure: task-1 succeeds, task-2 fails
+      mockClient.post.mockResolvedValueOnce({
+        issues: [{ key: 'ZUL-301', id: '10301', self: 'https://...' }],
+        errors: [{
+          status: 400,
+          failedElementNumber: 1,
+          elementErrors: { errors: { summary: 'Invalid summary' } }
+        }]
+      });
+
+      const result = await issueOps.create(hierarchyInput, { retry: manifestId }) as BulkResult;
+
+      expect(result.succeeded).toBe(2); // Epic + task-1
+      expect(result.failed).toBe(1);    // task-2 still failed
+    });
+
+    it('should fall back to flat retry when manifest has no uidMap', async () => {
+      const manifestId = 'bulk-flat-123';
+      // Manifest WITHOUT uidMap = flat bulk, not hierarchy
+      const manifest = createBasicManifest(manifestId);
+      manifest.total = 2;
+      manifest.failed = [1];
+      manifest.errors = {
+        '1': { status: 400, errors: { field: 'error' } },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+      setupBulkSuccess(mockClient, ['ZUL-2']);
+
+      const result = await issueOps.create(testInput.slice(0, 2), { retry: manifestId }) as BulkResult;
+
+      // Should succeed through flat retry path
+      expect(result.succeeded).toBe(2);
+      expect(result.manifest.uidMap).toBeUndefined(); // No uidMap for flat bulk
+    });
+
+    it('should handle empty failed rows on hierarchy retry', async () => {
+      const manifestId = 'bulk-hier-empty';
+      // All rows already succeeded
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 2,
+        succeeded: [0, 1],
+        failed: [],
+        created: { '0': 'ZUL-400', '1': 'ZUL-401' },
+        errors: {},
+        uidMap: { 'epic-1': 'ZUL-400', 'task-1': 'ZUL-401' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      const result = await issueOps.create(hierarchyInput.slice(0, 2), { retry: manifestId }) as BulkResult;
+
+      // No API calls needed, return existing state
+      expect(result.succeeded).toBe(2);
+      expect(result.failed).toBe(0);
+      expect(mockClient.post).not.toHaveBeenCalled();
+    });
+
+    it('should handle multi-level retry when failed records have hierarchy', async () => {
+      // Scenario: Epic succeeded but Story and its child Task both failed
+      // Story is parent of Task, creating 2 levels in the retry set
+      const multiLevelHierarchyInput = [
+        { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+        { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Story 1', Parent: 'epic-1' },
+        { uid: 'task-1', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'story-1' },
+      ];
+
+      const manifestId = 'bulk-multilevel-123';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 3,
+        succeeded: [0],      // Epic succeeded
+        failed: [1, 2],      // Story and Task failed (forming 2 levels)
+        created: { '0': 'ZUL-500' },
+        errors: {
+          '1': { status: 500, errors: { server: 'Temporary error' } },
+          '2': { status: 500, errors: { server: 'Temporary error' } },
+        },
+        uidMap: { 'epic-1': 'ZUL-500' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      // Setup mocks for different issue types
+      mockSchema.getFieldsForIssueType.mockImplementation(async (projectKey, issueType) => ({
+        projectKey,
+        issueType,
+        fields: {
+          summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } },
+        },
+      }));
+
+      mockResolver.resolveFields.mockImplementation(async (projectKey, issueType, record) => ({
+        project: { key: projectKey },
+        issuetype: { name: issueType },
+        summary: record.Summary,
+        parent: record.Parent ? { key: record.Parent } : undefined,
+      }));
+
+      mockConverter.convertFields.mockImplementation(async (schema, fields) => fields);
+
+      // Mock bulk API responses for each level
+      // Level 0: Story (parent is epic-1 which is external/succeeded)
+      mockClient.post.mockResolvedValueOnce({
+        issues: [{ key: 'ZUL-501', id: '10501', self: 'https://...' }],
+        errors: []
+      });
+      // Level 1: Task (parent is story-1)
+      mockClient.post.mockResolvedValueOnce({
+        issues: [{ key: 'ZUL-502', id: '10502', self: 'https://...' }],
+        errors: []
+      });
+
+      const result = await issueOps.create(multiLevelHierarchyInput, { retry: manifestId }) as BulkResult;
+
+      // Should have called bulk API twice (once per level)
+      expect(mockClient.post).toHaveBeenCalledTimes(2);
+      
+      // Should succeed with all issues
+      expect(result.succeeded).toBe(3);
+      expect(result.failed).toBe(0);
+      expect(result.manifest.uidMap).toBeDefined();
+      expect(result.manifest.uidMap!['story-1']).toBe('ZUL-501');
+      expect(result.manifest.uidMap!['task-1']).toBe('ZUL-502');
+    });
+
+    it('should merge multi-level retry results back to original manifest indices', async () => {
+      // 4-level deep hierarchy: Epic -> Feature -> Story -> Task
+      // All but Epic failed, creating 3 levels in retry
+      const deepHierarchyInput = [
+        { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Epic' },
+        { uid: 'feature-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Feature', Parent: 'epic-1' },
+        { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Story', Parent: 'feature-1' },
+        { uid: 'task-1', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task', Parent: 'story-1' },
+      ];
+
+      const manifestId = 'bulk-deep-456';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 4,
+        succeeded: [0],
+        failed: [1, 2, 3],
+        created: { '0': 'ZUL-600' },
+        errors: {
+          '1': { status: 500, errors: { server: 'Error' } },
+          '2': { status: 500, errors: { server: 'Error' } },
+          '3': { status: 500, errors: { server: 'Error' } },
+        },
+        uidMap: { 'epic-1': 'ZUL-600' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      // Setup mocks for different issue types
+      mockSchema.getFieldsForIssueType.mockImplementation(async (projectKey, issueType) => ({
+        projectKey,
+        issueType,
+        fields: {
+          summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } },
+        },
+      }));
+
+      mockResolver.resolveFields.mockImplementation(async (projectKey, issueType, record) => ({
+        project: { key: projectKey },
+        issuetype: { name: issueType },
+        summary: record.Summary,
+        parent: record.Parent ? { key: record.Parent } : undefined,
+      }));
+
+      mockConverter.convertFields.mockImplementation(async (schema, fields) => fields);
+
+      // Mock responses for 3 levels
+      mockClient.post
+        .mockResolvedValueOnce({
+          issues: [{ key: 'ZUL-601', id: '10601', self: 'https://...' }],
+          errors: []
+        })
+        .mockResolvedValueOnce({
+          issues: [{ key: 'ZUL-602', id: '10602', self: 'https://...' }],
+          errors: []
+        })
+        .mockResolvedValueOnce({
+          issues: [{ key: 'ZUL-603', id: '10603', self: 'https://...' }],
+          errors: []
+        });
+
+      const result = await issueOps.create(deepHierarchyInput, { retry: manifestId }) as BulkResult;
+
+      // 3 bulk API calls (one per level)
+      expect(mockClient.post).toHaveBeenCalledTimes(3);
+      
+      // All succeeded
+      expect(result.succeeded).toBe(4);
+      expect(result.failed).toBe(0);
+      
+      // Original indices preserved in manifest
+      expect(result.manifest.created['0']).toBe('ZUL-600');
+      expect(result.manifest.created['1']).toBe('ZUL-601');
+      expect(result.manifest.created['2']).toBe('ZUL-602');
+      expect(result.manifest.created['3']).toBe('ZUL-603');
+    });
+  });
 });

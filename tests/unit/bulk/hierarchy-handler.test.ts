@@ -369,7 +369,7 @@ describe('createBulkHierarchy', () => {
         expect(result.levels.length).toBe(1); // All at level 0 (no parents)
       });
 
-      it('should strip uid field from all records', async () => {
+      it('should preserve uid field for tracking (stripped later in createSingle)', async () => {
         const records = [
           { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 1' },
           { uid: 'task-1', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
@@ -377,14 +377,15 @@ describe('createBulkHierarchy', () => {
 
         const result = await preprocessHierarchyRecords(records);
 
-        // uid should be stripped from all returned records
+        // uid should be preserved for UID→Key tracking in createBulkHierarchy
+        // It gets stripped in createSingle before sending to JIRA
         result.levels.forEach(level => {
           level.issues.forEach(issue => {
-            expect(issue.record.uid).toBeUndefined();
+            expect(issue.record.uid).toBeDefined();
           });
         });
 
-        // But uidMap should still have the mappings
+        // uidMap should also have the mappings
         expect(result.uidMap).toBeDefined();
         expect(result.uidMap!['epic-1']).toBe(0);
         expect(result.uidMap!['task-1']).toBe(1);

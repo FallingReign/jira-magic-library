@@ -167,18 +167,13 @@ export async function preprocessHierarchyRecords(
   // The BFS algorithm uses uid and Parent fields to determine levels
   const levels = buildHierarchyLevels(records);
 
-  // Step 4: Strip uid field from all records in levels
-  const strippedLevels: HierarchyLevel[] = levels.map(level => ({
-    depth: level.depth,
-    issues: level.issues.map(issue => ({
-      index: issue.index,
-      record: stripUidField(issue.record),
-    })),
-  }));
+  // Step 5: Keep uid in record for tracking but strip before sending to JIRA
+  // The uid field is used by createBulkHierarchy to track UID→Key mappings
+  // It's stripped when building the actual JIRA payload in createSingle
 
   return {
     hasHierarchy: true,
-    levels: strippedLevels,
+    levels: levels,  // Keep uid in records for UID tracking
     uidMap: uidResult.uidMap,
   };
 }
