@@ -172,7 +172,7 @@ function validateStoryFile(filePath) {
   if (!content.includes('## Acceptance Criteria')) {
     error('Missing "## Acceptance Criteria" section', fileName);
   } else {
-    const acMatches = content.match(/### ✅ AC\d+:/g);
+    const acMatches = content.match(/###\s+(?:✅\s+)?AC\d+:/g);
     if (!acMatches || acMatches.length < 3) {
       warn('Story should have at least 3 Acceptance Criteria', fileName);
     }

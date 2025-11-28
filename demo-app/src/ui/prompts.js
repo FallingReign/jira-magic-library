@@ -78,6 +78,7 @@ export async function showMainMenu() {
         { name: '📥 Bulk Import (CSV/JSON/YAML) (E4-S04)', value: 'bulk-import' },
         { name: '✅ Schema Validation (E4-S07)', value: 'schema-validation' },
         { name: '🏗️  Issue Hierarchy & Parent Links (E3-S09)', value: 'hierarchy' },
+        { name: '🧱 Hierarchy Level Batching (UID bulk, E4-S13)', value: 'hierarchy-bulk-uids' },
         { name: '📚 Field Type Reference (Browse Converters)', value: 'field-reference' },
         { name: '💡 User Ambiguity Policy Explorer', value: 'user-ambiguity' },
         new inquirer.Separator(),

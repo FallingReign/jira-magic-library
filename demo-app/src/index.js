@@ -22,6 +22,7 @@ import { runManifestStorageDemo } from './features/manifest-storage-demo.js';
 import { runBulkApiWrapperDemo } from './features/bulk-api-wrapper-demo.js';
 import { runUserAmbiguityDemo } from './features/user-ambiguity-demo.js';
 import { runIntegrationTests } from './features/integration-tests.js';
+import { runHierarchyBulkUidDemo } from './features/hierarchy-bulk-uids.js';
 
 async function main() {
   clear();
@@ -106,6 +107,12 @@ async function main() {
       case 'hierarchy':
         clear();
         await runHierarchyDemo(config);
+        clear();
+        break;
+
+      case 'hierarchy-bulk-uids':
+        clear();
+        await runHierarchyBulkUidDemo(config);
         clear();
         break;
 

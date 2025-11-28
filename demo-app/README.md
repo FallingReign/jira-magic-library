@@ -51,6 +51,7 @@ Comprehensive examples for parent-child relationships:
 - **Multi-level Hierarchy** - Container → Phase → Epic → Story → Subtask
 - **Parent Synonyms** - Use "Parent", "Epic Link", "Epic", "Parent Link", etc.
 - **Summary Search** - Find parents by summary text
+- **Hierarchy Level Batching (UIDs)** - Create multi-level hierarchies in 1 payload using `uid` + `Parent` (E4-S13)
 - **Custom Synonyms** - Configure your own parent field synonyms
 - **Issue Type Abbreviations** - Use shortcuts like "ST" for Story, "B" for Bug
 - **Cascading Select** - All 3 input formats (string, object, array)
