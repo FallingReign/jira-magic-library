@@ -307,13 +307,13 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
         Summary: `[E4-S13-AC4] JPO Container - ${timestamp}`,
       });
       
-      // Level 1: 2 Super Epics (under Container)
+      // Level 1: 2 SuperEpics (under Container)
       for (let se = 1; se <= 2; se++) {
         input.push({
           uid: `super-epic-${se}`,
           Project: projectKey,
-          'Issue Type': 'Super Epic',
-          Summary: `[E4-S13-AC4] Super Epic ${se} - ${timestamp}`,
+          'Issue Type': 'SuperEpic',
+          Summary: `[E4-S13-AC4] SuperEpic ${se} - ${timestamp}`,
           Parent: 'container-1',
         });
       }
@@ -363,7 +363,7 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
 
       console.log('\n5️⃣  Creating full JPO hierarchy (31 issues across 5 levels)...');
       console.log('    Level 0: 1 Container');
-      console.log('    Level 1: 2 Super Epics');
+      console.log('    Level 1: 2 SuperEpics');
       console.log('    Level 2: 4 Epics');
       console.log('    Level 3: 8 Tasks');
       console.log('    Level 4: 16 Sub-tasks');
@@ -387,7 +387,7 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
       
       console.log(`\n   📊 By Level:`);
       console.log(`      Containers: ${containerResults.filter(r => r.success).length}/1 succeeded`);
-      console.log(`      Super Epics: ${superEpicResults.filter(r => r.success).length}/2 succeeded`);
+      console.log(`      SuperEpics: ${superEpicResults.filter(r => r.success).length}/2 succeeded`);
       console.log(`      Epics: ${epicResults.filter(r => r.success).length}/4 succeeded`);
       console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/8 succeeded`);
       console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/16 succeeded`);

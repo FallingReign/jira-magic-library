@@ -487,13 +487,13 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
     Summary: `[E4-S13-Test] JPO Container - ${timestamp}`,
   });
   
-  // Level 1: 2 Super Epics (under Container)
+  // Level 1: 2 SuperEpics (under Container)
   for (let se = 1; se <= 2; se++) {
     input.push({
       uid: `super-epic-${se}`,
       Project: projectKey,
-      'Issue Type': 'Super Epic',
-      Summary: `[E4-S13-Test] Super Epic ${se} - ${timestamp}`,
+      'Issue Type': 'SuperEpic',
+      Summary: `[E4-S13-Test] SuperEpic ${se} - ${timestamp}`,
       Parent: 'container-1',
     });
   }
@@ -543,7 +543,7 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
 
   info('Full JPO Hierarchy Structure:');
   info('  Level 0: 1 Container');
-  info('  Level 1: 2 Super Epics');
+  info('  Level 1: 2 SuperEpics');
   info('  Level 2: 4 Epics');
   info('  Level 3: 8 Tasks');
   info('  Level 4: 16 Sub-tasks');
@@ -576,7 +576,7 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
     
     console.log(`\n   📊 By Level:`);
     console.log(`      Containers: ${containerResults.filter(r => r.success).length}/1 succeeded`);
-    console.log(`      Super Epics: ${superEpicResults.filter(r => r.success).length}/2 succeeded`);
+    console.log(`      SuperEpics: ${superEpicResults.filter(r => r.success).length}/2 succeeded`);
     console.log(`      Epics: ${epicResults.filter(r => r.success).length}/4 succeeded`);
     console.log(`      Tasks: ${taskResults.filter(r => r.success).length}/8 succeeded`);
     console.log(`      Sub-tasks: ${subtaskResults.filter(r => r.success).length}/16 succeeded`);
@@ -607,7 +607,7 @@ async function runLargeScaleTest(jml, projectKey, createdIssues, results) {
       console.log(`\n   ✓ Sample created keys:`);
       const samples = [
         { idx: 0, label: 'Container' },
-        { idx: 1, label: 'Super Epic' },
+        { idx: 1, label: 'SuperEpic' },
         { idx: 3, label: 'Epic' },
         { idx: 7, label: 'Task' },
         { idx: 15, label: 'Sub-task' },
