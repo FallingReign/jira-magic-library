@@ -60,22 +60,22 @@ export class IssueOperations {
   }
 
   /**
-   * Create JIRA issues - handles single or bulk creation
-   * 
-   * **E4-S04: Unified API**
-   * This method detects input type automatically:
-   * - Single object with Project field → creates one issue (E1-S09)
-   * - Array of objects → bulk creation (E4-S01, E4-S02, E4-S03)
-   * - ParseInputOptions (from/data/format) → parse then bulk create
-   * 
-   * @param input - Issue data (single, array, or parse options)
-   * @param options - Optional settings (validate, retry)
-   * @returns Single Issue or BulkResult
-   * 
-   * @throws {Error} If input type cannot be determined
-   * @throws {Error} If validation or creation fails
-   * 
-   * @example Single issue
+   * Create JIRA issues from a single record, an array of records, or parsed file input.
+   *
+   * The implementation mirrors the public `jml.issues.create(...)` surface:
+   *
+   * - Accepts a single object with `Project` / `Issue Type` fields and returns a single Issue.
+   * - Accepts an array of objects (or ParseInputOptions such as `{ from: 'file.csv' }`) and returns a {@link BulkResult}.
+   * - Detects uid-based hierarchies produced by {@link preprocessHierarchyRecords} and routes them through level batching (story E4-S13).
+   * - Persists a manifest so callers can resume failures via the `retry` option (stories E4-S02/E4-S05).
+   *
+   * This is the method that powers `jml.issues.create(...)` in the public API.
+   *
+   * @param input - Single issue object, array of issue objects, or ParseInputOptions.
+   * @param options - Optional flags (`validate` for dry-run payload inspection, `retry` for manifest resume).
+   * @returns A single Issue when a lone object is provided, otherwise a {@link BulkResult}.
+   *
+   * @example Create a single issue
    * ```typescript
    * const issue = await issueOps.create({
    *   Project: 'ENG',
@@ -83,19 +83,14 @@ export class IssueOperations {
    *   Summary: 'Login fails'
    * });
    * ```
-   * 
-   * @example Bulk from array
+   *
+   * @example Create bulk hierarchy with uid references
    * ```typescript
    * const result = await issueOps.create([
-   *   { Project: 'ENG', 'Issue Type': 'Bug', Summary: 'Issue 1' },
-   *   { Project: 'ENG', 'Issue Type': 'Task', Summary: 'Issue 2' }
+   *   { uid: 'epic-1', Project: 'ENG', 'Issue Type': 'Epic', Summary: 'Parent Epic' },
+   *   { uid: 'task-1', Project: 'ENG', 'Issue Type': 'Task', Summary: 'Child Task', Parent: 'epic-1' }
    * ]);
-   * console.log(`Created ${result.succeeded} of ${result.total} issues`);
-   * ```
-   * 
-   * @example Bulk from CSV
-   * ```typescript
-   * const result = await issueOps.create({ from: './issues.csv' });
+   * // result.manifest.uidMap will map `epic-1`/`task-1` to real keys.
    * ```
    */
   async create(

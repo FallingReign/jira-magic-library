@@ -1,9 +1,12 @@
 {
-  "entryPoints": ["src/index.ts"],
+  "entryPoints": [
+    "src/index.ts"
+  ],
   "out": "docs/api",
   "tsconfig": "tsconfig.json",
   "excludePrivate": true,
   "excludeProtected": true,
   "includeVersion": true,
-  "readme": "README.md"
+  "readme": "README.md",
+  "excludeInternal": true
 }

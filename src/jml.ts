@@ -55,7 +55,11 @@ export interface ServerInfo {
  */
 export class JML {
   /**
-   * Issue operations (create, update, etc.)
+   * Issue operations entry point.
+   *
+   * Provides high-level helpers such as {@link IssueOperations.create}
+   * which back the public API `jml.issues.create(...)`. All bulk batching,
+   * manifest handling, and hierarchy routing flows live behind this property.
    */
   public readonly issues: IssueOperations;
 
