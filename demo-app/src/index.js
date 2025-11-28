@@ -18,6 +18,7 @@ import { runFieldReference } from './features/field-reference.js';
 import { runHierarchyDemo } from './features/hierarchy-demo.js';
 import { runBulkImportDemo } from './features/bulk-import.js';
 import { runBulkImportCsvQuickDemo, runBulkImportYamlQuickDemo } from './features/bulk-import-quick.js';
+import { runHierarchyCsvQuickDemo, runHierarchyYamlQuickDemo } from './features/hierarchy-bulk-quick.js';
 import { runSchemaValidationDemo } from './features/schema-validation.js';
 import { runManifestStorageDemo } from './features/manifest-storage-demo.js';
 import { runBulkApiWrapperDemo } from './features/bulk-api-wrapper-demo.js';
@@ -126,6 +127,18 @@ async function main() {
       case 'hierarchy-bulk-uids':
         clear();
         await runHierarchyBulkUidDemo(config);
+        clear();
+        break;
+
+      case 'hierarchy-csv':
+        clear();
+        await runHierarchyCsvQuickDemo(config);
+        clear();
+        break;
+
+      case 'hierarchy-yaml':
+        clear();
+        await runHierarchyYamlQuickDemo(config);
         clear();
         break;
 
