@@ -245,7 +245,9 @@ export async function runInternalDemo(config) {
 const choices = [
   new inquirer.Separator('=== User-Facing Features ==='),
   { name: '�📝 Multi-Field Issue Creator', value: 'multi-field' },
-  { name: '📦 Bulk Issue Import (CSV/JSON/YAML)', value: 'bulk-import' },
+    { name: '📦 Bulk Issue Import (CSV/JSON/YAML)', value: 'bulk-import' },
+    { name: '📄 Bulk Import: CSV Example', value: 'bulk-import-csv' },
+    { name: '📝 Bulk Import: YAML Example', value: 'bulk-import-yaml' },
   { name: '🔗 Issue Hierarchy & Parent Links', value: 'hierarchy' },
   
   new inquirer.Separator('=== Infrastructure Demos (Development) ==='),

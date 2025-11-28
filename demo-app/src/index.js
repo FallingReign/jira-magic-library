@@ -17,6 +17,7 @@ import { runMultiFieldCreator } from './features/multi-field-creator.js';
 import { runFieldReference } from './features/field-reference.js';
 import { runHierarchyDemo } from './features/hierarchy-demo.js';
 import { runBulkImportDemo } from './features/bulk-import.js';
+import { runBulkImportCsvQuickDemo, runBulkImportYamlQuickDemo } from './features/bulk-import-quick.js';
 import { runSchemaValidationDemo } from './features/schema-validation.js';
 import { runManifestStorageDemo } from './features/manifest-storage-demo.js';
 import { runBulkApiWrapperDemo } from './features/bulk-api-wrapper-demo.js';
@@ -83,6 +84,18 @@ async function main() {
       case 'bulk-import':
         clear();
         await runBulkImportDemo(config);
+        clear();
+        break;
+
+      case 'bulk-import-csv':
+        clear();
+        await runBulkImportCsvQuickDemo(config);
+        clear();
+        break;
+
+      case 'bulk-import-yaml':
+        clear();
+        await runBulkImportYamlQuickDemo(config);
         clear();
         break;
 

@@ -75,7 +75,9 @@ export async function showMainMenu() {
       message: 'Select a feature to demo:',
       choices: [
         { name: '🧪 Multi-Field Issue Creator (Full Demo)', value: 'multi-field' },
-        { name: '📥 Bulk Import (CSV/JSON/YAML) (E4-S04)', value: 'bulk-import' },
+        { name: '📥 Bulk Import (interactive)', value: 'bulk-import' },
+        { name: '📄 Bulk Import: CSV Example', value: 'bulk-import-csv' },
+        { name: '📝 Bulk Import: YAML Example', value: 'bulk-import-yaml' },
         { name: '✅ Schema Validation (E4-S07)', value: 'schema-validation' },
         { name: '🏗️  Issue Hierarchy & Parent Links (E3-S09)', value: 'hierarchy' },
         { name: '🧱 Hierarchy Level Batching (UID bulk, E4-S13)', value: 'hierarchy-bulk-uids' },
