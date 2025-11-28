@@ -14,7 +14,12 @@ Schema-aware helpers for working with the JIRA Server/Data Center REST API. JML 
 6. [Demos & Scripts](#demos--scripts)
 7. [Development](#development)
 8. [Guides](#guides)
-9. [Reference Docs](#reference-docs)
+
+---
+
+## API Documentation
+
+Looking for the full API reference? Visit the hosted docs at [https://fallingreign.github.io/jira-magic-library](https://fallingreign.github.io/jira-magic-library).
 
 ---
 
