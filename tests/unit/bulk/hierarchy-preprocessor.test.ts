@@ -113,6 +113,22 @@ describe('HierarchyPreprocessor', () => {
       expect(result.levels[1].depth).toBe(1); // child
       expect(result.levels[2].depth).toBe(2); // grandchild
     });
+
+    it('should treat children referencing UID parent even without their own uid', async () => {
+      const records = [
+        { uid: 'epic-1', Project: 'TEST', 'Issue Type': 'Epic', Summary: 'Parent Epic' },
+        { Project: 'TEST', 'Issue Type': 'Task', Summary: 'Child Task', Parent: 'epic-1' },
+      ];
+
+      const result = await preprocessHierarchyRecords(records);
+
+      expect(result.levels).toHaveLength(2);
+      const level0 = result.levels.find(l => l.depth === 0);
+      const level1 = result.levels.find(l => l.depth === 1);
+
+      expect(level0?.issues.map(i => i.record.Summary)).toContain('Parent Epic');
+      expect(level1?.issues.map(i => i.record.Summary)).toContain('Child Task');
+    });
   });
 
   describe('AC1.4: Original index preservation', () => {

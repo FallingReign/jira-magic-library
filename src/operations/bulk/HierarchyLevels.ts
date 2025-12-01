@@ -74,105 +74,117 @@ export interface HierarchyLevel {
 export function buildHierarchyLevels(
   input: Array<Record<string, unknown>>
 ): HierarchyLevel[] {
-  // Handle empty input
   if (input.length === 0) {
     return [];
   }
 
-  // Build UID map: normalized UID string → original index
+  // Normalize UID/Parent references up front so we can reason about relationships.
   const uidMap = new Map<string, number>();
+  const normalizedUids: Array<string | null> = new Array(input.length).fill(null);
+  const normalizedParents: Array<string | null> = new Array(input.length).fill(null);
+
   input.forEach((record, index) => {
     const uid = record.uid;
-    if ((typeof uid === 'string' || typeof uid === 'number') && String(uid).trim() !== '') {
+    if (typeof uid === 'string' || typeof uid === 'number') {
       const uidStr = String(uid).trim();
-      uidMap.set(uidStr, index);
+      if (uidStr !== '') {
+        normalizedUids[index] = uidStr;
+        uidMap.set(uidStr, index);
+      }
     }
-  });
 
-  // Track which level each issue belongs to
-  const levelMap = new Map<number, number>(); // index → level
-  const uidToLevel = new Map<string, number>(); // UID → level
-
-  // BFS queue: { uid, level }
-  const queue: Array<{ uid: string; level: number }> = [];
-
-  // Phase 1: Find roots (no parent, external parent, or no UID)
-  input.forEach((record, index) => {
-    const uid = record.uid;
     const parent = record.Parent;
-
-    // Issues without UID are independent (Level 0)
-    if (!(typeof uid === 'string' || typeof uid === 'number') || String(uid).trim() === '') {
-      levelMap.set(index, 0);
-      return;
+    if (typeof parent === 'string' || typeof parent === 'number') {
+      const parentStr = String(parent).trim();
+      if (parentStr !== '') {
+        normalizedParents[index] = parentStr;
+      }
     }
-
-    const uidStr = String(uid).trim();
-
-    // No parent → root
-    if (!parent || (typeof parent !== 'string' && typeof parent !== 'number') || String(parent).trim() === '') {
-      queue.push({ uid: uidStr, level: 0 });
-      uidToLevel.set(uidStr, 0);
-      levelMap.set(index, 0);
-      return;
-    }
-
-    const parentStr = String(parent).trim();
-
-    // External parent (not in uidMap) → treat as root
-    if (!uidMap.has(parentStr)) {
-      queue.push({ uid: uidStr, level: 0 });
-      uidToLevel.set(uidStr, 0);
-      levelMap.set(index, 0);
-      return;
-    }
-
-    // Internal parent exists → will be processed in BFS
-    // (Don't add to queue yet - wait for parent to be processed)
   });
 
-  // Phase 2: BFS to assign children to levels
-  const processed = new Set<string>();
+  // Map of parent UID -> child indices (children might not have their own UID).
+  const parentChildren = new Map<string, number[]>();
+  normalizedParents.forEach((parentStr, index) => {
+    if (!parentStr) {
+      return;
+    }
+    if (uidMap.has(parentStr)) {
+      const list = parentChildren.get(parentStr);
+      if (list) {
+        list.push(index);
+      } else {
+        parentChildren.set(parentStr, [index]);
+      }
+    }
+  });
 
+  const levelMap = new Map<number, number>();
+  const uidToLevel = new Map<string, number>();
+  const queued = new Set<string>();
+  const queue: string[] = [];
+
+  const enqueue = (uid: string, level: number): void => {
+    if (!queued.has(uid)) {
+      queue.push(uid);
+      queued.add(uid);
+    }
+    uidToLevel.set(uid, level);
+  };
+
+  // Phase 1: assign obvious roots
+  input.forEach((_, index) => {
+    const uidStr = normalizedUids[index];
+    const parentStr = normalizedParents[index];
+
+    if (uidStr) {
+      if (!parentStr || !uidMap.has(parentStr)) {
+        levelMap.set(index, 0);
+        enqueue(uidStr, 0);
+      }
+      return;
+    }
+
+    // No UID: root unless parent references an internal UID.
+    if (!parentStr || !uidMap.has(parentStr)) {
+      levelMap.set(index, 0);
+    }
+  });
+
+  // Phase 2: BFS across the UID graph (parent-before-child ordering)
   while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) break;
+    const uid = queue.shift();
+    if (!uid) {
+      continue;
+    }
 
-    const { uid, level } = current;
-    processed.add(uid);
+    const currentLevel = uidToLevel.get(uid) ?? 0;
+    const children = parentChildren.get(uid);
+    if (!children) {
+      continue;
+    }
 
-    // Find children of this UID
-    input.forEach((record, index) => {
-      const childUid = record.uid;
-      const parent = record.Parent;
-
-      if (!(typeof childUid === 'string' || typeof childUid === 'number') || String(childUid).trim() === '') {
-        return;
+    children.forEach((childIndex) => {
+      const nextLevel = currentLevel + 1;
+      const existingLevel = levelMap.get(childIndex);
+      if (existingLevel === undefined || existingLevel < nextLevel) {
+        levelMap.set(childIndex, nextLevel);
       }
 
-      const childUidStr = String(childUid).trim();
-
-      // Skip if already processed
-      if (processed.has(childUidStr)) {
-        return;
-      }
-
-      // Check if this record's parent is the current UID
-      if (parent && (typeof parent === 'string' || typeof parent === 'number')) {
-        const parentStr = String(parent).trim();
-
-        if (parentStr === uid) {
-          const childLevel = level + 1;
-          queue.push({ uid: childUidStr, level: childLevel });
-          uidToLevel.set(childUidStr, childLevel);
-          levelMap.set(index, childLevel);
-          processed.add(childUidStr);
-        }
+      const childUid = normalizedUids[childIndex];
+      if (childUid) {
+        enqueue(childUid, nextLevel);
       }
     });
   }
 
-  // Phase 3: Build level structure
+  // Phase 3: default any remaining issues (e.g., dangling references) to level 0
+  input.forEach((_, index) => {
+    if (!levelMap.has(index)) {
+      levelMap.set(index, 0);
+    }
+  });
+
+  // Phase 4: Build level structure
   const levelArrays = new Map<number, Array<{ index: number; record: Record<string, unknown> }>>();
 
   levelMap.forEach((level, index) => {
