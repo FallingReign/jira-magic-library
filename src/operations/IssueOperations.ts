@@ -16,21 +16,56 @@ import type { HierarchyLevel } from './bulk/HierarchyLevels.js';
 import { preprocessHierarchyRecords } from './bulk/HierarchyPreprocessor.js';
 
 /**
- * Input type for unified create() method
+ * Input supported by {@link JML.issues | `jml.issues.create`}.
+ *
+ * Callers can pass a single object, an array, or {@link ParseInputOptions}
+ * describing CSV/JSON/YAML payloads that should be parsed before creation.
  */
-type CreateInput = 
-  | Record<string, unknown>  // Single issue object
-  | Array<Record<string, unknown>>  // Array of issue objects
-  | ParseInputOptions;  // File path or string data with format
+export type IssuesCreateInput = 
+  | Record<string, unknown>
+  | Array<Record<string, unknown>>
+  | ParseInputOptions;
 
 /**
- * Options for create() method
+ * Options supported by {@link JML.issues | `jml.issues.create`}.
  */
-interface CreateOptions {
-  /** Validate only (dry-run mode) - don't create issues */
+export interface IssuesCreateOptions {
+  /**
+   * Run converters + validation without calling JIRA.
+   * Returns the converted payload with DRY-RUN markers.
+   */
   validate?: boolean;
-  /** Retry with manifest ID (skip already-created issues) */
+  /**
+   * Resume a previous manifest run by ID. When provided, only failed rows
+   * are retried and merged into the original manifest.
+   */
   retry?: string;
+}
+
+/**
+ * Thin interface describing the public surface exposed as `jml.issues`.
+ * This keeps the docs focused on what consumers can call without surfacing
+ * every internal helper on {@link IssueOperations}.
+ */
+export interface IssuesAPI {
+  /**
+   * Create one or more issues using human-readable payloads.
+   *
+   * - Accepts either a single row, an array of rows, or {@link ParseInputOptions}
+   *   pointing at CSV/JSON/YAML data.
+   * - Automatically batches hierarchies level-by-level (story E4-S13) so a full
+   *   Program → Epic → Story → Sub-task tree can be passed in a single payload.
+   * - Stores a manifest for every bulk run that can be retried via the `retry`
+   *   option without recreating successful rows.
+   *
+   * @param input - Single object, array of objects, or {@link ParseInputOptions}.
+   * @param options - Optional flags for dry-run validation and manifest retry.
+   * @returns The created {@link Issue} for single rows or a {@link BulkResult}.
+   */
+  create(
+    input: IssuesCreateInput,
+    options?: IssuesCreateOptions
+  ): Promise<Issue | BulkResult>;
 }
 
 /**
@@ -38,7 +73,7 @@ interface CreateOptions {
  * 
  * E4-S04: Unified create() method supports both single and bulk creation
  */
-export class IssueOperations {
+export class IssueOperations implements IssuesAPI {
   private manifestStorage?: ManifestStorage;
   private bulkApiWrapper?: JiraBulkApiWrapper;
 
@@ -94,8 +129,8 @@ export class IssueOperations {
    * ```
    */
   async create(
-    input: CreateInput,
-    options?: CreateOptions
+    input: IssuesCreateInput,
+    options?: IssuesCreateOptions
   ): Promise<Issue | BulkResult> {
     // E4-S05: Handle retry with manifest ID
     if (options?.retry) {
@@ -129,9 +164,9 @@ export class IssueOperations {
    * @private
    */
   private async retryWithManifest(
-    input: CreateInput,
+    input: IssuesCreateInput,
     manifestId: string,
-    _options?: CreateOptions
+    _options?: IssuesCreateOptions
   ): Promise<BulkResult> {
     // AC1: Load manifest from Redis
     if (!this.manifestStorage || !this.bulkApiWrapper) {
@@ -362,7 +397,7 @@ export class IssueOperations {
    * @param input - Input data
    * @returns 'single' for single issue object, 'bulk' for arrays or parse options
    */
-  private detectInputType(input: CreateInput): 'single' | 'bulk' {
+  private detectInputType(input: IssuesCreateInput): 'single' | 'bulk' {
     // Array of objects → bulk
     if (Array.isArray(input)) {
       return 'bulk';
@@ -518,8 +553,8 @@ export class IssueOperations {
    * @private
    */
   private async createBulk(
-    input: CreateInput,
-    _options?: CreateOptions
+    input: IssuesCreateInput,
+    _options?: IssuesCreateOptions
   ): Promise<BulkResult> {
     // Ensure bulk dependencies are available
     if (!this.manifestStorage || !this.bulkApiWrapper) {

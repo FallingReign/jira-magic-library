@@ -11,6 +11,11 @@
 // Main JML class
 export { JML } from './jml.js';
 export type { JMLConfig } from './types/config.js';
+export type {
+  IssuesAPI,
+  IssuesCreateInput,
+  IssuesCreateOptions,
+} from './operations/IssueOperations.js';
 
 // Configuration
 export { loadConfig } from './config/loader.js';

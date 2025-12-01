@@ -23,6 +23,38 @@ Looking for the full API reference? Visit the hosted docs at [https://fallingrei
 
 ---
 
+## Quick Usage
+
+```typescript
+import { JML } from 'jira-magic-library';
+
+const jml = new JML({
+  baseUrl: process.env.JIRA_BASE_URL!,
+  auth: { token: process.env.JIRA_TOKEN! },
+});
+
+const rows = [
+  { Project: 'ENG', 'Issue Type': 'Task', Summary: 'Set up CI' },
+  { Project: 'ENG', 'Issue Type': 'Bug', Summary: 'Fix login redirect' },
+];
+
+// Create issues (single object, array, or parsed CSV/JSON/YAML)
+const result = await jml.issues.create(rows);
+
+// Retry failed rows later using the manifest id
+if (result.failed > 0) {
+  const failedRows = result.results
+    .filter(r => !r.success)
+    .map(r => rows[r.index]);
+
+  await jml.issues.create(failedRows, {
+    retry: result.manifest.id,
+  });
+}
+```
+
+---
+
 ## Overview
 
 What you get today:

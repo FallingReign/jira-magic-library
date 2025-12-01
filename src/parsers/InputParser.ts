@@ -57,6 +57,38 @@ export interface ParsedInput {
 
 /**
  * Input options for the parser
+ *
+ * Common ways to call:
+ * - `from: 'tickets.csv'` (auto-detect by extension)
+ * - `data: 'Project,Summary\nENG,Set up CI', format: 'csv'` (inline CSV string)
+ * - `data: [{ Project: 'ENG', Summary: 'Create board' }]` (already-parsed JSON array)
+ * - `data: [['Project','Summary'], ['ENG','Do X']], format: 'csv'` (array-of-arrays as CSV)
+ *
+ * Notes:
+ * - Strings require `format` to be set.
+ * - YAML supports document streams with `---` separators (no indentation needed).
+ * - In CSV, empty unquoted cells become `null`; quote them to keep empty strings.
+ *
+ * CSV string (requires `format: 'csv'`)
+ * @example
+ * ```ts
+ * { data: 'Project,Summary\\nENG,Set up CI', format: 'csv' }
+ * ```
+ *
+ * JSON array string
+ * @example
+ * ```ts
+ * { data: '[{\"Project\":\"ENG\",\"Summary\":\"Create board\"}]', format: 'json' }
+ * ```
+ *
+ * YAML document stream string (no indentation needed)
+ * @example
+ * ```ts
+ * {
+ *   data: 'Project: ENG\\nSummary: Epic parent\\n---\\nProject: ENG\\nSummary: Child story',
+ *   format: 'yaml'
+ * }
+ * ```
  */
 export interface ParseInputOptions {
   /** File path to read from */

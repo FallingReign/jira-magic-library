@@ -12,6 +12,7 @@ import type { ProjectSchema } from './types/schema.js';
 import { FieldResolver } from './converters/FieldResolver.js';
 import { ConverterRegistry } from './converters/ConverterRegistry.js';
 import { IssueOperations } from './operations/IssueOperations.js';
+import type { IssuesAPI } from './operations/IssueOperations.js';
 import { ConnectionError } from './errors/index.js';
 import type { JMLConfig } from './types/config.js';
 import { ParentFieldDiscovery } from './hierarchy/ParentFieldDiscovery.js';
@@ -61,7 +62,7 @@ export class JML {
    * which back the public API `jml.issues.create(...)`. All bulk batching,
    * manifest handling, and hierarchy routing flows live behind this property.
    */
-  public readonly issues: IssueOperations;
+  public readonly issues: IssuesAPI;
 
   private readonly client: JiraClientImpl;
   private readonly cache: RedisCache;
