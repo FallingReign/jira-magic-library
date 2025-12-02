@@ -629,7 +629,7 @@ export class IssueOperations implements IssuesAPI {
     // Create manifest for tracking
     const manifest: BulkManifest = {
       id: `bulk-raw-${Date.now()}`,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       total,
       succeeded: apiResult.created.map(item => item.index),
       failed: apiResult.failed.map(item => item.index),
