@@ -91,6 +91,15 @@ export class FieldResolver {
     for (const [fieldName, value] of Object.entries(input)) {
       // E3-S06: Check if this is a parent synonym
       if (this.isParentSynonym(fieldName)) {
+        // Skip empty/null parent values (treat as no parent provided)
+        if (
+          value === undefined ||
+          value === null ||
+          (typeof value === 'string' && value.trim() === '')
+        ) {
+          continue;
+        }
+
         const parentFieldKey = await this.resolveParentSynonym(
           value,
           projectKey,

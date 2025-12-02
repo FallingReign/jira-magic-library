@@ -638,5 +638,33 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
         mockSchemaDiscovery
       );
     });
+
+    it('should ignore blank or null parent values', async () => {
+      mockClient.get.mockResolvedValue({
+        values: [{ id: '10001', name: 'Story' }],
+      });
+
+      const input = {
+        Summary: 'Child issue',
+        Parent: '   ', // blank string
+      };
+
+      const result = await resolver.resolveFields('PROJ', 'Story', input);
+
+      expect(result).toEqual({
+        summary: 'Child issue',
+      });
+      expect(resolveParentLink).not.toHaveBeenCalled();
+
+      const resultWithNull = await resolver.resolveFields('PROJ', 'Story', {
+        Summary: 'Child issue 2',
+        Parent: null,
+      });
+
+      expect(resultWithNull).toEqual({
+        summary: 'Child issue 2',
+      });
+      expect(resolveParentLink).not.toHaveBeenCalled();
+    });
   });
 });
