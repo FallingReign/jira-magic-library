@@ -1251,4 +1251,274 @@ describe('IssueOperations', () => {
       });
     });
   });
+
+  // Raw JIRA API Format Passthrough Tests (Power User Mode)
+  describe('Raw JIRA API Format Passthrough', () => {
+    describe('Single issue with { fields: { project: ... } } format', () => {
+      it('should detect raw JIRA format with fields.project.key', async () => {
+        const rawJiraPayload = {
+          fields: {
+            project: { key: 'HELP' },
+            issuetype: { name: 'Help Request' },
+            summary: 'User needs assistance!',
+            description: 'Details here',
+            assignee: { name: '+Help_OnCall' },
+            priority: { name: 'High' },
+            customfield_10395: { value: 'Raven' },
+            customfield_12300: 'C030SKZCJ15'
+          }
+        };
+
+        // Mock successful API call - passthrough should skip field resolution
+        mockClient.post.mockResolvedValue({
+          key: 'HELP-123',
+          id: '10050',
+          self: 'https://jira.example.com/rest/api/2/issue/10050'
+        });
+
+        const result = await issueOps.create(rawJiraPayload as any);
+
+        // Assert: Should pass payload directly to JIRA API
+        expect(result).toHaveProperty('key', 'HELP-123');
+        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', rawJiraPayload);
+        
+        // Should NOT call field resolution/conversion (passthrough mode)
+        expect(mockSchema.getFieldsForIssueType).not.toHaveBeenCalled();
+        expect(mockResolver.resolveFields).not.toHaveBeenCalled();
+        expect(mockConverter.convertFields).not.toHaveBeenCalled();
+      });
+
+      it('should detect raw JIRA format with fields.project.id', async () => {
+        const rawJiraPayload = {
+          fields: {
+            project: { id: '10000' },
+            issuetype: { id: '10001' },
+            summary: 'Issue via project ID'
+          }
+        };
+
+        mockClient.post.mockResolvedValue({
+          key: 'PROJ-1',
+          id: '10051',
+          self: 'https://jira.example.com/rest/api/2/issue/10051'
+        });
+
+        const result = await issueOps.create(rawJiraPayload as any);
+
+        expect(result).toHaveProperty('key', 'PROJ-1');
+        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', rawJiraPayload);
+        expect(mockSchema.getFieldsForIssueType).not.toHaveBeenCalled();
+      });
+
+      it('should support dry-run mode with raw JIRA format', async () => {
+        const rawJiraPayload = {
+          fields: {
+            project: { key: 'TEST' },
+            issuetype: { name: 'Task' },
+            summary: 'Dry run test'
+          }
+        };
+
+        const result = await issueOps.create(rawJiraPayload as any, { validate: true });
+
+        // Dry-run should return payload without calling API
+        expect(result).toHaveProperty('key', 'DRY-RUN');
+        expect(result).toHaveProperty('fields');
+        expect((result as any).fields).toEqual(rawJiraPayload.fields);
+        expect(mockClient.post).not.toHaveBeenCalled();
+      });
+
+      it('should reject fields object without project', async () => {
+        const invalidPayload = {
+          fields: {
+            issuetype: { name: 'Task' },
+            summary: 'Missing project'
+          }
+        };
+
+        await expect(issueOps.create(invalidPayload as any))
+          .rejects.toThrow(/project/i);
+      });
+
+      it('should handle JIRA API errors in passthrough mode', async () => {
+        const rawJiraPayload = {
+          fields: {
+            project: { key: 'HELP' },
+            issuetype: { name: 'Bad Type' },
+            summary: 'Test'
+          }
+        };
+
+        mockClient.post.mockRejectedValue(new Error('Issue type "Bad Type" does not exist'));
+
+        await expect(issueOps.create(rawJiraPayload as any))
+          .rejects.toThrow('Issue type "Bad Type" does not exist');
+      });
+    });
+
+    describe('Bulk with { issues: [{ fields: ... }] } format', () => {
+      let issueOpsWithCache: IssueOperations;
+      let mockCacheForBulk: jest.Mocked<LookupCache>;
+
+      beforeEach(() => {
+        mockCacheForBulk = {
+          get: jest.fn(),
+          set: jest.fn(),
+          getValue: jest.fn(),
+          setValue: jest.fn(),
+          clearAll: jest.fn(),
+        } as any;
+
+        issueOpsWithCache = new IssueOperations(
+          mockClient,
+          mockSchema,
+          mockResolver,
+          mockConverter,
+          mockCacheForBulk,
+          'https://jira.example.com',
+          { baseUrl: 'https://jira.example.com', auth: { pat: 'test' } }
+        );
+      });
+
+      it('should detect raw JIRA bulk format with issues array', async () => {
+        const rawJiraBulkPayload = {
+          issues: [
+            {
+              fields: {
+                project: { key: 'HELP' },
+                issuetype: { name: 'Task' },
+                summary: 'Issue 1'
+              }
+            },
+            {
+              fields: {
+                project: { key: 'HELP' },
+                issuetype: { name: 'Task' },
+                summary: 'Issue 2'
+              }
+            }
+          ]
+        };
+
+        // Mock bulk API response
+        mockClient.post.mockResolvedValue({
+          issues: [
+            { id: '100', key: 'HELP-100', self: 'https://...' },
+            { id: '101', key: 'HELP-101', self: 'https://...' }
+          ],
+          errors: []
+        });
+
+        const result = await issueOpsWithCache.create(rawJiraBulkPayload as any);
+
+        // Should call bulk endpoint directly
+        expect(mockClient.post).toHaveBeenCalledWith(
+          '/rest/api/2/issue/bulk',
+          expect.objectContaining({
+            issueUpdates: rawJiraBulkPayload.issues
+          })
+        );
+
+        // Should return BulkResult
+        expect(result).toHaveProperty('total', 2);
+        expect(result).toHaveProperty('succeeded');
+        expect(result).toHaveProperty('manifest');
+      });
+
+      it('should handle mixed success/failure in bulk passthrough', async () => {
+        const rawJiraBulkPayload = {
+          issues: [
+            {
+              fields: {
+                project: { key: 'HELP' },
+                issuetype: { name: 'Task' },
+                summary: 'Good issue'
+              }
+            },
+            {
+              fields: {
+                project: { key: 'BAD' },
+                issuetype: { name: 'Task' },
+                summary: 'Bad project'
+              }
+            }
+          ]
+        };
+
+        mockClient.post.mockResolvedValue({
+          issues: [{ id: '100', key: 'HELP-100', self: 'https://...' }],
+          errors: [{ 
+            status: 400, 
+            elementErrors: { 
+              errors: { project: 'Project does not exist' } 
+            } 
+          }]
+        });
+
+        const result = await issueOpsWithCache.create(rawJiraBulkPayload as any);
+
+        expect(result).toHaveProperty('total', 2);
+        expect(result).toHaveProperty('succeeded', 1);
+        expect(result).toHaveProperty('failed', 1);
+      });
+    });
+
+    describe('Format detection edge cases', () => {
+      it('should prefer raw JIRA format over human-readable when fields property exists', async () => {
+        // This payload has both 'fields' (raw) and 'Project' (human-readable)
+        // Should treat as raw JIRA format when 'fields' is present
+        const ambiguousPayload = {
+          fields: {
+            project: { key: 'TEST' },
+            issuetype: { name: 'Task' },
+            summary: 'Ambiguous'
+          },
+          Project: 'IGNORED' // This should be ignored
+        };
+
+        mockClient.post.mockResolvedValue({
+          key: 'TEST-1',
+          id: '10052',
+          self: 'https://...'
+        });
+
+        await issueOps.create(ambiguousPayload as any);
+
+        // Should pass only the fields object, not the top-level Project
+        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', {
+          fields: ambiguousPayload.fields
+        });
+      });
+
+      it('should handle empty fields object gracefully', async () => {
+        const emptyFields = { fields: {} };
+
+        // No project field = falls through to "Invalid input format" error
+        await expect(issueOps.create(emptyFields as any))
+          .rejects.toThrow(/Invalid input format/i);
+      });
+
+      it('should pass through fields with string project to JIRA (let JIRA validate)', async () => {
+        // JIRA API requires project: { key: "X" } or { id: "Y" }
+        // But we pass it through and let JIRA return the error
+        const stringProject = {
+          fields: {
+            project: 'TEST', // String - will fail at JIRA, not at JML
+            summary: 'Test'
+          }
+        };
+
+        // Mock JIRA rejecting the invalid format
+        mockClient.post.mockRejectedValue(new Error('project is required'));
+
+        await expect(issueOps.create(stringProject as any))
+          .rejects.toThrow('project is required');
+        
+        // Verify it was passed through to JIRA
+        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', {
+          fields: stringProject.fields
+        });
+      });
+    });
+  });
 });
