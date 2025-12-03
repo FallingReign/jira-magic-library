@@ -1054,6 +1054,59 @@ describe('FieldResolver', () => {
   });
 
   describe('resolveFieldsWithExtraction (S4: Defer extraction to FieldResolver)', () => {
+    // Setup mock client for API calls required by project/issueType resolution
+    let mockClient: { get: jest.Mock };
+    let resolverWithClient: FieldResolver;
+
+    beforeEach(() => {
+      // Mock client that returns project list and issue types
+      mockClient = {
+        get: jest.fn().mockImplementation((url: string) => {
+          if (url === '/rest/api/2/project') {
+            return Promise.resolve([
+              { id: '10000', key: 'ENG', name: 'Engineering' },
+              { id: '10001', key: 'HELP', name: 'Help Desk' },
+              { id: '10002', key: 'PROJ', name: 'Test Project' },
+              { id: '10003', key: 'RESOLVED', name: 'Resolved Project' },
+            ]);
+          }
+          if (url.includes('/issuetypes')) {
+            return Promise.resolve({
+              values: [
+                { id: '10001', name: 'Bug' },
+                { id: '10002', name: 'Task' },
+                { id: '10003', name: 'Story' },
+                { id: '10004', name: 'Feature' },
+              ],
+            });
+          }
+          // Single project lookup by ID
+          if (url.startsWith('/rest/api/2/project/')) {
+            const idOrKey = url.split('/').pop();
+            // Map IDs to their corresponding projects (consistent with project list)
+            const projectById: Record<string, { id: string; key: string; name: string }> = {
+              '10000': { id: '10000', key: 'ENG', name: 'Engineering' },
+              '10001': { id: '10001', key: 'HELP', name: 'Help Desk' },
+              '10002': { id: '10002', key: 'PROJ', name: 'Test Project' },
+              '10003': { id: '10003', key: 'RESOLVED', name: 'Resolved Project' },
+            };
+            if (idOrKey && projectById[idOrKey]) {
+              return Promise.resolve(projectById[idOrKey]);
+            }
+          }
+          return Promise.reject(new Error(`Unexpected URL: ${url}`));
+        }),
+      };
+
+      resolverWithClient = new FieldResolver(
+        mockSchemaDiscovery,
+        undefined, // parentFieldDiscovery
+        mockClient as any, // client for API calls
+        undefined, // cache
+        undefined  // hierarchyDiscovery
+      );
+    });
+
     describe('AC1: Extract Project/IssueType from Input', () => {
       it('should extract project string from input', async () => {
         const input = {
@@ -1062,7 +1115,7 @@ describe('FieldResolver', () => {
           Summary: 'Test issue',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.projectKey).toBe('ENG');
         expect(result.issueType).toBe('Bug');
@@ -1076,7 +1129,7 @@ describe('FieldResolver', () => {
           summary: 'Test issue',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.projectKey).toBe('HELP');
         expect(result.issueType).toBe('Task');
@@ -1089,7 +1142,7 @@ describe('FieldResolver', () => {
           Summary: 'Test story',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.issueType).toBe('Story');
       });
@@ -1101,7 +1154,7 @@ describe('FieldResolver', () => {
           SUMMARY: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.projectKey).toBe('ENG');
         expect(result.issueType).toBe('Bug');
@@ -1114,9 +1167,258 @@ describe('FieldResolver', () => {
           Summary: 'Test feature',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.issueType).toBe('Feature');
+      });
+    });
+
+    describe('AC6: Project/IssueType Resolution with Fuzzy Matching', () => {
+      it('should resolve lowercase project key to correct case', async () => {
+        const input = {
+          Project: 'eng', // lowercase
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('ENG'); // Resolved to uppercase
+      });
+
+      it('should resolve project by name', async () => {
+        const input = {
+          Project: 'Engineering', // full name
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('ENG');
+      });
+
+      it('should resolve project with partial name match', async () => {
+        const input = {
+          Project: 'help desk', // lowercase with space
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP');
+      });
+
+      it('should resolve lowercase issue type to correct case', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'bug', // lowercase
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.issueType).toBe('Bug');
+      });
+
+      it('should resolve issue type with typo', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Storey', // typo
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.issueType).toBe('Story');
+      });
+
+      it('should throw ValidationError for unknown project', async () => {
+        const input = {
+          Project: 'UNKNOWN',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Project 'UNKNOWN' not found");
+      });
+
+      it('should throw ValidationError for unknown issue type', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'UnknownType',
+          Summary: 'Test',
+        };
+
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Issue type 'UnknownType' not found");
+      });
+
+      it('should throw ConfigurationError when resolving project without client', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        // resolver without client
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('JiraClient required for project resolution');
+      });
+
+      it('should throw ValidationError when project has no issue types', async () => {
+        // Mock client that returns empty issue types
+        const emptyIssueTypesClient = {
+          get: jest.fn().mockImplementation((url: string) => {
+            if (url === '/rest/api/2/project') {
+              return Promise.resolve([{ id: '10000', key: 'EMPTY', name: 'Empty Project' }]);
+            }
+            if (url.includes('/issuetypes')) {
+              return Promise.resolve({ values: [] }); // No issue types!
+            }
+            return Promise.reject(new Error(`Unexpected URL: ${url}`));
+          }),
+        };
+        const resolverWithEmptyIssueTypes = new FieldResolver(
+          mockSchemaDiscovery,
+          undefined,
+          emptyIssueTypesClient as any,
+          undefined,
+          undefined
+        );
+
+        const input = {
+          Project: 'EMPTY',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        await expect(resolverWithEmptyIssueTypes.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("No issue types found for project 'EMPTY'");
+      });
+
+      it('should use cache for project list', async () => {
+        // Create mock cache
+        const mockCache = {
+          get: jest.fn().mockResolvedValue(JSON.stringify([
+            { id: '10000', key: 'CACHED', name: 'Cached Project' },
+          ])),
+          set: jest.fn().mockResolvedValue(undefined),
+        };
+        const cachedClient = {
+          get: jest.fn().mockImplementation((url: string) => {
+            if (url.includes('/issuetypes')) {
+              return Promise.resolve({
+                values: [{ id: '10001', name: 'Bug' }],
+              });
+            }
+            return Promise.reject(new Error(`Should not call API: ${url}`));
+          }),
+        };
+        const resolverWithCache = new FieldResolver(
+          mockSchemaDiscovery,
+          undefined,
+          cachedClient as any,
+          mockCache as any,
+          undefined
+        );
+
+        const input = {
+          Project: 'CACHED',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithCache.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('CACHED');
+        expect(mockCache.get).toHaveBeenCalled();
+        // Should NOT call /rest/api/2/project because cache hit
+        expect(cachedClient.get).not.toHaveBeenCalledWith('/rest/api/2/project');
+      });
+
+      it('should handle cache read errors gracefully', async () => {
+        // Create mock cache that throws on read
+        const mockCache = {
+          get: jest.fn().mockRejectedValue(new Error('Cache read error')),
+          set: jest.fn().mockResolvedValue(undefined),
+        };
+        const clientWithCache = {
+          get: jest.fn().mockImplementation((url: string) => {
+            if (url === '/rest/api/2/project') {
+              return Promise.resolve([{ id: '10000', key: 'ENG', name: 'Engineering' }]);
+            }
+            if (url.includes('/issuetypes')) {
+              return Promise.resolve({
+                values: [{ id: '10001', name: 'Bug' }],
+              });
+            }
+            return Promise.reject(new Error(`Unexpected URL: ${url}`));
+          }),
+        };
+        const resolverWithBrokenCache = new FieldResolver(
+          mockSchemaDiscovery,
+          undefined,
+          clientWithCache as any,
+          mockCache as any,
+          undefined
+        );
+
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        // Should still work despite cache error
+        const result = await resolverWithBrokenCache.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('ENG');
+        expect(mockCache.get).toHaveBeenCalled();
+        // Should fall back to API call
+        expect(clientWithCache.get).toHaveBeenCalledWith('/rest/api/2/project');
+      });
+
+      it('should handle cache write errors gracefully', async () => {
+        // Create mock cache that throws on write
+        const mockCache = {
+          get: jest.fn().mockResolvedValue(null), // Cache miss
+          set: jest.fn().mockRejectedValue(new Error('Cache write error')),
+        };
+        const clientWithCache = {
+          get: jest.fn().mockImplementation((url: string) => {
+            if (url === '/rest/api/2/project') {
+              return Promise.resolve([{ id: '10000', key: 'ENG', name: 'Engineering' }]);
+            }
+            if (url.includes('/issuetypes')) {
+              return Promise.resolve({
+                values: [{ id: '10001', name: 'Bug' }],
+              });
+            }
+            return Promise.reject(new Error(`Unexpected URL: ${url}`));
+          }),
+        };
+        const resolverWithWriteError = new FieldResolver(
+          mockSchemaDiscovery,
+          undefined,
+          clientWithCache as any,
+          mockCache as any,
+          undefined
+        );
+
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        // Should still work despite cache write error
+        const result = await resolverWithWriteError.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('ENG');
+        expect(mockCache.set).toHaveBeenCalled();
       });
     });
 
@@ -1128,7 +1430,7 @@ describe('FieldResolver', () => {
           Summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.projectKey).toBe('PROJ');
       });
@@ -1140,24 +1442,12 @@ describe('FieldResolver', () => {
           summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.projectKey).toBe('PROJ');
       });
 
       it('should handle object project with id (requires API lookup)', async () => {
-        // Create resolver with mock client for ID lookup
-        const mockClient = {
-          get: jest.fn().mockResolvedValue({ key: 'RESOLVED', id: '10000', name: 'Resolved Project' }),
-        };
-        const resolverWithClient = new FieldResolver(
-          mockSchemaDiscovery,
-          undefined, // parentFieldDiscovery
-          mockClient as any, // client for API calls
-          undefined, // cache
-          undefined  // hierarchyDiscovery
-        );
-
         const input = {
           project: { id: '10000' },
           issuetype: { name: 'Bug' },
@@ -1166,7 +1456,7 @@ describe('FieldResolver', () => {
 
         const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
-        expect(result.projectKey).toBe('RESOLVED');
+        expect(result.projectKey).toBe('ENG'); // Maps id 10000 to ENG based on mock
         expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/project/10000');
       });
 
@@ -1177,7 +1467,7 @@ describe('FieldResolver', () => {
           Summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.issueType).toBe('Bug');
       });
@@ -1189,7 +1479,7 @@ describe('FieldResolver', () => {
           summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.issueType).toBe('Story');
       });
@@ -1201,7 +1491,7 @@ describe('FieldResolver', () => {
           summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         // When id is provided, use it as the issueType for schema lookup
         expect(result.issueType).toBe('10001');
@@ -1230,7 +1520,7 @@ describe('FieldResolver', () => {
           'Story Points': 5,
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         expect(result.fields).toHaveProperty('summary', 'Test issue');
         expect(result.fields).toHaveProperty('customfield_10024', 5);
@@ -1254,30 +1544,32 @@ describe('FieldResolver', () => {
           Summary: 'Test',
         };
 
-        await expect(resolver.resolveFieldsWithExtraction(input))
+        // Now requires client for project resolution
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
           .rejects.toThrow("Field 'Issue Type' is required");
       });
 
-      it('should throw error when project object has neither key nor id', async () => {
+      it('should resolve project by name when object has only name (not key or id)', async () => {
+        // Now we're more flexible - can resolve by name!
         const input = {
-          project: { name: 'Some Project' }, // Only name, no key or id
+          project: { name: 'Engineering' },
           issuetype: { name: 'Bug' },
           summary: 'Test',
         };
 
-        await expect(resolver.resolveFieldsWithExtraction(input))
-          .rejects.toThrow("Field 'Project' must have 'key' or 'id' property");
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+        expect(result.projectKey).toBe('ENG'); // Resolved by name
       });
 
-      it('should throw error when issueType object has neither name nor id', async () => {
+      it('should throw error when issueType object has no extractable property', async () => {
         const input = {
           project: { key: 'ENG' },
-          issuetype: { description: 'A bug' }, // Only description, no name or id
+          issuetype: { description: 'A bug' }, // Only description, no name, key, id, or value
           summary: 'Test',
         };
 
-        await expect(resolver.resolveFieldsWithExtraction(input))
-          .rejects.toThrow("Field 'Issue Type' must have 'name' or 'id' property");
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('Object must have key, name, id, or value property');
       });
 
       it('should throw error when project ID lookup fails without client', async () => {
@@ -1299,8 +1591,9 @@ describe('FieldResolver', () => {
           summary: 'Invalid project type',
         };
 
-        await expect(resolver.resolveFieldsWithExtraction(input))
-          .rejects.toThrow("Field 'Project' must be a string or object with key/id");
+        // extractIdentifier throws for non-string non-object values
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('Expected string or object');
       });
 
       it('should throw error when issueType value is neither string nor object', async () => {
@@ -1310,8 +1603,9 @@ describe('FieldResolver', () => {
           summary: 'Invalid issue type',
         };
 
-        await expect(resolver.resolveFieldsWithExtraction(input))
-          .rejects.toThrow("Field 'Issue Type' must be a string or object with name/id");
+        // extractIdentifier throws for non-string non-object values
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('Expected string or object');
       });
     });
 
@@ -1323,7 +1617,7 @@ describe('FieldResolver', () => {
           summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         // Project should be preserved in resolved fields for converter
         expect(result.fields).toHaveProperty('project', { key: 'ENG' });
@@ -1336,7 +1630,7 @@ describe('FieldResolver', () => {
           summary: 'Test',
         };
 
-        const result = await resolver.resolveFieldsWithExtraction(input);
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
 
         // IssueType should be preserved in resolved fields
         expect(result.fields).toHaveProperty('issuetype', { name: 'Bug' });

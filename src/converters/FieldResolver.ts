@@ -8,6 +8,8 @@ import type { RedisCache } from '../cache/RedisCache.js';
 import type { JPOHierarchyDiscovery } from '../hierarchy/JPOHierarchyDiscovery.js';
 import { resolveParentLink } from '../hierarchy/ParentLinkResolver.js';
 import { DEFAULT_PARENT_SYNONYMS } from '../constants/field-constants.js';
+import { resolveUniqueName } from '../utils/resolveUniqueName.js';
+import { ValidationError } from '../errors/ValidationError.js';
 
 /**
  * Resolves human-readable field names to JIRA field IDs.
@@ -221,107 +223,222 @@ export class FieldResolver {
   async resolveFieldsWithExtraction(
     input: Record<string, unknown>
   ): Promise<{ projectKey: string; issueType: string; fields: Record<string, unknown> }> {
-    // Extract project key from input
-    const projectKey = await this.extractProjectKey(input);
+    // 1. Get raw project value
+    const rawProject = this.getFieldValue(input, 'Project', 'project', 'PROJECT');
+    if (!rawProject) {
+      throw new ValidationError("Field 'Project' is required", { field: 'project' });
+    }
     
-    // Extract issue type from input
-    const issueType = this.extractIssueType(input);
+    // 2. Resolve project - handle ID vs key/name differently
+    let projectKey: string;
+    if (typeof rawProject === 'object' && rawProject !== null && 'id' in rawProject) {
+      // Object with id - requires API lookup
+      const id = String((rawProject as Record<string, unknown>).id);
+      if (!this.client) {
+        throw new ConfigurationError('Cannot resolve project by ID without JiraClient');
+      }
+      const projectData = await this.client.get<{ key: string }>(`/rest/api/2/project/${id}`);
+      projectKey = projectData.key;
+    } else {
+      // String or object with key/name - fuzzy match against project list
+      const projectInput = this.extractIdentifier(rawProject);
+      projectKey = await this.resolveProject(projectInput);
+    }
     
-    // Resolve fields using existing method
+    // 3. Get raw issue type value
+    const rawIssueType = this.getFieldValue(
+      input,
+      'Issue Type', 'issuetype', 'issueType', 'ISSUETYPE', 'IssueType', 'type'
+    );
+    if (!rawIssueType) {
+      throw new ValidationError("Field 'Issue Type' is required", { field: 'issuetype' });
+    }
+    
+    // 4. Resolve issue type - handle ID vs name differently
+    let issueType: string;
+    if (typeof rawIssueType === 'object' && rawIssueType !== null && 'id' in rawIssueType) {
+      // Object with id - pass through for schema lookup (original behavior)
+      issueType = String((rawIssueType as Record<string, unknown>).id);
+    } else {
+      // String or object with name - fuzzy match against createmeta
+      const issueTypeInput = this.extractIdentifier(rawIssueType);
+      issueType = await this.resolveIssueType(issueTypeInput, projectKey);
+    }
+    
+    // 5. Resolve remaining fields using existing method
     const fields = await this.resolveFields(projectKey, issueType, input);
     
     return { projectKey, issueType, fields };
   }
 
   /**
-   * Extracts project key from input, handling string or object formats.
+   * Extracts string identifier from various input formats.
    * 
-   * @param input - Input object containing project field
-   * @returns Extracted project key string
-   * @throws {Error} If project is missing, invalid, or ID lookup fails
+   * Handles: string, { key }, { name }, { id }, { value }
+   * 
+   * @param value - Raw field value
+   * @returns Extracted string identifier
+   * @throws {ValidationError} If value cannot be extracted
    * 
    * @private
    */
-  private async extractProjectKey(input: Record<string, unknown>): Promise<string> {
-    // Find project value (case-insensitive)
-    const projectValue = this.getFieldValue(input, 'Project', 'project', 'PROJECT');
-    
-    if (!projectValue) {
-      throw new Error("Field 'Project' is required");
+  private extractIdentifier(value: unknown): string {
+    // String - use directly
+    if (typeof value === 'string') {
+      return value.trim();
     }
     
-    // String format - use directly
-    if (typeof projectValue === 'string') {
-      return projectValue;
+    // Object - extract key, name, id, or value
+    if (typeof value === 'object' && value !== null) {
+      const obj = value as Record<string, unknown>;
+      
+      // Priority: key > name > id > value (most specific first)
+      if (typeof obj.key === 'string') return obj.key.trim();
+      if (typeof obj.name === 'string') return obj.name.trim();
+      if (typeof obj.id === 'string') return obj.id.trim();
+      if (typeof obj.value === 'string') return obj.value.trim();
+      
+      throw new ValidationError(
+        'Object must have key, name, id, or value property',
+        { value }
+      );
     }
     
-    // Object format
-    if (typeof projectValue === 'object' && projectValue !== null) {
-      const projObj = projectValue as Record<string, unknown>;
-      
-      // Object with key - extract directly
-      if (projObj.key && typeof projObj.key === 'string') {
-        return projObj.key;
-      }
-      
-      // Object with id - requires API lookup
-      if (projObj.id && typeof projObj.id === 'string') {
-        if (!this.client) {
-          throw new Error('Cannot resolve project by ID without JiraClient');
-        }
-        const projectData = await this.client.get<{ key: string }>(`/rest/api/2/project/${projObj.id}`);
-        return projectData.key;
-      }
-      
-      throw new Error("Field 'Project' must have 'key' or 'id' property");
-    }
-    
-    throw new Error("Field 'Project' must be a string or object with key/id");
+    throw new ValidationError(
+      `Expected string or object, got ${typeof value}`,
+      { value }
+    );
   }
 
   /**
-   * Extracts issue type from input, handling string or object formats.
+   * Resolves a project identifier to a canonical project key.
    * 
-   * @param input - Input object containing issue type field
-   * @returns Extracted issue type string (name or id)
-   * @throws {Error} If issue type is missing or invalid
+   * Fetches all projects from JIRA (cached for 15 min), then uses fuzzy
+   * matching to find the best match by key or name.
+   * 
+   * @param input - Project key, name, or ID to resolve
+   * @returns Canonical project key (uppercase)
+   * @throws {ValidationError} If project not found
    * 
    * @private
    */
-  private extractIssueType(input: Record<string, unknown>): string {
-    // Find issue type value (case-insensitive, multiple variations)
-    const issueTypeValue = this.getFieldValue(
-      input, 
-      'Issue Type', 'issuetype', 'issueType', 'ISSUETYPE', 'IssueType', 'type'
+  private async resolveProject(input: string): Promise<string> {
+    if (!this.client) {
+      throw new ConfigurationError('JiraClient required for project resolution');
+    }
+
+    // Fetch all projects (cached)
+    const projects = await this.fetchAllProjects();
+    
+    // Build lookup array for fuzzy matching (use key as id, name as name)
+    // Also include key as an alias for matching by key
+    const projectLookup = projects.flatMap(p => [
+      { id: p.key, name: p.name },
+      { id: p.key, name: p.key }, // Allow matching by key too
+    ]);
+    
+    try {
+      const matched = resolveUniqueName(input, projectLookup, {
+        field: 'project',
+        fieldName: 'Project'
+      });
+      return matched.id; // id is the project key
+    } catch {
+      // Enhance error with available projects
+      const availableKeys = projects.map(p => p.key).join(', ');
+      throw new ValidationError(
+        `Project '${input}' not found. Available projects: ${availableKeys}`,
+        { input, availableProjects: projects.map(p => ({ key: p.key, name: p.name })) }
+      );
+    }
+  }
+
+  /**
+   * Fetches all projects from JIRA with caching.
+   * 
+   * @returns Array of projects with id, key, name
+   * @private
+   */
+  private async fetchAllProjects(): Promise<Array<{ id: string; key: string; name: string }>> {
+    const cacheKey = `jml:projects:${this.cache ? 'cached' : 'nocache'}`;
+    
+    // Check cache first
+    if (this.cache) {
+      try {
+        const cached = await this.cache.get(cacheKey);
+        if (cached) {
+          return JSON.parse(cached) as Array<{ id: string; key: string; name: string }>;
+        }
+      } catch {
+        // Cache read error - continue to fetch
+      }
+    }
+
+    // Fetch from API
+    const projects = await this.client!.get<Array<{ id: string; key: string; name: string }>>(
+      '/rest/api/2/project'
     );
     
-    if (!issueTypeValue) {
-      throw new Error("Field 'Issue Type' is required");
-    }
-    
-    // String format - use directly
-    if (typeof issueTypeValue === 'string') {
-      return issueTypeValue;
-    }
-    
-    // Object format
-    if (typeof issueTypeValue === 'object' && issueTypeValue !== null) {
-      const typeObj = issueTypeValue as Record<string, unknown>;
-      
-      // Object with name - extract directly
-      if (typeObj.name && typeof typeObj.name === 'string') {
-        return typeObj.name;
+    // Cache for 15 minutes
+    if (this.cache) {
+      try {
+        await this.cache.set(cacheKey, JSON.stringify(projects), 900);
+      } catch {
+        // Cache write error - non-critical
       }
-      
-      // Object with id - use id for schema lookup
-      if (typeObj.id && typeof typeObj.id === 'string') {
-        return typeObj.id;
-      }
-      
-      throw new Error("Field 'Issue Type' must have 'name' or 'id' property");
     }
+
+    return projects;
+  }
+
+  /**
+   * Resolves an issue type identifier to a canonical issue type name.
+   * 
+   * Uses the createmeta endpoint for the given project, then fuzzy matches
+   * against available issue types.
+   * 
+   * @param input - Issue type name or ID to resolve
+   * @param projectKey - Resolved project key
+   * @returns Canonical issue type name
+   * @throws {ValidationError} If issue type not found
+   * 
+   * @private
+   */
+  private async resolveIssueType(input: string, projectKey: string): Promise<string> {
+    if (!this.client) {
+      throw new ConfigurationError('JiraClient required for issue type resolution');
+    }
+
+    // Fetch issue types from createmeta (already used by schema discovery)
+    const issueTypesData = await this.client.get<{ values?: Array<{ id: string; name: string }> }>(
+      `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`
+    );
+
+    const issueTypes = issueTypesData.values || [];
+    if (issueTypes.length === 0) {
+      throw new ValidationError(
+        `No issue types found for project '${projectKey}'`,
+        { projectKey }
+      );
+    }
+
+    // Build lookup for fuzzy matching
+    const issueTypeLookup = issueTypes.map(it => ({ id: it.id, name: it.name }));
     
-    throw new Error("Field 'Issue Type' must be a string or object with name/id");
+    try {
+      const matched = resolveUniqueName(input, issueTypeLookup, {
+        field: 'issuetype',
+        fieldName: 'Issue Type'
+      });
+      return matched.name; // Return name for schema lookup
+    } catch {
+      // Enhance error with available issue types
+      const availableTypes = issueTypes.map(it => it.name).join(', ');
+      throw new ValidationError(
+        `Issue type '${input}' not found in project '${projectKey}'. Available types: ${availableTypes}`,
+        { input, projectKey, availableTypes: issueTypes.map(it => it.name) }
+      );
+    }
   }
 
   /**
