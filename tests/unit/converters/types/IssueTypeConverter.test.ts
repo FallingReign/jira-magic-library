@@ -652,34 +652,22 @@ describe('IssueTypeConverter', () => {
     });
   });
 
-  describe('AC8: Custom Abbreviations', () => {
-    // REMOVED: Custom abbreviation tests
-    // Fuzzy matching with fuse.js is now used instead of hardcoded abbreviations
-    // "story" → "User Story" works via fuzzy matching, not abbreviations
+  describe('Fuzzy Matching (replaces old abbreviation system)', () => {
+    // Fuzzy matching with fuse.js handles abbreviations dynamically
+    // e.g., "story" → "User Story", "bug" → "Bug" without hardcoded mappings
 
-    it('should add new custom abbreviations without defaults', async () => {
-      // Add a new abbreviation pattern for "production"
-      const customContext = {
-        ...context,
-        config: {
-          issueTypeAbbreviations: {
-            prod: ['production'], // "prod" input matches issues with "production"
-          },
-        },
-      };
-
+    it('should fuzzy match partial input to full issue type name', async () => {
       mockClient.get.mockResolvedValue({
         values: [mockIssueTypes[5]], // Bug - Production
       });
 
-      // "prod" input should match "Bug - Production" via custom abbreviation
-      const result = await convertIssueTypeType('prod', fieldSchema, customContext);
+      // "prod" should fuzzy match "Bug - Production"
+      const result = await convertIssueTypeType('prod', fieldSchema, context);
       expect(result).toEqual({ id: '10006', name: 'Bug - Production', subtask: false });
     });
 
-    it('should work without custom abbreviations (defaults only)', async () => {
-      // No config provided - should use defaults
-      // User Story has id 10002
+    it('should fuzzy match common abbreviations like story', async () => {
+      // "story" fuzzy matches "User Story"
       const result = await convertIssueTypeType('story', fieldSchema, context);
       expect(result).toEqual({ id: '10002', name: 'User Story', subtask: false });
     });

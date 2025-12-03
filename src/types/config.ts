@@ -57,12 +57,6 @@ export interface JMLConfig {
   /** Enable debug logging (HTTP requests, cache operations, etc.) */
   debug?: boolean;
 
-  /** 
-   * Custom abbreviations for issue type resolution (E3-S07b AC8)
-   * @example { 'defect': ['bug'], 'feature': ['story', 'user story'] }
-   */
-  issueTypeAbbreviations?: Record<string, string[]>;
-
   /**
    * Custom synonyms for parent field names (E3-S07b AC9)
    * @example ['Superior', 'ParentTask', 'Owner']

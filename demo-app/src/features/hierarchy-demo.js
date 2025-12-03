@@ -34,8 +34,7 @@ export async function runHierarchyDemo(config) {
         { name: '3. 🏗️  Multi-level Hierarchy (up to 6 levels deep)', value: 'multi-level' },
         { name: '4. 🔍 Parent Link by Summary Search', value: 'summary-search' },
         { name: '5. ⚙️  Custom Parent Synonyms (config)', value: 'custom-synonyms' },
-        { name: '6. 🎯 Custom Issue Type Abbreviations', value: 'custom-types' },
-        { name: '7. 🔀 Cascading Select All Formats', value: 'cascading-select' },
+        { name: '6. 🔀 Cascading Select All Formats', value: 'cascading-select' },
         new inquirer.Separator(),
         { name: '↩️  Back to Main Menu', value: 'back' },
       ],
@@ -82,9 +81,6 @@ export async function runHierarchyDemo(config) {
         break;
       case 'custom-synonyms':
         await demoCustomSynonyms(config);
-        break;
-      case 'custom-types':
-        await demoCustomTypes(config);
         break;
       case 'cascading-select':
         await demoCascadingSelect(jml, config);
@@ -592,50 +588,7 @@ const story = await jml.issues.create({
 }
 
 /**
- * Demo 6: Custom Issue Types
- */
-async function demoCustomTypes(config) {
-  console.log('\n🎯 Custom Issue Type Abbreviations Demo\n');
-
-  info('You can configure custom issue type abbreviations:\n');
-
-  showCodeExample(`
-const jml = new JML({
-  baseUrl: '${config.baseUrl}',
-  auth: { token: 'YOUR_TOKEN' },
-  
-  // Add custom issue type abbreviations
-  issueTypeAbbreviations: {
-    spike: ['spike', 'sp', 'research'],
-    technical_debt: ['tech debt', 'td', 'debt'],
-    improvement: ['improve', 'imp', 'enhancement']
-  }
-});
-
-// Now you can use abbreviations:
-const issue1 = await jml.issues.create({
-  Project: 'DEMO',
-  'Issue Type': 'sp',              // ← Resolves to "Spike"
-  Summary: 'Research OAuth options',
-});
-
-const issue2 = await jml.issues.create({
-  Project: 'DEMO',
-  'Issue Type': 'tech debt',       // ← Resolves to "Technical Debt"
-  Summary: 'Refactor auth module',
-});
-
-// ✅ Fuzzy matching still works:
-// 'stor' → 'Story'
-// 'bug' → 'Bug'  
-// 'SP' → 'Spike' (case-insensitive)
-  `);
-
-  info('Abbreviations make issue creation faster and more flexible\n');
-}
-
-/**
- * Demo 7: Cascading Select
+ * Demo 6: Cascading Select
  */
 async function demoCascadingSelect(jml, config) {
   const projectKey = config.defaultProjectKey || 'DEMO';
