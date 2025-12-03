@@ -34,7 +34,32 @@ describe('IssueOperations', () => {
 
     mockResolver = {
       resolveFields: jest.fn(),
+      resolveFieldsWithExtraction: jest.fn(),
     } as any;
+
+    // Default mock for resolveFieldsWithExtraction that extracts project/issueType from input
+    // Individual tests can override this if needed
+    (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockImplementation(async (input: Record<string, unknown>) => {
+      const projectVal = input['Project'] || input['project'];
+      const issueTypeVal = input['Issue Type'] || input['issuetype'] || input['issueType'];
+      
+      const projectKey = typeof projectVal === 'string' 
+        ? projectVal 
+        : (projectVal as any)?.key || 'PROJ';
+      const issueType = typeof issueTypeVal === 'string'
+        ? issueTypeVal
+        : (issueTypeVal as any)?.name || 'Task';
+      
+      return {
+        projectKey,
+        issueType,
+        fields: {
+          project: { key: projectKey },
+          issuetype: { name: issueType },
+          ...input,
+        },
+      };
+    });
 
     mockConverter = {
       convertFields: jest.fn(),
@@ -88,7 +113,12 @@ describe('IssueOperations', () => {
       };
 
       mockSchema.getFieldsForIssueType.mockResolvedValue(mockProjectSchema);
-      mockResolver.resolveFields.mockResolvedValue(mockResolvedFields);
+      // Override default mock to return specific resolved fields
+      (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockResolvedValueOnce({
+        projectKey: 'ENG',
+        issueType: 'Bug',
+        fields: mockResolvedFields,
+      });
       mockConverter.convertFields.mockResolvedValue(mockConvertedFields);
       mockClient.post.mockResolvedValue(mockResponse);
 
@@ -97,14 +127,9 @@ describe('IssueOperations', () => {
 
       // Assert
       expect(result).toEqual(mockResponse);
-      expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/project/ENG'); // Project resolution
+      // S4: Project/issueType extraction now happens inside resolveFieldsWithExtraction
+      expect(mockResolver.resolveFieldsWithExtraction).toHaveBeenCalledWith(validInput);
       expect(mockSchema.getFieldsForIssueType).toHaveBeenCalledWith('ENG', 'Bug');
-      expect(mockResolver.resolveFields).toHaveBeenCalledWith('ENG', 'Bug', expect.objectContaining({
-        Project: { key: 'ENG' }, // Project resolved to { key: "ENG" }
-        'Issue Type': 'Bug',
-        Summary: 'Login fails on Safari',
-        Description: 'Steps to reproduce...',
-      }));
       expect(mockConverter.convertFields).toHaveBeenCalledWith(
         mockProjectSchema,
         mockResolvedFields,
@@ -124,20 +149,14 @@ describe('IssueOperations', () => {
       };
 
       mockSchema.getFieldsForIssueType.mockResolvedValue(mockProjectSchema);
-      mockResolver.resolveFields.mockResolvedValue({});
       mockConverter.convertFields.mockResolvedValue({});
       mockClient.post.mockResolvedValue({ key: 'ENG-1', id: '1', self: '' });
 
       // Act
       await issueOps.create(validInput);
 
-      // Assert
-      expect(mockResolver.resolveFields).toHaveBeenCalledWith('ENG', 'Bug', expect.objectContaining({
-        Project: { key: 'ENG' }, // Resolved from "ENG" string
-        'Issue Type': 'Bug',
-        Summary: 'Login fails on Safari',
-        Description: 'Steps to reproduce...',
-      }));
+      // Assert - S4: resolveFieldsWithExtraction now handles project/issueType extraction
+      expect(mockResolver.resolveFieldsWithExtraction).toHaveBeenCalledWith(validInput);
     });
 
     it('should convert field values', async () => {
@@ -151,7 +170,12 @@ describe('IssueOperations', () => {
       const mockResolvedFields = { summary: '  Login bug  ' };
 
       mockSchema.getFieldsForIssueType.mockResolvedValue(mockProjectSchema);
-      mockResolver.resolveFields.mockResolvedValue(mockResolvedFields);
+      // Override default mock to return specific resolved fields
+      (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockResolvedValueOnce({
+        projectKey: 'ENG',
+        issueType: 'Bug',
+        fields: mockResolvedFields,
+      });
       mockConverter.convertFields.mockResolvedValue({ summary: 'Login bug' });
       mockClient.post.mockResolvedValue({ key: 'ENG-1', id: '1', self: '' });
 
@@ -214,6 +238,11 @@ describe('IssueOperations', () => {
         Project: 'ENG',
         Summary: 'Test',
       };
+
+      // Override mock to throw for missing issue type
+      (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+        new Error("Field 'Issue Type' is required")
+      );
 
       // Act & Assert
       await expect(issueOps.create(invalidInput)).rejects.toThrow(
@@ -465,6 +494,11 @@ describe('IssueOperations', () => {
           Summary: 'No issue type',
         };
 
+        // Override mock to throw for missing issue type
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+          new Error("Field 'Issue Type' is required")
+        );
+
         await expect(issueOps.create(invalidInput))
           .rejects.toThrow(/issue type.*required/i);
       });
@@ -550,15 +584,20 @@ describe('IssueOperations', () => {
           .rejects.toThrow(/invalid input format/i);
       });
 
-      it('should throw error if Project is not a string', async () => {
+      it('should throw error if Project is not a string or valid object', async () => {
         const input = { 
-          Project: 123,  // Not a string
+          Project: 123,  // Not a string or object
           'Issue Type': 'Bug',
           Summary: 'Invalid project type'
         };
 
+        // Override mock to throw for invalid project type
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+          new Error("Field 'Project' must be a string or object with key/id")
+        );
+
         await expect(issueOps.create(input))
-          .rejects.toThrow(/project.*required.*string/i);
+          .rejects.toThrow(/project.*string.*object/i);
       });
 
       it('should throw error if Issue Type missing', async () => {
@@ -568,19 +607,29 @@ describe('IssueOperations', () => {
           // Missing: 'Issue Type'
         };
 
+        // Override mock to throw for missing issue type
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+          new Error("Field 'Issue Type' is required")
+        );
+
         await expect(issueOps.create(input))
           .rejects.toThrow(/issue type.*required/i);
       });
 
-      it('should throw error if Issue Type is not a string', async () => {
+      it('should throw error if Issue Type is not a string or valid object', async () => {
         const input = { 
           Project: 'ENG',
-          'Issue Type': 456,  // Not a string
+          'Issue Type': 456,  // Not a string or object
           Summary: 'Invalid issue type'
         };
 
+        // Override mock to throw for invalid issue type
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+          new Error("Field 'Issue Type' must be a string or object with name/id")
+        );
+
         await expect(issueOps.create(input))
-          .rejects.toThrow(/issue type.*required.*string/i);
+          .rejects.toThrow(/issue type.*string.*object/i);
       });
 
       it('should handle all records failing validation in bulk', async () => {
@@ -732,11 +781,18 @@ describe('IssueOperations', () => {
             }
           });
 
-          mockResolver.resolveFields = jest.fn().mockResolvedValue({
-            project: { key: 'ENG' },
-            issuetype: { name: 'Bug' },
-            summary: 'Valid'
-          });
+          // First call succeeds (valid record), second call fails (missing Project)
+          (mockResolver.resolveFieldsWithExtraction as jest.Mock)
+            .mockResolvedValueOnce({
+              projectKey: 'ENG',
+              issueType: 'Bug',
+              fields: {
+                project: { key: 'ENG' },
+                issuetype: { name: 'Bug' },
+                summary: 'Valid'
+              }
+            })
+            .mockRejectedValueOnce(new Error("Field 'Project' is required"));
 
           mockConverter.convertFields = jest.fn().mockImplementation(f => f);
 
@@ -1050,6 +1106,11 @@ describe('IssueOperations', () => {
           Summary: 'Test'
         };
 
+        // Override default mock to throw for invalid project type
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+          new Error("Field 'Project' must be a string or object with key/id")
+        );
+
         await expect(issueOpsWithCache.create(input))
           .rejects.toThrow(/Project.*must be a string/i);
       });
@@ -1060,6 +1121,11 @@ describe('IssueOperations', () => {
           'Issue Type': 123, // Not a string
           Summary: 'Test'
         };
+
+        // Override default mock to throw for invalid issue type
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockRejectedValueOnce(
+          new Error("Field 'Issue Type' must be a string or object with name/id")
+        );
 
         await expect(issueOpsWithCache.create(input))
           .rejects.toThrow(/Issue Type.*must be a string/i);
@@ -1252,11 +1318,13 @@ describe('IssueOperations', () => {
     });
   });
 
-  // Raw JIRA API Format Passthrough Tests (Power User Mode)
-  describe('Raw JIRA API Format Passthrough', () => {
+  // Raw JIRA API Format - Unwrap and Process (Option A)
+  // When users send { fields: {...} } format, JML unwraps it and processes
+  // through the normal pipeline (resolution, conversion), then re-wraps for JIRA
+  describe('JIRA fields format support', () => {
     describe('Single issue with { fields: { project: ... } } format', () => {
-      it('should detect raw JIRA format with fields.project.key', async () => {
-        const rawJiraPayload = {
+      it('should unwrap fields and process through JML pipeline', async () => {
+        const jiraFormatPayload = {
           fields: {
             project: { key: 'HELP' },
             issuetype: { name: 'Help Request' },
@@ -1269,27 +1337,74 @@ describe('IssueOperations', () => {
           }
         };
 
-        // Mock successful API call - passthrough should skip field resolution
+        // Mock the pipeline
+        const mockProjectSchema = {
+          projectKey: 'HELP',
+          issueType: 'Help Request',
+          fields: {}
+        };
+        const mockConvertedFields = {
+          project: { key: 'HELP' },
+          issuetype: { name: 'Help Request' },
+          summary: 'User needs assistance!',
+          assignee: { name: '+Help_OnCall' }
+        };
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue(mockProjectSchema);
+        mockResolver.resolveFields.mockResolvedValue(jiraFormatPayload.fields);
+        mockConverter.convertFields.mockResolvedValue(mockConvertedFields);
         mockClient.post.mockResolvedValue({
           key: 'HELP-123',
           id: '10050',
           self: 'https://jira.example.com/rest/api/2/issue/10050'
         });
 
-        const result = await issueOps.create(rawJiraPayload as any);
+        const result = await issueOps.create(jiraFormatPayload as any);
 
-        // Assert: Should pass payload directly to JIRA API
+        // Assert: Should process through JML pipeline
         expect(result).toHaveProperty('key', 'HELP-123');
-        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', rawJiraPayload);
         
-        // Should NOT call field resolution/conversion (passthrough mode)
-        expect(mockSchema.getFieldsForIssueType).not.toHaveBeenCalled();
-        expect(mockResolver.resolveFields).not.toHaveBeenCalled();
-        expect(mockConverter.convertFields).not.toHaveBeenCalled();
+        // SHOULD call field resolution/conversion (processed mode)
+        expect(mockSchema.getFieldsForIssueType).toHaveBeenCalledWith('HELP', 'Help Request');
+        expect(mockResolver.resolveFieldsWithExtraction).toHaveBeenCalled();
+        expect(mockConverter.convertFields).toHaveBeenCalled();
+        
+        // Final payload should be wrapped in fields
+        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', {
+          fields: mockConvertedFields
+        });
       });
 
-      it('should detect raw JIRA format with fields.project.id', async () => {
-        const rawJiraPayload = {
+      it('should handle fields.project with key', async () => {
+        const jiraFormatPayload = {
+          fields: {
+            project: { key: 'TEST' },
+            issuetype: { name: 'Task' },
+            summary: 'Test issue'
+          }
+        };
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'TEST',
+          issueType: 'Task',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockResolvedValue(jiraFormatPayload.fields);
+        mockConverter.convertFields.mockResolvedValue(jiraFormatPayload.fields);
+        mockClient.post.mockResolvedValue({
+          key: 'TEST-1',
+          id: '10051',
+          self: 'https://jira.example.com/rest/api/2/issue/10051'
+        });
+
+        const result = await issueOps.create(jiraFormatPayload as any);
+
+        expect(result).toHaveProperty('key', 'TEST-1');
+        expect(mockSchema.getFieldsForIssueType).toHaveBeenCalledWith('TEST', 'Task');
+      });
+
+      it('should handle fields.project with id', async () => {
+        const jiraFormatPayload = {
           fields: {
             project: { id: '10000' },
             issuetype: { id: '10001' },
@@ -1297,21 +1412,33 @@ describe('IssueOperations', () => {
           }
         };
 
+        // Mock project lookup by ID
+        mockClient.get.mockResolvedValue({
+          id: '10000',
+          key: 'PROJ',
+          name: 'Project'
+        });
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'PROJ',
+          issueType: 'Task',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockResolvedValue(jiraFormatPayload.fields);
+        mockConverter.convertFields.mockResolvedValue(jiraFormatPayload.fields);
         mockClient.post.mockResolvedValue({
           key: 'PROJ-1',
           id: '10051',
           self: 'https://jira.example.com/rest/api/2/issue/10051'
         });
 
-        const result = await issueOps.create(rawJiraPayload as any);
+        const result = await issueOps.create(jiraFormatPayload as any);
 
         expect(result).toHaveProperty('key', 'PROJ-1');
-        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', rawJiraPayload);
-        expect(mockSchema.getFieldsForIssueType).not.toHaveBeenCalled();
       });
 
-      it('should support dry-run mode with raw JIRA format', async () => {
-        const rawJiraPayload = {
+      it('should support dry-run mode with fields format', async () => {
+        const jiraFormatPayload = {
           fields: {
             project: { key: 'TEST' },
             issuetype: { name: 'Task' },
@@ -1319,12 +1446,25 @@ describe('IssueOperations', () => {
           }
         };
 
-        const result = await issueOps.create(rawJiraPayload as any, { validate: true });
+        const mockConvertedFields = {
+          project: { key: 'TEST' },
+          issuetype: { name: 'Task' },
+          summary: 'Dry run test'
+        };
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'TEST',
+          issueType: 'Task',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockResolvedValue(jiraFormatPayload.fields);
+        mockConverter.convertFields.mockResolvedValue(mockConvertedFields);
+
+        const result = await issueOps.create(jiraFormatPayload as any, { validate: true });
 
         // Dry-run should return payload without calling API
         expect(result).toHaveProperty('key', 'DRY-RUN');
         expect(result).toHaveProperty('fields');
-        expect((result as any).fields).toEqual(rawJiraPayload.fields);
         expect(mockClient.post).not.toHaveBeenCalled();
       });
 
@@ -1340,8 +1480,8 @@ describe('IssueOperations', () => {
           .rejects.toThrow(/project/i);
       });
 
-      it('should handle JIRA API errors in passthrough mode', async () => {
-        const rawJiraPayload = {
+      it('should handle JIRA API errors', async () => {
+        const jiraFormatPayload = {
           fields: {
             project: { key: 'HELP' },
             issuetype: { name: 'Bad Type' },
@@ -1349,9 +1489,9 @@ describe('IssueOperations', () => {
           }
         };
 
-        mockClient.post.mockRejectedValue(new Error('Issue type "Bad Type" does not exist'));
+        mockSchema.getFieldsForIssueType.mockRejectedValue(new Error('Issue type "Bad Type" does not exist'));
 
-        await expect(issueOps.create(rawJiraPayload as any))
+        await expect(issueOps.create(jiraFormatPayload as any))
           .rejects.toThrow('Issue type "Bad Type" does not exist');
       });
     });
@@ -1380,8 +1520,8 @@ describe('IssueOperations', () => {
         );
       });
 
-      it('should detect raw JIRA bulk format with issues array', async () => {
-        const rawJiraBulkPayload = {
+      it('should unwrap issues array and process through JML pipeline', async () => {
+        const jiraBulkPayload = {
           issues: [
             {
               fields: {
@@ -1400,6 +1540,15 @@ describe('IssueOperations', () => {
           ]
         };
 
+        // Mock the pipeline for each issue
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'HELP',
+          issueType: 'Task',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockImplementation(async (_, __, input) => input);
+        mockConverter.convertFields.mockImplementation(async (_, input) => input);
+
         // Mock bulk API response
         mockClient.post.mockResolvedValue({
           issues: [
@@ -1409,15 +1558,10 @@ describe('IssueOperations', () => {
           errors: []
         });
 
-        const result = await issueOpsWithCache.create(rawJiraBulkPayload as any);
+        const result = await issueOpsWithCache.create(jiraBulkPayload as any);
 
-        // Should call bulk endpoint directly
-        expect(mockClient.post).toHaveBeenCalledWith(
-          '/rest/api/2/issue/bulk',
-          expect.objectContaining({
-            issueUpdates: rawJiraBulkPayload.issues
-          })
-        );
+        // Should process through pipeline (schema called for each issue type)
+        expect(mockSchema.getFieldsForIssueType).toHaveBeenCalled();
 
         // Should return BulkResult
         expect(result).toHaveProperty('total', 2);
@@ -1425,8 +1569,8 @@ describe('IssueOperations', () => {
         expect(result).toHaveProperty('manifest');
       });
 
-      it('should handle mixed success/failure in bulk passthrough', async () => {
-        const rawJiraBulkPayload = {
+      it('should handle mixed success/failure in bulk', async () => {
+        const jiraBulkPayload = {
           issues: [
             {
               fields: {
@@ -1445,6 +1589,14 @@ describe('IssueOperations', () => {
           ]
         };
 
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'HELP',
+          issueType: 'Task',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockImplementation(async (_, __, input) => input);
+        mockConverter.convertFields.mockImplementation(async (_, input) => input);
+
         mockClient.post.mockResolvedValue({
           issues: [{ id: '100', key: 'HELP-100', self: 'https://...' }],
           errors: [{ 
@@ -1455,7 +1607,7 @@ describe('IssueOperations', () => {
           }]
         });
 
-        const result = await issueOpsWithCache.create(rawJiraBulkPayload as any);
+        const result = await issueOpsWithCache.create(jiraBulkPayload as any);
 
         expect(result).toHaveProperty('total', 2);
         expect(result).toHaveProperty('succeeded', 1);
@@ -1464,9 +1616,9 @@ describe('IssueOperations', () => {
     });
 
     describe('Format detection edge cases', () => {
-      it('should prefer raw JIRA format over human-readable when fields property exists', async () => {
-        // This payload has both 'fields' (raw) and 'Project' (human-readable)
-        // Should treat as raw JIRA format when 'fields' is present
+      it('should prefer fields format over human-readable when fields property exists', async () => {
+        // This payload has both 'fields' and 'Project'
+        // Should use fields and ignore top-level Project
         const ambiguousPayload = {
           fields: {
             project: { key: 'TEST' },
@@ -1476,6 +1628,13 @@ describe('IssueOperations', () => {
           Project: 'IGNORED' // This should be ignored
         };
 
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'TEST',
+          issueType: 'Task',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockResolvedValue(ambiguousPayload.fields);
+        mockConverter.convertFields.mockResolvedValue(ambiguousPayload.fields);
         mockClient.post.mockResolvedValue({
           key: 'TEST-1',
           id: '10052',
@@ -1484,10 +1643,8 @@ describe('IssueOperations', () => {
 
         await issueOps.create(ambiguousPayload as any);
 
-        // Should pass only the fields object, not the top-level Project
-        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', {
-          fields: ambiguousPayload.fields
-        });
+        // Should use TEST from fields, not IGNORED
+        expect(mockSchema.getFieldsForIssueType).toHaveBeenCalledWith('TEST', 'Task');
       });
 
       it('should handle empty fields object gracefully', async () => {
@@ -1498,26 +1655,42 @@ describe('IssueOperations', () => {
           .rejects.toThrow(/Invalid input format/i);
       });
 
-      it('should pass through fields with string project to JIRA (let JIRA validate)', async () => {
-        // JIRA API requires project: { key: "X" } or { id: "Y" }
-        // But we pass it through and let JIRA return the error
+      it('should process fields with string project through JML (resolves to object)', async () => {
+        // User sends project as string in fields - JML will resolve it
         const stringProject = {
           fields: {
-            project: 'TEST', // String - will fail at JIRA, not at JML
+            project: 'TEST', // String - JML will resolve to { key: 'TEST' }
+            issuetype: { name: 'Task' },
             summary: 'Test'
           }
         };
 
-        // Mock JIRA rejecting the invalid format
-        mockClient.post.mockRejectedValue(new Error('project is required'));
-
-        await expect(issueOps.create(stringProject as any))
-          .rejects.toThrow('project is required');
-        
-        // Verify it was passed through to JIRA
-        expect(mockClient.post).toHaveBeenCalledWith('/rest/api/2/issue', {
-          fields: stringProject.fields
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'TEST',
+          issueType: 'Task',
+          fields: {}
         });
+        mockResolver.resolveFields.mockResolvedValue({
+          project: { key: 'TEST' },
+          issuetype: { name: 'Task' },
+          summary: 'Test'
+        });
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'TEST' },
+          issuetype: { name: 'Task' },
+          summary: 'Test'
+        });
+        mockClient.post.mockResolvedValue({
+          key: 'TEST-1',
+          id: '10053',
+          self: 'https://...'
+        });
+
+        const result = await issueOps.create(stringProject as any);
+
+        expect(result).toHaveProperty('key', 'TEST-1');
+        // Verify it went through the pipeline
+        expect(mockSchema.getFieldsForIssueType).toHaveBeenCalled();
       });
     });
   });

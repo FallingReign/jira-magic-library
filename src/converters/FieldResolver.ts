@@ -122,7 +122,12 @@ export class FieldResolver {
 
       // Special case: Issue Type field
       if (this.isIssueTypeField(fieldName)) {
-        resolved.issuetype = { name: value };
+        // Check if already in object format (from JIRA API format passthrough)
+        if (typeof value === 'object' && value !== null && ('name' in value || 'id' in value)) {
+          resolved.issuetype = value; // Already in correct format, use as-is
+        } else {
+          resolved.issuetype = { name: value }; // Wrap string name in object
+        }
         continue;
       }
       
@@ -189,6 +194,155 @@ export class FieldResolver {
   }
 
   /**
+   * Resolves field names to JIRA field IDs, extracting project and issueType from input.
+   * 
+   * This method consolidates project/issueType extraction that was previously in
+   * IssueOperations.createSingle(), keeping field knowledge in one place.
+   * 
+   * Supports all input formats:
+   * - String: `{ Project: "ENG", "Issue Type": "Bug" }`
+   * - Object with key: `{ project: { key: "ENG" }, issuetype: { name: "Bug" } }`
+   * - Object with id: `{ project: { id: "10000" }, issuetype: { id: "10001" } }`
+   * 
+   * @param input - User input with project, issueType, and other fields
+   * @returns Promise resolving to { projectKey, issueType, fields }
+   * @throws {Error} If Project or Issue Type is missing or invalid
+   * 
+   * @example
+   * ```typescript
+   * const result = await resolver.resolveFieldsWithExtraction({
+   *   project: { key: 'ENG' },
+   *   issuetype: { name: 'Bug' },
+   *   summary: 'Login fails'
+   * });
+   * // { projectKey: 'ENG', issueType: 'Bug', fields: { project: {...}, issuetype: {...}, summary: '...' } }
+   * ```
+   */
+  async resolveFieldsWithExtraction(
+    input: Record<string, unknown>
+  ): Promise<{ projectKey: string; issueType: string; fields: Record<string, unknown> }> {
+    // Extract project key from input
+    const projectKey = await this.extractProjectKey(input);
+    
+    // Extract issue type from input
+    const issueType = this.extractIssueType(input);
+    
+    // Resolve fields using existing method
+    const fields = await this.resolveFields(projectKey, issueType, input);
+    
+    return { projectKey, issueType, fields };
+  }
+
+  /**
+   * Extracts project key from input, handling string or object formats.
+   * 
+   * @param input - Input object containing project field
+   * @returns Extracted project key string
+   * @throws {Error} If project is missing, invalid, or ID lookup fails
+   * 
+   * @private
+   */
+  private async extractProjectKey(input: Record<string, unknown>): Promise<string> {
+    // Find project value (case-insensitive)
+    const projectValue = this.getFieldValue(input, 'Project', 'project', 'PROJECT');
+    
+    if (!projectValue) {
+      throw new Error("Field 'Project' is required");
+    }
+    
+    // String format - use directly
+    if (typeof projectValue === 'string') {
+      return projectValue;
+    }
+    
+    // Object format
+    if (typeof projectValue === 'object' && projectValue !== null) {
+      const projObj = projectValue as Record<string, unknown>;
+      
+      // Object with key - extract directly
+      if (projObj.key && typeof projObj.key === 'string') {
+        return projObj.key;
+      }
+      
+      // Object with id - requires API lookup
+      if (projObj.id && typeof projObj.id === 'string') {
+        if (!this.client) {
+          throw new Error('Cannot resolve project by ID without JiraClient');
+        }
+        const projectData = await this.client.get<{ key: string }>(`/rest/api/2/project/${projObj.id}`);
+        return projectData.key;
+      }
+      
+      throw new Error("Field 'Project' must have 'key' or 'id' property");
+    }
+    
+    throw new Error("Field 'Project' must be a string or object with key/id");
+  }
+
+  /**
+   * Extracts issue type from input, handling string or object formats.
+   * 
+   * @param input - Input object containing issue type field
+   * @returns Extracted issue type string (name or id)
+   * @throws {Error} If issue type is missing or invalid
+   * 
+   * @private
+   */
+  private extractIssueType(input: Record<string, unknown>): string {
+    // Find issue type value (case-insensitive, multiple variations)
+    const issueTypeValue = this.getFieldValue(
+      input, 
+      'Issue Type', 'issuetype', 'issueType', 'ISSUETYPE', 'IssueType', 'type'
+    );
+    
+    if (!issueTypeValue) {
+      throw new Error("Field 'Issue Type' is required");
+    }
+    
+    // String format - use directly
+    if (typeof issueTypeValue === 'string') {
+      return issueTypeValue;
+    }
+    
+    // Object format
+    if (typeof issueTypeValue === 'object' && issueTypeValue !== null) {
+      const typeObj = issueTypeValue as Record<string, unknown>;
+      
+      // Object with name - extract directly
+      if (typeObj.name && typeof typeObj.name === 'string') {
+        return typeObj.name;
+      }
+      
+      // Object with id - use id for schema lookup
+      if (typeObj.id && typeof typeObj.id === 'string') {
+        return typeObj.id;
+      }
+      
+      throw new Error("Field 'Issue Type' must have 'name' or 'id' property");
+    }
+    
+    throw new Error("Field 'Issue Type' must be a string or object with name/id");
+  }
+
+  /**
+   * Gets a field value from input, checking multiple possible key names.
+   * 
+   * @param input - Input object to search
+   * @param keys - Possible key names to check (in order of preference)
+   * @returns Field value or undefined if not found
+   * 
+   * @private
+   */
+  private getFieldValue(input: Record<string, unknown>, ...keys: string[]): unknown {
+    for (const key of keys) {
+      if (key in input) {
+        return input[key];
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Normalizes a field name by removing spaces, hyphens, underscores
    * and converting to lowercase.
    * 
@@ -203,7 +357,7 @@ export class FieldResolver {
    * ```
    */
   private normalizeFieldName(name: string): string {
-    return name.toLowerCase().replace(/[\s_\/-]/g, '');
+    return name.toLowerCase().replace(/[\s_\-/]/g, '');
   }
 
   /**

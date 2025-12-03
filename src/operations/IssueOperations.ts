@@ -6,7 +6,6 @@ import { Issue, CreateIssueOptions } from '../types/index.js';
 import { BulkResult, BulkManifest } from '../types/bulk.js';
 import { LookupCache, GenericCache } from '../types/converter.js';
 import type { JMLConfig } from '../types/config.js';
-import { convertProjectType } from '../converters/types/ProjectConverter.js';
 import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
 import { ManifestStorage } from './ManifestStorage.js';
 import { JiraBulkApiWrapper } from './JiraBulkApiWrapper.js';
@@ -137,25 +136,53 @@ export class IssueOperations implements IssuesAPI {
       return this.retryWithManifest(input, options.retry, options);
     }
 
-    const inputType = this.detectInputType(input);
+    // Normalize input: unwrap { fields: {...} } and { issues: [...] } formats
+    const normalizedInput = this.normalizeInput(input);
+    const inputType = this.detectInputType(normalizedInput);
 
     if (inputType === 'single') {
       // Dispatch to single-issue creation (E1-S09)
-      return this.createSingle(input as Record<string, unknown>, options);
-    }
-
-    if (inputType === 'raw-single') {
-      // Passthrough raw JIRA API format without field resolution
-      return this.createRawSingle(input as { fields: Record<string, unknown> }, options);
-    }
-
-    if (inputType === 'raw-bulk') {
-      // Passthrough raw JIRA bulk API format
-      return this.createRawBulk(input as { issues: Array<{ fields: Record<string, unknown> }> }, options);
+      return this.createSingle(normalizedInput as Record<string, unknown>, options);
     }
 
     // Dispatch to bulk creation (E4-S01, E4-S02, E4-S03)
-    return this.createBulk(input, options);
+    return this.createBulk(normalizedInput, options);
+  }
+
+  /**
+   * Normalize input format to standard JML format
+   * 
+   * Handles JIRA API formats:
+   * - { fields: { project: {...}, ... } } → unwrap to flat object
+   * - { issues: [{ fields: {...} }, ...] } → unwrap to array of flat objects
+   * 
+   * @param input - Original input in any supported format
+   * @returns Normalized input for JML processing
+   * 
+   * @private
+   */
+  private normalizeInput(input: IssuesCreateInput): IssuesCreateInput {
+    if (Array.isArray(input)) {
+      return input;
+    }
+
+    const obj = input as Record<string, unknown>;
+
+    // Handle { issues: [{ fields: {...} }, ...] } format
+    if (obj.issues && Array.isArray(obj.issues)) {
+      return (obj.issues as Array<{ fields: Record<string, unknown> }>).map(issue => issue.fields);
+    }
+
+    // Handle { fields: { project: {...}, ... } } format
+    if (obj.fields && typeof obj.fields === 'object' && obj.fields !== null) {
+      const fields = obj.fields as Record<string, unknown>;
+      if (fields.project !== undefined) {
+        return fields;
+      }
+    }
+
+    // Return as-is for other formats (ParseInputOptions, flat JML format)
+    return input;
   }
 
   /**
@@ -404,32 +431,18 @@ export class IssueOperations implements IssuesAPI {
   /**
    * Detect whether input is for single or bulk issue creation
    * 
-   * @param input - Input data
-   * @returns 'single' for single issue object, 'bulk' for arrays or parse options, or 'raw-single' / 'raw-bulk' for JIRA API format
+   * Note: Input should be normalized via normalizeInput() before calling this method.
+   * 
+   * @param input - Normalized input data
+   * @returns 'single' for single issue object, 'bulk' for arrays or parse options
    */
-  private detectInputType(input: IssuesCreateInput): 'single' | 'bulk' | 'raw-single' | 'raw-bulk' {
+  private detectInputType(input: IssuesCreateInput): 'single' | 'bulk' {
     // Array of objects → bulk
     if (Array.isArray(input)) {
       return 'bulk';
     }
 
     const obj = input as Record<string, unknown>;
-
-    // Raw JIRA bulk format: { issues: [{ fields: {...} }, ...] }
-    if (obj.issues && Array.isArray(obj.issues)) {
-      return 'raw-bulk';
-    }
-
-    // Raw JIRA single format: { fields: { project: ..., ... } }
-    // This is a passthrough for power users sending pre-formatted JIRA payloads
-    // We check for fields.project existence - JIRA will validate the format
-    if (obj.fields && typeof obj.fields === 'object' && obj.fields !== null) {
-      const fields = obj.fields as Record<string, unknown>;
-      if (fields.project !== undefined) {
-        return 'raw-single';
-      }
-      // fields exists but no project - will error below
-    }
 
     // Parse options (from/data/format) → bulk
     const parseOpts = input as ParseInputOptions;
@@ -438,6 +451,7 @@ export class IssueOperations implements IssuesAPI {
     }
 
     // Single object with Project field → single (JML human-readable format)
+    // After normalization, fields.project becomes just project
     if (obj.Project || obj.project) {
       return 'single';
     }
@@ -469,55 +483,12 @@ export class IssueOperations implements IssuesAPI {
     // uid is used for hierarchy tracking in bulk operations
     const { uid: _uid, ...cleanInput } = input;
     
-    // Extract required fields (case-insensitive)
-    const projectInput = cleanInput['Project'] || cleanInput['project'];
-    const issueType = cleanInput['Issue Type'] || cleanInput['issuetype'] || cleanInput['issueType'];
-
-    // Validate required fields
-    if (!projectInput || typeof projectInput !== 'string') {
-      throw new Error("Field 'Project' is required and must be a string");
-    }
-    if (!issueType || typeof issueType !== 'string') {
-      throw new Error("Field 'Issue Type' is required and must be a string");
-    }
-
-    // CRITICAL: Resolve project value to key BEFORE using in API calls
-    // The project input could be a key ("ENG") or name ("Engineering Project")
-    // But createmeta API requires the key, so we must resolve it first
-    // Use a minimal fieldSchema and context since we only need project resolution
-    const projectResolved = await convertProjectType(
-      projectInput,
-      { 
-        id: 'project', 
-        name: 'Project', 
-        type: 'project', 
-        required: true, 
-        schema: { type: 'project' } 
-      },
-      {
-        baseUrl: this.baseUrl,
-        cache: this.cache,
-        client: this.client,
-        projectKey: '', // Will be resolved from projectInput
-        issueType: String(issueType), // Already validated above
-      }
-    ) as { key: string };
-    const projectKey = projectResolved.key;
-
-    // Update input with resolved project value so converter receives the correct format
-    // This ensures the final payload has { project: { key: "PROJ" } } not { project: "Zulu" }
-    const inputWithResolvedProject = {
-      ...cleanInput,
-      'Project': projectResolved, // Replace with resolved { key: "..." }
-      'project': projectResolved, // Also set lowercase version for consistency
-    };
-
-    // Resolve field names → IDs
-    const resolvedFields = await this.resolver.resolveFields(
-      projectKey,
-      issueType,
-      inputWithResolvedProject
-    );
+    // S4: Defer project/issueType extraction to FieldResolver
+    // This handles all formats: string, object with key/id, object with name
+    // Returns projectKey (for schema lookup), issueType (for schema lookup), 
+    // and resolved fields (with project/issuetype already in JIRA format)
+    const { projectKey, issueType, fields: resolvedFields } = 
+      await this.resolver.resolveFieldsWithExtraction(cleanInput);
 
     // Get schema for conversion context
     const projectSchema = await this.schema.getFieldsForIssueType(projectKey, issueType);
@@ -562,116 +533,6 @@ export class IssueOperations implements IssuesAPI {
       const error = new Error(message, { cause: err });
       throw error;
     }
-  }
-
-  /**
-   * Create a single JIRA issue using raw JIRA API format (passthrough mode)
-   * 
-   * This method bypasses field resolution and conversion, passing the payload
-   * directly to the JIRA API. Intended for power users who construct their own
-   * valid JIRA payloads.
-   * 
-   * @param input - Raw JIRA payload with { fields: { project: { key/id: ... }, ... } }
-   * @param options - Optional settings (validate for dry-run mode)
-   * @returns Created issue with key, id, and self URL
-   * 
-   * @private
-   */
-  private async createRawSingle(
-    input: { fields: Record<string, unknown> },
-    options?: IssuesCreateOptions
-  ): Promise<Issue> {
-    // Build clean payload with only fields property (strip any extra properties)
-    const payload = { fields: input.fields };
-
-    // Dry-run mode: return payload without API call
-    if (options?.validate) {
-      return {
-        key: 'DRY-RUN',
-        id: '0',
-        self: '',
-        fields: input.fields,
-      };
-    }
-
-    // Pass directly to JIRA API without field resolution/conversion
-    const response = await this.client.post<Issue>('/rest/api/2/issue', payload);
-    return response;
-  }
-
-  /**
-   * Create multiple JIRA issues using raw JIRA bulk API format (passthrough mode)
-   * 
-   * This method bypasses field resolution and conversion, passing the payload
-   * directly to the JIRA bulk API. Intended for power users who construct their
-   * own valid JIRA payloads.
-   * 
-   * @param input - Raw JIRA bulk payload with { issues: [{ fields: {...} }, ...] }
-   * @param options - Optional settings (validate for dry-run mode)
-   * @returns BulkResult with manifest, totals, and individual results
-   * 
-   * @private
-   */
-  private async createRawBulk(
-    input: { issues: Array<{ fields: Record<string, unknown> }> },
-    _options?: IssuesCreateOptions
-  ): Promise<BulkResult> {
-    // Ensure bulk dependencies are available
-    if (!this.manifestStorage || !this.bulkApiWrapper) {
-      throw new Error('Bulk operations require cache to be configured');
-    }
-
-    const total = input.issues.length;
-
-    // Call bulk API with raw payloads (issueUpdates format)
-    const apiResult = await this.bulkApiWrapper.createBulk(input.issues);
-
-    // Create manifest for tracking
-    const manifest: BulkManifest = {
-      id: `bulk-raw-${Date.now()}`,
-      timestamp: Date.now(),
-      total,
-      succeeded: apiResult.created.map(item => item.index),
-      failed: apiResult.failed.map(item => item.index),
-      created: Object.fromEntries(
-        apiResult.created.map(item => [item.index, item.key])
-      ),
-      errors: Object.fromEntries(
-        apiResult.failed.map(item => [item.index, { status: item.status, errors: item.errors }])
-      )
-    };
-
-    // Store manifest
-    await this.manifestStorage.storeManifest(manifest);
-
-    // Build results array
-    const results = [];
-    for (let i = 0; i < total; i++) {
-      if (manifest.succeeded.includes(i)) {
-        results.push({
-          index: i,
-          success: true as const,
-          key: manifest.created[i]
-        });
-      } else {
-        const error = manifest.errors[i];
-        if (error) {
-          results.push({
-            index: i,
-            success: false as const,
-            error: { status: error.status, errors: error.errors }
-          });
-        }
-      }
-    }
-
-    return {
-      total,
-      succeeded: manifest.succeeded.length,
-      failed: manifest.failed.length,
-      manifest,
-      results
-    };
   }
 
   /**

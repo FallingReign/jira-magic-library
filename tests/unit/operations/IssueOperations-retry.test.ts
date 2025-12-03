@@ -50,6 +50,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
     mockResolver = {
       resolveFields: jest.fn(),
+      resolveFieldsWithExtraction: jest.fn(),
     } as any;
 
     mockConverter = {
@@ -80,6 +81,17 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       issuetype: { name: 'Task' },
       summary: 'Test issue',
       description: 'Test description',
+    });
+
+    mockResolver.resolveFieldsWithExtraction.mockResolvedValue({
+      projectKey: 'ZUL',
+      issueType: 'Task',
+      fields: {
+        project: { key: 'ZUL' },
+        issuetype: { name: 'Task' },
+        summary: 'Test issue',
+        description: 'Test description',
+      },
     });
 
     mockConverter.convertFields.mockResolvedValue({
@@ -488,6 +500,18 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       ).rejects.toThrow('Bulk operations require cache to be configured');
     });
 
+    it('should throw error when retry input is not array or parse options', async () => {
+      const manifest = createBasicManifest('bulk-invalid-format');
+      setupManifestInCache(mockCache, manifest);
+
+      // Single object input is not valid for retry (must be array or {from/data})
+      const invalidInput = { Project: 'ENG', 'Issue Type': 'Bug', Summary: 'Single' };
+
+      await expect(
+        issueOps.create(invalidInput, { retry: manifest.id })
+      ).rejects.toThrow('Retry requires array or parse options input format');
+    });
+
     it('should return manifest summary immediately when no failed rows remain', async () => {
       const manifest = createBasicManifest('bulk-complete');
       manifest.failed = [];
@@ -567,6 +591,71 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       await expect(
         issueOps.create(testInput.slice(0, 1), { retry: manifest.id })
       ).rejects.toThrow(/Failed to map filtered index 99/);
+    });
+
+    it('should throw when failed API indexes cannot be remapped', async () => {
+      const manifest = createPartialRetryManifest('bulk-remap-failed');
+      manifest.failed = [0];
+      manifest.errors = { '0': { status: 400, errors: { field: 'error' } } };
+      setupManifestInCache(mockCache, manifest);
+
+      // Force payload build success, but bulk API returns an out-of-range failed index
+      const allSettledSpy = jest.spyOn(Promise, 'allSettled').mockResolvedValueOnce([
+        {
+          status: 'fulfilled',
+          value: { index: 0, success: true as const, payload: { fields: {} } },
+        } as PromiseFulfilledResult<{ index: number; success: true; payload: { fields: Record<string, unknown> } }>,
+      ]);
+
+      (issueOps as any).bulkApiWrapper = {
+        createBulk: jest.fn().mockResolvedValue({
+          created: [],
+          failed: [{ index: 99, status: 400, errors: { field: 'still failing' } }],
+        }),
+      };
+
+      await expect(
+        issueOps.create(testInput.slice(0, 1), { retry: manifest.id })
+      ).rejects.toThrow(/Failed to map filtered index 99/);
+
+      allSettledSpy.mockRestore();
+    });
+
+    it('should throw when validation errors cannot be remapped to original indices', async () => {
+      const manifest = createPartialRetryManifest('bulk-remap-validation');
+      manifest.failed = [0];
+      manifest.errors = { '0': { status: 400, errors: { field: 'error' } } };
+      setupManifestInCache(mockCache, manifest);
+
+      const rejectionSpy = jest
+        .spyOn(Promise, 'allSettled')
+        .mockResolvedValueOnce([
+          {
+            status: 'fulfilled',
+            value: { index: 99, success: false as const, error: new Error('invalid') },
+          } as PromiseFulfilledResult<{ index: number; success: false; error: Error }>,
+        ]);
+
+      await expect(
+        issueOps.create(testInput.slice(0, 1), { retry: manifest.id })
+      ).rejects.toThrow(/Failed to map filtered index 99/);
+
+      rejectionSpy.mockRestore();
+    });
+
+    it('should capture unexpected validation failures during retry payload building', async () => {
+      const manifest = createPartialRetryManifest('bulk-retry-rejection');
+      setupManifestInCache(mockCache, manifest);
+
+      const rejectionSpy = jest
+        .spyOn(Promise, 'allSettled')
+        .mockResolvedValueOnce([{ status: 'rejected', reason: 'retry boom' } as PromiseRejectedResult]);
+
+      const result = await issueOps.create(testInput.slice(0, 2), { retry: manifest.id }) as BulkResult;
+
+      expect(result.manifest.errors[manifest.failed[0]]?.errors.validation).toContain('retry boom');
+
+      rejectionSpy.mockRestore();
     });
   });
 
@@ -947,6 +1036,215 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       expect(result.manifest.created['1']).toBe('ZUL-601');
       expect(result.manifest.created['2']).toBe('ZUL-602');
       expect(result.manifest.created['3']).toBe('ZUL-603');
+    });
+
+    it('should capture unexpected validation failures in hierarchy retry fallback', async () => {
+      const manifestId = 'bulk-hier-reject';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 1,
+        succeeded: [],
+        failed: [0],
+        created: {},
+        errors: { '0': { status: 400, errors: { parent: 'missing' } } },
+        uidMap: { 'epic-1': 'ZUL-1' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      const rejectionSpy = jest
+        .spyOn(Promise, 'allSettled')
+        .mockResolvedValueOnce([{ status: 'rejected', reason: 'hierarchy boom' } as PromiseRejectedResult]);
+
+      const result = await issueOps.create(
+        [{ uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' }],
+        { retry: manifestId }
+      ) as BulkResult;
+
+      expect(result.manifest.errors['0'].errors.validation).toContain('hierarchy boom');
+
+      rejectionSpy.mockRestore();
+    });
+
+    it('should handle createSingle errors during hierarchy retry fallback', async () => {
+      const manifestId = 'bulk-hier-create-fail';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 1,
+        succeeded: [],
+        failed: [0],
+        created: {},
+        errors: { '0': { status: 400, errors: { parent: 'missing' } } },
+        uidMap: { 'epic-1': 'ZUL-1' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      jest.spyOn(issueOps as any, 'createSingle').mockImplementation(() => {
+        throw new Error('parent lookup failed');
+      });
+
+      const result = await issueOps.create(
+        [{ uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' }],
+        { retry: manifestId }
+      ) as BulkResult;
+
+      expect(result.manifest.errors['0'].errors.validation).toContain('parent lookup failed');
+    });
+
+    it('should merge hierarchy retry results that include failures', async () => {
+      const manifestId = 'bulk-hier-merge';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 2,
+        succeeded: [],
+        failed: [0, 1],
+        created: {},
+        errors: {
+          '0': { status: 400, errors: { parent: 'missing' } },
+          '1': { status: 400, errors: { parent: 'missing' } },
+        },
+        uidMap: { 'epic-1': 'ZUL-1' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      const hierarchyPreprocessor = await import('../../../src/operations/bulk/HierarchyPreprocessor.js');
+      jest.spyOn(hierarchyPreprocessor, 'preprocessHierarchyRecords').mockResolvedValueOnce({
+        hasHierarchy: true,
+        levels: [
+          { issues: [{ index: 0, record: { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic' } }] },
+          { issues: [{ index: 1, record: { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Parent: 'epic-1' } }] },
+        ],
+        uidMap: { 'epic-1': 0, 'story-1': 1 },
+      });
+
+      jest.spyOn(issueOps as any, 'createBulkHierarchy').mockResolvedValueOnce({
+        manifest: {
+          id: 'hier-child',
+          timestamp: Date.now(),
+          total: 2,
+          succeeded: [0],
+          failed: [1],
+          created: { '0': 'ZUL-101' },
+          errors: { '1': { status: 400, errors: { summary: 'bad' } } },
+          uidMap: { 'epic-1': 'ZUL-101' },
+        },
+        total: 2,
+        succeeded: 1,
+        failed: 1,
+        results: [
+          { index: 0, success: true as const, key: 'ZUL-101' },
+          { index: 1, success: false as const, error: { status: 400, errors: { summary: 'bad' } } },
+        ],
+      });
+
+      const result = await issueOps.create(
+        [
+          { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
+          { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'epic-1' },
+        ],
+        { retry: manifestId }
+      ) as BulkResult;
+
+      expect(result.results).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ index: 0, success: true, key: 'ZUL-101' }),
+          expect.objectContaining({ index: 1, success: false }),
+        ])
+      );
+    });
+
+    it('should remap successes and failures in hierarchy retry fallback', async () => {
+      const manifestId = 'bulk-hier-flat-success';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 2,
+        succeeded: [],
+        failed: [0, 1],
+        created: {},
+        errors: {
+          '0': { status: 400, errors: { parent: 'missing' } },
+          '1': { status: 400, errors: { parent: 'missing' } },
+        },
+        uidMap: { 'u1': 'ZUL-1' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      const allSettledSpy = jest.spyOn(Promise, 'allSettled').mockResolvedValueOnce([
+        { status: 'fulfilled', value: { index: 0, success: true as const, payload: { fields: {} }, uid: 'u1' } },
+        { status: 'fulfilled', value: { index: 1, success: true as const, payload: { fields: {} }, uid: 'u2' } },
+      ]);
+
+      (issueOps as any).bulkApiWrapper = {
+        createBulk: jest.fn().mockResolvedValue({
+          created: [{ index: 0, key: 'ZUL-200', id: '200', self: '' }],
+          failed: [{ index: 1, status: 400, errors: { summary: 'bad' } }],
+        }),
+      };
+
+      const result = await issueOps.create(
+        [
+          { uid: 'u1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
+          { uid: 'u2', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'u1' },
+        ],
+        { retry: manifestId }
+      ) as BulkResult;
+
+      expect(result.manifest.created['0']).toBe('ZUL-200');
+      expect(result.manifest.errors['1']).toBeDefined();
+
+      allSettledSpy.mockRestore();
+    });
+
+    it('should process hierarchy retry fallback with uid replacement and real payloads', async () => {
+      const manifestId = 'bulk-hier-flat-real';
+      const manifest = {
+        id: manifestId,
+        timestamp: Date.now(),
+        total: 2,
+        succeeded: [],
+        failed: [0, 1],
+        created: {},
+        errors: {},
+        uidMap: { 'u1': 'ZUL-1' },
+      };
+
+      setupManifestInCache(mockCache, manifest);
+
+      const hierarchyPreprocessor = await import('../../../src/operations/bulk/HierarchyPreprocessor.js');
+      jest.spyOn(hierarchyPreprocessor, 'preprocessHierarchyRecords').mockResolvedValueOnce({
+        hasHierarchy: false,
+        levels: [],
+        uidMap: {},
+      });
+
+      jest.spyOn(issueOps as any, 'createSingle').mockImplementation(async (record: any) => ({
+        fields: { project: { key: record.Project }, issuetype: { name: record['Issue Type'] }, summary: record.Summary },
+      }));
+
+      (issueOps as any).bulkApiWrapper = {
+        createBulk: jest.fn().mockResolvedValue({
+          created: [{ index: 0, key: 'ZUL-300', id: '300', self: '' }],
+          failed: [{ index: 1, status: 400, errors: { summary: 'bad' } }],
+        }),
+      };
+
+      const result = await issueOps.create(
+        [
+          { uid: 'u1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
+          { uid: 'u2', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'u1' },
+        ],
+        { retry: manifestId }
+      ) as BulkResult;
+
+      expect(result.manifest.created['0']).toBe('ZUL-300');
+      expect(result.manifest.errors['1']).toBeDefined();
     });
   });
 });

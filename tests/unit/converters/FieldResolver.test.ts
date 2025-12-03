@@ -1052,4 +1052,295 @@ describe('FieldResolver', () => {
       expect(result.parent).toEqual({ key: 'PROJ-100' });
     });
   });
+
+  describe('resolveFieldsWithExtraction (S4: Defer extraction to FieldResolver)', () => {
+    describe('AC1: Extract Project/IssueType from Input', () => {
+      it('should extract project string from input', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Bug',
+          Summary: 'Test issue',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('ENG');
+        expect(result.issueType).toBe('Bug');
+        expect(result.fields).toHaveProperty('summary', 'Test issue');
+      });
+
+      it('should extract project key from object format { key: "..." }', async () => {
+        const input = {
+          project: { key: 'HELP' },
+          issuetype: { name: 'Task' },
+          summary: 'Test issue',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP');
+        expect(result.issueType).toBe('Task');
+      });
+
+      it('should extract issueType name from object format { name: "..." }', async () => {
+        const input = {
+          Project: 'ENG',
+          issuetype: { name: 'Story' },
+          Summary: 'Test story',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.issueType).toBe('Story');
+      });
+
+      it('should handle case-insensitive field names', async () => {
+        const input = {
+          PROJECT: 'ENG',
+          ISSUETYPE: 'Bug',
+          SUMMARY: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('ENG');
+        expect(result.issueType).toBe('Bug');
+      });
+
+      it('should handle "Issue Type" with space', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Feature',
+          Summary: 'Test feature',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.issueType).toBe('Feature');
+      });
+    });
+
+    describe('AC2: Support All Existing Input Formats', () => {
+      it('should handle string project key', async () => {
+        const input = {
+          Project: 'PROJ',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('PROJ');
+      });
+
+      it('should handle object project with key', async () => {
+        const input = {
+          project: { key: 'PROJ' },
+          issuetype: { name: 'Task' },
+          summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('PROJ');
+      });
+
+      it('should handle object project with id (requires API lookup)', async () => {
+        // Create resolver with mock client for ID lookup
+        const mockClient = {
+          get: jest.fn().mockResolvedValue({ key: 'RESOLVED', id: '10000', name: 'Resolved Project' }),
+        };
+        const resolverWithClient = new FieldResolver(
+          mockSchemaDiscovery,
+          undefined, // parentFieldDiscovery
+          mockClient as any, // client for API calls
+          undefined, // cache
+          undefined  // hierarchyDiscovery
+        );
+
+        const input = {
+          project: { id: '10000' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test with project ID',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('RESOLVED');
+        expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/project/10000');
+      });
+
+      it('should handle string issueType', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.issueType).toBe('Bug');
+      });
+
+      it('should handle object issueType with name', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { name: 'Story' },
+          summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.issueType).toBe('Story');
+      });
+
+      it('should handle object issueType with id', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { id: '10001' },
+          summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // When id is provided, use it as the issueType for schema lookup
+        expect(result.issueType).toBe('10001');
+      });
+    });
+
+    describe('AC4: Backward Compatibility', () => {
+      it('should still work with original resolveFields signature', async () => {
+        const input = {
+          Summary: 'Test issue',
+          Description: 'Test description',
+        };
+
+        // Original signature still works
+        const result = await resolver.resolveFields('ENG', 'Bug', input);
+
+        expect(result).toHaveProperty('summary', 'Test issue');
+        expect(result).toHaveProperty('description', 'Test description');
+      });
+
+      it('should resolve fields correctly in new method', async () => {
+        const input = {
+          Project: 'ENG',
+          'Issue Type': 'Bug',
+          Summary: 'Test issue',
+          'Story Points': 5,
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        expect(result.fields).toHaveProperty('summary', 'Test issue');
+        expect(result.fields).toHaveProperty('customfield_10024', 5);
+      });
+    });
+
+    describe('AC5: Error Handling', () => {
+      it('should throw error when project is missing', async () => {
+        const input = {
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Field 'Project' is required");
+      });
+
+      it('should throw error when issueType is missing', async () => {
+        const input = {
+          Project: 'ENG',
+          Summary: 'Test',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Field 'Issue Type' is required");
+      });
+
+      it('should throw error when project object has neither key nor id', async () => {
+        const input = {
+          project: { name: 'Some Project' }, // Only name, no key or id
+          issuetype: { name: 'Bug' },
+          summary: 'Test',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Field 'Project' must have 'key' or 'id' property");
+      });
+
+      it('should throw error when issueType object has neither name nor id', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { description: 'A bug' }, // Only description, no name or id
+          summary: 'Test',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Field 'Issue Type' must have 'name' or 'id' property");
+      });
+
+      it('should throw error when project ID lookup fails without client', async () => {
+        // Resolver without client
+        const input = {
+          project: { id: '10000' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('Cannot resolve project by ID without JiraClient');
+      });
+
+      it('should throw error when project value is neither string nor object', async () => {
+        const input = {
+          project: 42,
+          issuetype: { name: 'Bug' },
+          summary: 'Invalid project type',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Field 'Project' must be a string or object with key/id");
+      });
+
+      it('should throw error when issueType value is neither string nor object', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: true,
+          summary: 'Invalid issue type',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow("Field 'Issue Type' must be a string or object with name/id");
+      });
+    });
+
+    describe('Field passthrough for JIRA format', () => {
+      it('should preserve project object in resolved fields', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // Project should be preserved in resolved fields for converter
+        expect(result.fields).toHaveProperty('project', { key: 'ENG' });
+      });
+
+      it('should preserve issuetype object in resolved fields', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // IssueType should be preserved in resolved fields
+        expect(result.fields).toHaveProperty('issuetype', { name: 'Bug' });
+      });
+    });
+  });
 });
