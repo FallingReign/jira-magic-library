@@ -174,16 +174,33 @@ describe('UserConverter', () => {
     });
   });
 
-  describe('AC4: Already-Object Passthrough', () => {
-    it('should pass through Server format { name: "alex" }', async () => {
+  describe('AC4: Object Input Handling', () => {
+    it('should resolve { name: "alex" } through API (not passthrough)', async () => {
+      // { name: "..." } extracts the name and resolves like a string
+      // This ensures active user check, ambiguity policy, and validation run
+      const mockUsers = [
+        {
+          name: 'alex',
+          displayName: displayPrimary,
+          emailAddress: emailPrimary,
+          active: true,
+        },
+      ];
+
+      (mockClient.get as jest.Mock).mockResolvedValue(mockUsers);
+
       const input = { name: 'alex' };
       const result = await convertUserType(input, fieldSchema, context);
 
       expect(result).toEqual({ name: 'alex' });
-      expect(mockClient.get).not.toHaveBeenCalled();
+      expect(mockClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/rest/api/2/user/search'),
+        { username: 'alex' }
+      );
     });
 
     it('should pass through Cloud format { accountId: "..." }', async () => {
+      // accountId is JIRA's internal ID - safe to passthrough
       const input = { accountId: '5d8c1234567890abcdef' };
       const result = await convertUserType(input, fieldSchema, context);
 
@@ -191,7 +208,8 @@ describe('UserConverter', () => {
       expect(mockClient.get).not.toHaveBeenCalled();
     });
 
-    it('should pass through object with both name and accountId', async () => {
+    it('should pass through object with accountId even if name also present', async () => {
+      // If accountId is present, we trust it and passthrough
       const input = { name: 'alex', accountId: '5d8c1234567890abcdef' };
       const result = await convertUserType(input, fieldSchema, context);
 
@@ -199,17 +217,105 @@ describe('UserConverter', () => {
       expect(mockClient.get).not.toHaveBeenCalled();
     });
 
-    it('should pass through object with additional properties', async () => {
-      const input = {
-        name: 'alex',
-        displayName: displayPrimary,
-        emailAddress: emailPrimary,
-        self: 'http://jira.example.com/rest/api/2/user?username=alex',
-      };
+    it('should apply ambiguity policy when resolving { name: "..." }', async () => {
+      // Multiple users match - should use ambiguity policy
+      const mockUsers = [
+        {
+          name: 'alex.smith',
+          displayName: 'Alex Smith',
+          emailAddress: 'alex.smith@example.com',
+          active: true,
+        },
+        {
+          name: 'alex.jones',
+          displayName: 'Alex Jones',
+          emailAddress: 'alex.jones@example.com',
+          active: true,
+        },
+      ];
+
+      (mockClient.get as jest.Mock).mockResolvedValue(mockUsers);
+
+      const input = { name: 'alex' };
+      
+      // With 'error' policy, should throw AmbiguityError
+      await expect(
+        convertUserType(input, fieldSchema, contextWithPolicy('error'))
+      ).rejects.toThrow(AmbiguityError);
+    });
+
+    it('should filter inactive users when resolving { name: "..." }', async () => {
+      const mockUsers = [
+        {
+          name: 'alex.inactive',
+          displayName: 'Alex Inactive',
+          emailAddress: 'alex.inactive@example.com',
+          active: false, // Inactive user
+        },
+        {
+          name: 'alex.active',
+          displayName: 'Alex Active',
+          emailAddress: 'alex.active@example.com',
+          active: true,
+        },
+      ];
+
+      (mockClient.get as jest.Mock).mockResolvedValue(mockUsers);
+
+      const input = { name: 'alex' };
       const result = await convertUserType(input, fieldSchema, context);
 
-      expect(result).toEqual(input);
-      expect(mockClient.get).not.toHaveBeenCalled();
+      // Should only match the active user
+      expect(result).toEqual({ name: 'alex.active' });
+    });
+
+    it('should throw ValidationError when { name: "..." } user not found', async () => {
+      (mockClient.get as jest.Mock).mockResolvedValue([]);
+
+      const input = { name: 'nonexistent.user' };
+      
+      await expect(
+        convertUserType(input, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle special characters in { name: "..." } like service accounts', async () => {
+      // Service accounts often have special prefixes like +Help_OnCall
+      const mockUsers = [
+        {
+          name: '+Help_OnCall',
+          displayName: 'Help OnCall Service Account',
+          emailAddress: 'help-oncall@example.com',
+          active: true,
+        },
+      ];
+
+      (mockClient.get as jest.Mock).mockResolvedValue(mockUsers);
+
+      const input = { name: '+Help_OnCall' };
+      const result = await convertUserType(input, fieldSchema, context);
+
+      expect(result).toEqual({ name: '+Help_OnCall' });
+      expect(mockClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/rest/api/2/user/search'),
+        { username: '+Help_OnCall' }
+      );
+    });
+
+    it('should handle empty name in object gracefully', async () => {
+      const input = { name: '' };
+      
+      await expect(
+        convertUserType(input, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle whitespace-only name in object', async () => {
+      const input = { name: '   ' };
+      
+      await expect(
+        convertUserType(input, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
     });
   });
 

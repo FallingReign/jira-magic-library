@@ -69,10 +69,18 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     return value;
   }
 
-  // Already an object with name or accountId → pass through
+  // Handle object input
   if (typeof value === 'object' && value !== null) {
-    if ('name' in value || 'accountId' in value) {
+    // accountId is JIRA Cloud's internal ID - safe to passthrough
+    if ('accountId' in value && value.accountId) {
       return value;
+    }
+    // name is human-readable - extract and resolve like a string
+    // This ensures active user check, ambiguity policy, and validation run
+    // (Same pattern as ProjectConverter and IssueTypeConverter)
+    if ('name' in value && typeof value.name === 'string') {
+      value = value.name;
+      // Fall through to string resolution below
     }
   }
 

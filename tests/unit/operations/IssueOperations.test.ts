@@ -1494,6 +1494,130 @@ describe('IssueOperations', () => {
         await expect(issueOps.create(jiraFormatPayload as any))
           .rejects.toThrow('Issue type "Bad Type" does not exist');
       });
+
+      it('should pass string user values through conversion pipeline', async () => {
+        // This tests that { fields: { reporter: "username" } } gets unwrapped
+        // and the string "username" is passed to converters (not an object)
+        const jiraFormatPayload = {
+          fields: {
+            project: { key: 'HELP' },
+            issuetype: { name: 'Task' },
+            summary: 'Test issue',
+            reporter: 'justin.time',  // String format
+            assignee: 'help.desk'     // String format
+          }
+        };
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'HELP',
+          issueType: 'Task',
+          fields: {
+            reporter: { id: 'reporter', name: 'Reporter', type: 'user', required: false, schema: { type: 'user' } },
+            assignee: { id: 'assignee', name: 'Assignee', type: 'user', required: false, schema: { type: 'user' } },
+          }
+        });
+
+        // Mock resolveFieldsWithExtraction to return the unwrapped fields
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockResolvedValueOnce({
+          projectKey: 'HELP',
+          issueType: 'Task',
+          fields: {
+            project: { key: 'HELP' },
+            issuetype: { name: 'Task' },
+            summary: 'Test issue',
+            reporter: 'justin.time',  // Should remain string for converter
+            assignee: 'help.desk'     // Should remain string for converter
+          }
+        });
+
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'HELP' },
+          issuetype: { name: 'Task' },
+          summary: 'Test issue',
+          reporter: { name: 'justin.time' },
+          assignee: { name: 'help.desk' }
+        });
+
+        mockClient.post.mockResolvedValue({
+          key: 'HELP-1',
+          id: '10001',
+          self: 'https://...'
+        });
+
+        await issueOps.create(jiraFormatPayload as any);
+
+        // Verify the converter received the string values (not objects)
+        expect(mockConverter.convertFields).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            reporter: 'justin.time',
+            assignee: 'help.desk'
+          }),
+          expect.anything()
+        );
+      });
+
+      it('should pass object user values through conversion pipeline', async () => {
+        // This tests that { fields: { reporter: { name: "username" } } } gets unwrapped
+        // and the object { name: "username" } is passed to converters
+        const jiraFormatPayload = {
+          fields: {
+            project: { key: 'HELP' },
+            issuetype: { name: 'Task' },
+            summary: 'Test issue',
+            reporter: { name: 'justin.time' },  // Object format
+            assignee: { name: 'help.desk' }     // Object format
+          }
+        };
+
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'HELP',
+          issueType: 'Task',
+          fields: {
+            reporter: { id: 'reporter', name: 'Reporter', type: 'user', required: false, schema: { type: 'user' } },
+            assignee: { id: 'assignee', name: 'Assignee', type: 'user', required: false, schema: { type: 'user' } },
+          }
+        });
+
+        // Mock resolveFieldsWithExtraction to return the unwrapped fields
+        (mockResolver.resolveFieldsWithExtraction as jest.Mock).mockResolvedValueOnce({
+          projectKey: 'HELP',
+          issueType: 'Task',
+          fields: {
+            project: { key: 'HELP' },
+            issuetype: { name: 'Task' },
+            summary: 'Test issue',
+            reporter: { name: 'justin.time' },  // Should remain object for converter
+            assignee: { name: 'help.desk' }     // Should remain object for converter
+          }
+        });
+
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'HELP' },
+          issuetype: { name: 'Task' },
+          summary: 'Test issue',
+          reporter: { name: 'justin.time' },
+          assignee: { name: 'help.desk' }
+        });
+
+        mockClient.post.mockResolvedValue({
+          key: 'HELP-1',
+          id: '10001',
+          self: 'https://...'
+        });
+
+        await issueOps.create(jiraFormatPayload as any);
+
+        // Verify the converter received the object values
+        expect(mockConverter.convertFields).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({
+            reporter: { name: 'justin.time' },
+            assignee: { name: 'help.desk' }
+          }),
+          expect.anything()
+        );
+      });
     });
 
     describe('Bulk with { issues: [{ fields: ... }] } format', () => {
