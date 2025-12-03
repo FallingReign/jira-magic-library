@@ -10,6 +10,8 @@ import { resolveParentLink } from '../hierarchy/ParentLinkResolver.js';
 import { DEFAULT_PARENT_SYNONYMS } from '../constants/field-constants.js';
 import { resolveUniqueName } from '../utils/resolveUniqueName.js';
 import { ValidationError } from '../errors/ValidationError.js';
+import { findSystemField, isIdOnlyObject } from '../utils/findSystemField.js';
+import { normalizeFieldName } from '../utils/normalizeFieldName.js';
 
 /**
  * Resolves human-readable field names to JIRA field IDs.
@@ -112,7 +114,7 @@ export class FieldResolver {
       }
 
       // Special case: Project field
-      if (this.normalizeFieldName(fieldName) === 'project') {
+      if (normalizeFieldName(fieldName) === 'project') {
         // Check if already resolved to { key: "..." } format (from IssueOperations pre-resolution)
         if (typeof value === 'object' && value !== null && 'key' in value) {
           resolved.project = value; // Already in correct format, use as-is
@@ -134,7 +136,7 @@ export class FieldResolver {
       }
       
       // Check if this is a virtual field (E3-S02b)
-      const normalizedName = this.normalizeFieldName(fieldName);
+      const normalizedName = normalizeFieldName(fieldName);
       const virtualDef = virtualFieldRegistry.get(normalizedName);
       if (virtualDef) {
         // Accumulate virtual fields by parent for later grouping
@@ -223,17 +225,24 @@ export class FieldResolver {
   async resolveFieldsWithExtraction(
     input: Record<string, unknown>
   ): Promise<{ projectKey: string; issueType: string; fields: Record<string, unknown> }> {
-    // 1. Get raw project value
-    const rawProject = this.getFieldValue(input, 'Project', 'project', 'PROJECT');
-    if (!rawProject) {
+    // 1. Find project field dynamically using normalization
+    const projectResult = findSystemField(input, 'project');
+    if (!projectResult) {
       throw new ValidationError("Field 'Project' is required", { field: 'project' });
+    }
+    if (projectResult.extracted === null) {
+      // Field found but value can't be extracted - give helpful error
+      throw new ValidationError(
+        "Project value must be a string or object with key, name, id, or value property",
+        { field: 'project', value: projectResult.value }
+      );
     }
     
     // 2. Resolve project - handle ID vs key/name differently
     let projectKey: string;
-    if (typeof rawProject === 'object' && rawProject !== null && 'id' in rawProject) {
-      // Object with id - requires API lookup
-      const id = String((rawProject as Record<string, unknown>).id);
+    if (isIdOnlyObject(projectResult.value)) {
+      // Object with id only - requires API lookup
+      const id = projectResult.value.id;
       if (!this.client) {
         throw new ConfigurationError('Cannot resolve project by ID without JiraClient');
       }
@@ -241,73 +250,36 @@ export class FieldResolver {
       projectKey = projectData.key;
     } else {
       // String or object with key/name - fuzzy match against project list
-      const projectInput = this.extractIdentifier(rawProject);
-      projectKey = await this.resolveProject(projectInput);
+      projectKey = await this.resolveProject(projectResult.extracted);
     }
     
-    // 3. Get raw issue type value
-    const rawIssueType = this.getFieldValue(
-      input,
-      'Issue Type', 'issuetype', 'issueType', 'ISSUETYPE', 'IssueType', 'type'
-    );
-    if (!rawIssueType) {
+    // 3. Find issue type field dynamically (supports 'type' alias)
+    const issueTypeResult = findSystemField(input, 'issuetype');
+    if (!issueTypeResult) {
       throw new ValidationError("Field 'Issue Type' is required", { field: 'issuetype' });
+    }
+    if (issueTypeResult.extracted === null) {
+      // Field found but value can't be extracted - give helpful error
+      throw new ValidationError(
+        "Issue Type value must be a string or object with key, name, id, or value property",
+        { field: 'issuetype', value: issueTypeResult.value }
+      );
     }
     
     // 4. Resolve issue type - handle ID vs name differently
     let issueType: string;
-    if (typeof rawIssueType === 'object' && rawIssueType !== null && 'id' in rawIssueType) {
-      // Object with id - pass through for schema lookup (original behavior)
-      issueType = String((rawIssueType as Record<string, unknown>).id);
+    if (isIdOnlyObject(issueTypeResult.value)) {
+      // Object with id only - pass through for schema lookup (original behavior)
+      issueType = issueTypeResult.value.id;
     } else {
       // String or object with name - fuzzy match against createmeta
-      const issueTypeInput = this.extractIdentifier(rawIssueType);
-      issueType = await this.resolveIssueType(issueTypeInput, projectKey);
+      issueType = await this.resolveIssueType(issueTypeResult.extracted, projectKey);
     }
     
     // 5. Resolve remaining fields using existing method
     const fields = await this.resolveFields(projectKey, issueType, input);
     
     return { projectKey, issueType, fields };
-  }
-
-  /**
-   * Extracts string identifier from various input formats.
-   * 
-   * Handles: string, { key }, { name }, { id }, { value }
-   * 
-   * @param value - Raw field value
-   * @returns Extracted string identifier
-   * @throws {ValidationError} If value cannot be extracted
-   * 
-   * @private
-   */
-  private extractIdentifier(value: unknown): string {
-    // String - use directly
-    if (typeof value === 'string') {
-      return value.trim();
-    }
-    
-    // Object - extract key, name, id, or value
-    if (typeof value === 'object' && value !== null) {
-      const obj = value as Record<string, unknown>;
-      
-      // Priority: key > name > id > value (most specific first)
-      if (typeof obj.key === 'string') return obj.key.trim();
-      if (typeof obj.name === 'string') return obj.name.trim();
-      if (typeof obj.id === 'string') return obj.id.trim();
-      if (typeof obj.value === 'string') return obj.value.trim();
-      
-      throw new ValidationError(
-        'Object must have key, name, id, or value property',
-        { value }
-      );
-    }
-    
-    throw new ValidationError(
-      `Expected string or object, got ${typeof value}`,
-      { value }
-    );
   }
 
   /**
@@ -442,49 +414,13 @@ export class FieldResolver {
   }
 
   /**
-   * Gets a field value from input, checking multiple possible key names.
-   * 
-   * @param input - Input object to search
-   * @param keys - Possible key names to check (in order of preference)
-   * @returns Field value or undefined if not found
-   * 
-   * @private
-   */
-  private getFieldValue(input: Record<string, unknown>, ...keys: string[]): unknown {
-    for (const key of keys) {
-      if (key in input) {
-        return input[key];
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * Normalizes a field name by removing spaces, hyphens, underscores
-   * and converting to lowercase.
-   * 
-   * @param name - Field name to normalize
-   * @returns Normalized field name
-   * 
-   * @example
-   * ```typescript
-   * normalizeFieldName('Issue Type')   // 'issuetype'
-   * normalizeFieldName('Story_Points') // 'storypoints'
-   * normalizeFieldName('SUMMARY')      // 'summary'
-   * ```
-   */
-  private normalizeFieldName(name: string): string {
-    return name.toLowerCase().replace(/[\s_\-/]/g, '');
-  }
-
-  /**
    * Checks if a field name refers to the Issue Type field.
    * 
    * @param name - Field name to check
    * @returns True if this is an Issue Type field
    */
   private isIssueTypeField(name: string): boolean {
-    const normalized = this.normalizeFieldName(name);
+    const normalized = normalizeFieldName(name);
     return normalized === 'issuetype' || normalized === 'type';
   }
 
@@ -505,10 +441,10 @@ export class FieldResolver {
    * ```
    */
   private findFieldByName(schema: ProjectSchema, name: string): string | null {
-    const normalized = this.normalizeFieldName(name);
+    const normalized = normalizeFieldName(name);
     const entries = Object.entries(schema.fields).map(([fieldId, field]) => ({
       fieldId,
-      normalizedName: this.normalizeFieldName(field.name),
+      normalizedName: normalizeFieldName(field.name),
     }));
 
     // 1) Exact normalized match
@@ -645,8 +581,8 @@ export class FieldResolver {
    * ```
    */
   private isParentSynonym(fieldName: string): boolean {
-    const normalized = this.normalizeFieldName(fieldName);
-    return this.parentSynonyms.some((synonym: string) => this.normalizeFieldName(synonym) === normalized);
+    const normalized = normalizeFieldName(fieldName);
+    return this.parentSynonyms.some((synonym: string) => normalizeFieldName(synonym) === normalized);
   }
 
   /**

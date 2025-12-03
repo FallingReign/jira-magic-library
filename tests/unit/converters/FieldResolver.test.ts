@@ -1561,15 +1561,17 @@ describe('FieldResolver', () => {
         expect(result.projectKey).toBe('ENG'); // Resolved by name
       });
 
-      it('should throw error when issueType object has no extractable property', async () => {
+      it('should try to fuzzy-match extracted value from object with non-standard property', async () => {
         const input = {
           project: { key: 'ENG' },
-          issuetype: { description: 'A bug' }, // Only description, no name, key, id, or value
+          issuetype: { description: 'A bug' }, // Only description - will be extracted and fuzzy-matched
           summary: 'Test',
         };
 
+        // extractFieldValue extracts 'A bug' from { description: 'A bug' }
+        // Then fuzzy matching fails because 'A bug' isn't a valid issue type
         await expect(resolverWithClient.resolveFieldsWithExtraction(input))
-          .rejects.toThrow('Object must have key, name, id, or value property');
+          .rejects.toThrow(/Issue type 'A bug' not found/);
       });
 
       it('should throw error when project ID lookup fails without client', async () => {
@@ -1584,28 +1586,28 @@ describe('FieldResolver', () => {
           .rejects.toThrow('Cannot resolve project by ID without JiraClient');
       });
 
-      it('should throw error when project value is neither string nor object', async () => {
+      it('should throw error when project value cannot be matched', async () => {
         const input = {
-          project: 42,
+          project: 42, // Number - will be converted to "42" and fail fuzzy match
           issuetype: { name: 'Bug' },
           summary: 'Invalid project type',
         };
 
-        // extractIdentifier throws for non-string non-object values
+        // findSystemField converts to string, then fuzzy match fails with helpful error
         await expect(resolverWithClient.resolveFieldsWithExtraction(input))
-          .rejects.toThrow('Expected string or object');
+          .rejects.toThrow(/Project '42' not found/);
       });
 
-      it('should throw error when issueType value is neither string nor object', async () => {
+      it('should throw error when issueType value cannot be matched', async () => {
         const input = {
           project: { key: 'ENG' },
-          issuetype: true,
+          issuetype: true, // Boolean - will be converted to "true" and fail fuzzy match
           summary: 'Invalid issue type',
         };
 
-        // extractIdentifier throws for non-string non-object values
+        // findSystemField converts to string, then fuzzy match fails with helpful error
         await expect(resolverWithClient.resolveFieldsWithExtraction(input))
-          .rejects.toThrow('Expected string or object');
+          .rejects.toThrow(/Issue type 'true' not found/);
       });
     });
 

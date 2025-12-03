@@ -271,7 +271,8 @@ describe('ValidationService', () => {
         expect(mockSchemaDiscovery.getFieldsForIssueType).not.toHaveBeenCalled();
       });
 
-      it('should fail when Project or Issue Type not strings', async () => {
+      it('should fail when Issue Type is an array (cannot be extracted)', async () => {
+        // Arrays cannot be extracted to strings, so Issue Type will be null
         mockParseInput.mockResolvedValue({
           data: [{ Project: 123, 'Issue Type': ['Task'], Summary: 'Test' }],
           format: 'json',
@@ -283,9 +284,10 @@ describe('ValidationService', () => {
         });
 
         expect(result.valid).toBe(false);
+        // Arrays can't be extracted, so Issue Type is treated as missing
         expect(result.errors[0]).toMatchObject({
-          field: 'Project / Issue Type',
-          code: 'INVALID_TYPE'
+          field: 'Issue Type',
+          code: 'REQUIRED_FIELD_MISSING'
         });
         expect(mockSchemaDiscovery.getFieldsForIssueType).not.toHaveBeenCalled();
       });

@@ -39,6 +39,8 @@ import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
 import { ProjectSchema, FieldSchema } from '../types/schema.js';
 import { ValidationResult, ValidationError, ValidationWarning } from './types.js';
 import { NotFoundError } from '../errors/NotFoundError.js';
+import { findSystemField } from '../utils/findSystemField.js';
+import { normalizeFieldName } from '../utils/normalizeFieldName.js';
 
 type SchemaLookupErrorMeta = Omit<ValidationError, 'rowIndex'>;
 
@@ -88,9 +90,12 @@ export class ValidationService {
     for (let rowIndex = 0; rowIndex < parsed.data.length; rowIndex++) {
       const row = parsed.data[rowIndex] as Record<string, unknown>;
       
-      // Extract Project and Issue Type (required for schema lookup)
-      const projectKey = this.extractFieldValue(row, ['Project', 'project']);
-      const issueType = this.extractFieldValue(row, ['Issue Type', 'issue type', 'IssueType', 'issuetype']);
+      // Extract Project and Issue Type using dynamic field lookup
+      const projectResult = findSystemField(row, 'project');
+      const issueTypeResult = findSystemField(row, 'issuetype');
+      
+      const projectKey = projectResult?.extracted;
+      const issueType = issueTypeResult?.extracted;
 
       if (!projectKey || !issueType) {
         if (!projectKey) {
@@ -110,16 +115,6 @@ export class ValidationService {
           });
         }
         continue; // Skip further validation for this row
-      }
-
-      if (typeof projectKey !== 'string' || typeof issueType !== 'string') {
-        errors.push({
-          rowIndex,
-          field: 'Project / Issue Type',
-          code: 'INVALID_TYPE',
-          message: 'Project and Issue Type must be strings',
-        });
-        continue;
       }
 
       const normalizedProjectKey = projectKey.trim();
@@ -454,31 +449,6 @@ export class ValidationService {
   }
 
   /**
-   * Extract field value by trying multiple key variants
-   */
-  private extractFieldValue(
-    row: Record<string, unknown>,
-    keys: string[]
-  ): unknown {
-    for (const key of keys) {
-      // Try exact match
-      if (key in row) {
-        return row[key];
-      }
-
-      // Try case-insensitive match
-      const lowerKey = key.toLowerCase();
-      for (const [rowKey, value] of Object.entries(row)) {
-        if (rowKey.toLowerCase() === lowerKey) {
-          return value;
-        }
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
    * Check if value is empty (null, undefined, empty string)
    */
   private isEmptyValue(value: unknown): boolean {
@@ -487,12 +457,12 @@ export class ValidationService {
 
   /**
    * Check if field is a meta field (Project, Issue Type)
+   * Uses normalization to handle all case/format variations dynamically.
    */
   private isMetaField(key: string): boolean {
-    const lowerKey = key.toLowerCase();
-    return lowerKey === 'project' || 
-           lowerKey === 'issue type' || 
-           lowerKey === 'issuetype' ||
-           lowerKey === 'issue_type';
+    const normalized = normalizeFieldName(key);
+    return normalized === 'project' || 
+           normalized === 'issuetype' ||
+           normalized === 'type'; // 'type' alias for 'issuetype'
   }
 }
