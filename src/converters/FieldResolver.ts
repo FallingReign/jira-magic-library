@@ -277,7 +277,14 @@ export class FieldResolver {
     }
     
     // 5. Resolve remaining fields using existing method
-    const fields = await this.resolveFields(projectKey, issueType, input);
+    // Pass resolved project/issueType in JIRA format so they're used directly
+    const inputWithResolved = {
+      ...input,
+      // Override with resolved values in JIRA format
+      [projectResult.key]: { key: projectKey },
+      [issueTypeResult.key]: { name: issueType },
+    };
+    const fields = await this.resolveFields(projectKey, issueType, inputWithResolved);
     
     return { projectKey, issueType, fields };
   }
