@@ -247,3 +247,9 @@ Each demo reads the main repo’s `.env` / config manager, so ensure those value
 - [Bulk create with manifest + retry](docs/guides/bulk-manifest-retry.md)
 - [Troubleshooting & common errors](docs/guides/troubleshooting.md)
 
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
+
