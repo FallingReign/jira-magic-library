@@ -39,6 +39,7 @@
 import type { FieldConverter } from '../../types/converter.js';
 import { ValidationError } from '../../errors/ValidationError.js';
 import { resolveUniqueName, type LookupValue } from '../../utils/resolveUniqueName.js';
+import { extractFieldValue } from '../../utils/extractFieldValue.js';
 
 export const convertOptionType: FieldConverter = async (value, fieldSchema, context) => {
   // Handle optional fields
@@ -46,22 +47,13 @@ export const convertOptionType: FieldConverter = async (value, fieldSchema, cont
     return value;
   }
 
-  // Handle object input
-  if (typeof value === 'object' && value !== null) {
-    // ID passthrough (already resolved)
-    if ('id' in value && value.id) {
-      return value;
-    }
-    // JIRA API format: { value: "Production" } - extract and resolve
-    if ('value' in value && typeof (value as Record<string, unknown>).value === 'string') {
-      value = (value as Record<string, unknown>).value as string;
-      // Fall through to string resolution below
-    }
-    // Also handle { name: "..." } for consistency
-    else if ('name' in value && typeof (value as Record<string, unknown>).name === 'string') {
-      value = (value as Record<string, unknown>).name as string;
-      // Fall through to string resolution below
-    }
+  // Extract value from JIRA API object formats (e.g., { value: "Production" })
+  // Returns unchanged if already id/accountId/key, or complex/nested structure
+  value = extractFieldValue(value);
+
+  // Passthrough: already-resolved objects with id
+  if (typeof value === 'object' && value !== null && 'id' in value) {
+    return value;
   }
 
   // Must be a string value

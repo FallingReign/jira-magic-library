@@ -46,6 +46,7 @@ import type { JiraClient } from '../../client/JiraClient.js';
 import type { CacheClient } from '../../types/cache.js';
 import { ValidationError } from '../../errors/ValidationError.js';
 import { resolveUniqueName } from '../../utils/resolveUniqueName.js';
+import { extractFieldValue } from '../../utils/extractFieldValue.js';
 
 /**
  * JIRA project object from API
@@ -80,14 +81,13 @@ export const convertProjectType: FieldConverter = async (value, fieldSchema, con
     return value;
   }
 
+  // Extract value from JIRA API object formats (e.g., { name: "My Project" })
+  // Returns unchanged if already id/accountId/key, or complex/nested structure
+  value = extractFieldValue(value);
+
   // Handle object input with key (passthrough)
   if (typeof value === 'object' && value !== null && 'key' in value && value.key) {
     return { key: value.key }; // Already resolved with key
-  }
-
-  // Handle object input with name (extract name for resolution)
-  if (typeof value === 'object' && value !== null && 'name' in value && value.name) {
-    value = value.name; // Extract name string
   }
 
   // Must be string at this point

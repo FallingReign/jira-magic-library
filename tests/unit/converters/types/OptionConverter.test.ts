@@ -311,10 +311,12 @@ describe('OptionConverter', () => {
       expect(result).toEqual({ id: '10100', value: 'Ignored' });
     });
 
-    it('should prefer { value } over { name } when both present', async () => {
-      // When value is present, use it (matches JIRA option field format)
-      const result = await convertOptionType({ value: 'Production', name: 'Ignored' }, fieldSchema, context);
-      expect(result).toEqual({ id: '10100' });
+    it('should pass through object with multiple keys (let converter error)', async () => {
+      // Objects with multiple keys pass through unchanged (rule 3)
+      // Converter then rejects it as invalid input
+      await expect(
+        convertOptionType({ value: 'Production', name: 'Ignored' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
     });
 
     it('should throw ValidationError for { value: "NonExistent" }', async () => {

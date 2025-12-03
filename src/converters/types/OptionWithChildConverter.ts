@@ -50,6 +50,7 @@ import { ValidationError } from '../../errors/ValidationError.js';
 import { AmbiguityError } from '../../errors/AmbiguityError.js';
 import { NotFoundError } from '../../errors/NotFoundError.js';
 import { resolveUniqueName } from '../../utils/resolveUniqueName.js';
+import { extractFieldValue } from '../../utils/extractFieldValue.js';
 
 interface ParsedInput {
   parent?: string;
@@ -66,13 +67,31 @@ interface CascadingOption {
  * Parse input into parent/child components
  */
 function parseInput(value: string | object): ParsedInput {
-  // Handle object format
+  // Handle object format with parent/child structure
   if (typeof value === 'object' && value !== null) {
     const obj = value as Record<string, unknown>;
-    return {
-      parent: obj.parent && typeof obj.parent === 'string' ? obj.parent.trim() : undefined,
-      child: obj.child && typeof obj.child === 'string' ? obj.child.trim() : undefined,
-    };
+    
+    // If object has parent/child properties, use them directly
+    if ('parent' in obj || 'child' in obj) {
+      return {
+        parent: obj.parent && typeof obj.parent === 'string' ? obj.parent.trim() : undefined,
+        child: obj.child && typeof obj.child === 'string' ? obj.child.trim() : undefined,
+      };
+    }
+    
+    // Otherwise, try to extract a string value using extractFieldValue
+    // This handles { value: "MP -> map1" } or { name: "MP -> map1" } formats
+    const extracted = extractFieldValue(value);
+    if (typeof extracted === 'string') {
+      value = extracted;
+      // Fall through to string parsing below
+    } else {
+      // Complex object we don't understand
+      throw new ValidationError(
+        `Invalid object format for cascading select field: expected { parent, child } or { value/name: "string" }`,
+        { value, type: typeof value }
+      );
+    }
   }
 
   // Handle string format - try delimiters in priority order

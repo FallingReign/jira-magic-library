@@ -50,6 +50,7 @@ import { AmbiguityError } from '../../errors/AmbiguityError.js';
 import { NotFoundError } from '../../errors/NotFoundError.js';
 import { JPOHierarchyDiscovery } from '../../hierarchy/JPOHierarchyDiscovery.js';
 import { resolveUniqueName } from '../../utils/resolveUniqueName.js';
+import { extractFieldValue } from '../../utils/extractFieldValue.js';
 
 /**
  * Resolved issue type information
@@ -78,6 +79,10 @@ export const convertIssueTypeType: FieldConverter = async (value, fieldSchema, c
     return value;
   }
 
+  // Extract value from JIRA API object formats (e.g., { name: "Bug" })
+  // Returns unchanged if already id/accountId/key, or complex/nested structure
+  value = extractFieldValue(value);
+
   // Handle object input with id (passthrough)
   if (typeof value === 'object' && value !== null && 'id' in value && value.id) {
     return value; // Already resolved with ID
@@ -85,15 +90,7 @@ export const convertIssueTypeType: FieldConverter = async (value, fieldSchema, c
 
   // Extract name from object or use string value
   let name: string;
-  if (typeof value === 'object' && value !== null && 'name' in value) {
-    if (typeof value.name !== 'string') {
-      throw new ValidationError(
-        `Invalid issue type object for field "${fieldSchema.name}": name must be a string`,
-        { field: fieldSchema.id, value }
-      );
-    }
-    name = value.name;
-  } else if (typeof value === 'string') {
+  if (typeof value === 'string') {
     name = value;
   } else {
     throw new ValidationError(

@@ -688,13 +688,14 @@ describe('IssueTypeConverter', () => {
   describe('Edge Cases: Input Validation', () => {
     it('should throw ValidationError when object.name is not a string', async () => {
       const input = { name: 123 }; // name is number, not string
+      // extractFieldValue extracts 123, then converter rejects non-string
 
       await expect(
         convertIssueTypeType(input, fieldSchema, context)
       ).rejects.toThrow(ValidationError);
       await expect(
         convertIssueTypeType(input, fieldSchema, context)
-      ).rejects.toThrow('name must be a string');
+      ).rejects.toThrow('Expected string or object');
     });
 
     it('should throw ValidationError when projectKey is missing from context', async () => {

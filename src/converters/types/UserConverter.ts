@@ -28,6 +28,7 @@ import type { FieldConverter } from '../../types/converter.js';
 import { ValidationError } from '../../errors/ValidationError.js';
 import { AmbiguityError } from '../../errors/AmbiguityError.js';
 import type { AmbiguityPolicy, JMLConfig } from '../../types/config.js';
+import { extractFieldValue } from '../../utils/extractFieldValue.js';
 
 /**
  * Simple email validation regex
@@ -69,19 +70,13 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     return value;
   }
 
-  // Handle object input
-  if (typeof value === 'object' && value !== null) {
-    // accountId is JIRA Cloud's internal ID - safe to passthrough
-    if ('accountId' in value && value.accountId) {
-      return value;
-    }
-    // name is human-readable - extract and resolve like a string
-    // This ensures active user check, ambiguity policy, and validation run
-    // (Same pattern as ProjectConverter and IssueTypeConverter)
-    if ('name' in value && typeof value.name === 'string') {
-      value = value.name;
-      // Fall through to string resolution below
-    }
+  // Extract value from JIRA API object formats (e.g., { name: "john.doe" })
+  // Returns unchanged if already id/accountId/key, or complex/nested structure
+  value = extractFieldValue(value);
+
+  // Passthrough: already-resolved objects with accountId
+  if (typeof value === 'object' && value !== null && 'accountId' in value) {
+    return value;
   }
 
   // Must be a string (email or display name)

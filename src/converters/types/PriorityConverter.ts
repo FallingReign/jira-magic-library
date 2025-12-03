@@ -38,6 +38,7 @@
 import type { FieldConverter } from '../../types/converter.js';
 import { ValidationError } from '../../errors/ValidationError.js';
 import { resolveUniqueName, type LookupValue } from '../../utils/resolveUniqueName.js';
+import { extractFieldValue } from '../../utils/extractFieldValue.js';
 
 export const convertPriorityType: FieldConverter = async (value, fieldSchema, context) => {
   // Handle optional fields
@@ -45,17 +46,13 @@ export const convertPriorityType: FieldConverter = async (value, fieldSchema, co
     return value;
   }
 
-  // Handle object input
-  if (typeof value === 'object' && value !== null) {
-    // ID passthrough (already resolved)
-    if ('id' in value && value.id) {
-      return value;
-    }
-    // JIRA API format: { name: "High" } - extract and resolve
-    if ('name' in value && typeof (value as Record<string, unknown>).name === 'string') {
-      value = (value as Record<string, unknown>).name as string;
-      // Fall through to string resolution below
-    }
+  // Extract value from JIRA API object formats (e.g., { name: "High" })
+  // Returns unchanged if already id/accountId/key, or complex/nested structure
+  value = extractFieldValue(value);
+
+  // Passthrough: already-resolved objects with id
+  if (typeof value === 'object' && value !== null && 'id' in value) {
+    return value;
   }
 
   // Must be a string name
