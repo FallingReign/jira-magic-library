@@ -6,7 +6,8 @@
  * 
  * Accepts:
  * - String name: "v1.0", "v2.0", "Sprint 1" (case-insensitive)
- * - Object with id: { id: "10200" }
+ * - Object with id: { id: "10200" } (passthrough)
+ * - Object with name: { name: "v1.0" } (JIRA API format - extracts and resolves)
  * - null/undefined for optional fields
  * 
  * Returns: { id: string }
@@ -17,6 +18,7 @@
  * - Lookup caching (reduces API calls)
  * - Graceful cache degradation
  * - Project-level lookup (versions are not issue-type specific)
+ * - JIRA API format support ({ name: "..." })
  * 
  * Note: This converter handles a SINGLE version value.
  * The array converter (E2-S04) handles iteration for multiple versions.
@@ -27,8 +29,12 @@
  * convertVersionType("v1.0", fieldSchema, context)
  * // → { id: "10200" }
  * 
- * // By ID
+ * // By ID (passthrough)
  * convertVersionType({ id: "10200" }, fieldSchema, context)
+ * // → { id: "10200" }
+ * 
+ * // JIRA API format (extracts and resolves)
+ * convertVersionType({ name: "v1.0" }, fieldSchema, context)
  * // → { id: "10200" }
  * 
  * // Case-insensitive
@@ -47,9 +53,17 @@ export const convertVersionType: FieldConverter = async (value, fieldSchema, con
     return value;
   }
 
-  // Already an object with id → pass through
-  if (typeof value === 'object' && value !== null && 'id' in value) {
-    return value;
+  // Handle object input
+  if (typeof value === 'object' && value !== null) {
+    // ID passthrough (already resolved)
+    if ('id' in value && value.id) {
+      return value;
+    }
+    // JIRA API format: { name: "v1.0" } - extract and resolve
+    if ('name' in value && typeof (value as Record<string, unknown>).name === 'string') {
+      value = (value as Record<string, unknown>).name as string;
+      // Fall through to string resolution below
+    }
   }
 
   // Must be a string name

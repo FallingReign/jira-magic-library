@@ -6,7 +6,8 @@
  * 
  * Accepts:
  * - String name: "High", "Medium", "Low" (case-insensitive)
- * - Object with id: { id: "1" }
+ * - Object with id: { id: "1" } (passthrough)
+ * - Object with name: { name: "High" } (JIRA API format - extracts and resolves)
  * - null/undefined for optional fields
  * 
  * Returns: { id: string }
@@ -16,6 +17,7 @@
  * - Ambiguity detection (multiple matches)
  * - Lookup caching (reduces API calls)
  * - Graceful cache degradation
+ * - JIRA API format support ({ name: "..." })
  * 
  * @example
  * ```typescript
@@ -23,8 +25,12 @@
  * convertPriorityType("High", fieldSchema, context)
  * // → { id: "2" }
  * 
- * // By ID
+ * // By ID (passthrough)
  * convertPriorityType({ id: "2" }, fieldSchema, context)
+ * // → { id: "2" }
+ * 
+ * // JIRA API format (extracts and resolves)
+ * convertPriorityType({ name: "High" }, fieldSchema, context)
  * // → { id: "2" }
  * ```
  */
@@ -39,9 +45,17 @@ export const convertPriorityType: FieldConverter = async (value, fieldSchema, co
     return value;
   }
 
-  // Already an object with id → pass through
-  if (typeof value === 'object' && value !== null && 'id' in value) {
-    return value;
+  // Handle object input
+  if (typeof value === 'object' && value !== null) {
+    // ID passthrough (already resolved)
+    if ('id' in value && value.id) {
+      return value;
+    }
+    // JIRA API format: { name: "High" } - extract and resolve
+    if ('name' in value && typeof (value as Record<string, unknown>).name === 'string') {
+      value = (value as Record<string, unknown>).name as string;
+      // Fall through to string resolution below
+    }
   }
 
   // Must be a string name

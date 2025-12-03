@@ -345,4 +345,40 @@ describe('VersionConverter', () => {
       expect(result).toEqual({ id: '10200' });
     });
   });
+
+  describe('JIRA API Format Support', () => {
+    it('should extract and resolve { name: "v1.0" } format', async () => {
+      const result = await convertVersionType({ name: 'v1.0' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10200' });
+    });
+
+    it('should extract and resolve { name: "V2.0" } format (case-insensitive)', async () => {
+      const result = await convertVersionType({ name: 'V2.0' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10202' });
+    });
+
+    it('should prefer { id } over { name } for passthrough', async () => {
+      const result = await convertVersionType({ id: '10200', name: 'Ignored' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10200', name: 'Ignored' });
+    });
+
+    it('should throw ValidationError for { name: "NonExistent" }', async () => {
+      await expect(
+        convertVersionType({ name: 'NonExistent' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle { name: "" } empty string', async () => {
+      await expect(
+        convertVersionType({ name: '' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle full JIRA API response object', async () => {
+      // Full JIRA API format with additional fields
+      const jiraFormat = { id: '10200', name: 'v1.0', self: 'https://jira.example.com/rest/api/2/version/10200', released: true };
+      const result = await convertVersionType(jiraFormat, fieldSchema, context);
+      expect(result).toEqual(jiraFormat); // Passthrough because id is present
+    });
+  });
 });

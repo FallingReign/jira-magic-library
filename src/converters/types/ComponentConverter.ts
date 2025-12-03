@@ -6,7 +6,8 @@
  * 
  * Accepts:
  * - String name: "Backend", "Frontend", "API" (case-insensitive)
- * - Object with id: { id: "10001" }
+ * - Object with id: { id: "10001" } (passthrough)
+ * - Object with name: { name: "Backend" } (JIRA API format - extracts and resolves)
  * - null/undefined for optional fields
  * 
  * Returns: { id: string }
@@ -17,6 +18,7 @@
  * - Lookup caching (reduces API calls)
  * - Graceful cache degradation
  * - Project-level lookup (components are not issue-type specific)
+ * - JIRA API format support ({ name: "..." })
  * 
  * Note: This converter handles a SINGLE component value.
  * The array converter (E2-S04) handles iteration for multiple components.
@@ -27,8 +29,12 @@
  * convertComponentType("Backend", fieldSchema, context)
  * // → { id: "10001" }
  * 
- * // By ID
+ * // By ID (passthrough)
  * convertComponentType({ id: "10001" }, fieldSchema, context)
+ * // → { id: "10001" }
+ * 
+ * // JIRA API format (extracts and resolves)
+ * convertComponentType({ name: "Backend" }, fieldSchema, context)
  * // → { id: "10001" }
  * 
  * // Case-insensitive
@@ -47,9 +53,17 @@ export const convertComponentType: FieldConverter = async (value, fieldSchema, c
     return value;
   }
 
-  // Already an object with id → pass through
-  if (typeof value === 'object' && value !== null && 'id' in value) {
-    return value;
+  // Handle object input
+  if (typeof value === 'object' && value !== null) {
+    // ID passthrough (already resolved)
+    if ('id' in value && value.id) {
+      return value;
+    }
+    // JIRA API format: { name: "Backend" } - extract and resolve
+    if ('name' in value && typeof (value as Record<string, unknown>).name === 'string') {
+      value = (value as Record<string, unknown>).name as string;
+      // Fall through to string resolution below
+    }
   }
 
   // Must be a string name

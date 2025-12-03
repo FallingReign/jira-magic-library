@@ -6,7 +6,9 @@
  * 
  * Accepts:
  * - String value: "Production", "Staging", "Development" (case-insensitive)
- * - Object with id: { id: "10100" }
+ * - Object with id: { id: "10100" } (passthrough)
+ * - Object with value: { value: "Production" } (JIRA API format - extracts and resolves)
+ * - Object with name: { name: "Production" } (alternative format - extracts and resolves)
  * - null/undefined for optional fields
  * 
  * Returns: { id: string }
@@ -16,6 +18,7 @@
  * - Ambiguity detection (multiple matches)
  * - Lookup caching (reduces API calls)
  * - Graceful cache degradation
+ * - JIRA API format support ({ value: "..." })
  * 
  * @example
  * ```typescript
@@ -23,8 +26,12 @@
  * convertOptionType("Production", fieldSchema, context)
  * // → { id: "10100" }
  * 
- * // By ID
+ * // By ID (passthrough)
  * convertOptionType({ id: "10100" }, fieldSchema, context)
+ * // → { id: "10100" }
+ * 
+ * // JIRA API format (extracts and resolves)
+ * convertOptionType({ value: "Production" }, fieldSchema, context)
  * // → { id: "10100" }
  * ```
  */
@@ -39,9 +46,22 @@ export const convertOptionType: FieldConverter = async (value, fieldSchema, cont
     return value;
   }
 
-  // Already an object with id → pass through
-  if (typeof value === 'object' && value !== null && 'id' in value) {
-    return value;
+  // Handle object input
+  if (typeof value === 'object' && value !== null) {
+    // ID passthrough (already resolved)
+    if ('id' in value && value.id) {
+      return value;
+    }
+    // JIRA API format: { value: "Production" } - extract and resolve
+    if ('value' in value && typeof (value as Record<string, unknown>).value === 'string') {
+      value = (value as Record<string, unknown>).value as string;
+      // Fall through to string resolution below
+    }
+    // Also handle { name: "..." } for consistency
+    else if ('name' in value && typeof (value as Record<string, unknown>).name === 'string') {
+      value = (value as Record<string, unknown>).name as string;
+      // Fall through to string resolution below
+    }
   }
 
   // Must be a string value

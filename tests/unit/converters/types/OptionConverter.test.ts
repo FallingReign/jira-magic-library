@@ -289,4 +289,44 @@ describe('OptionConverter', () => {
       expect(result).toEqual({ id: '10101' });
     });
   });
+
+  describe('JIRA API Format Support', () => {
+    it('should extract and resolve { value: "Production" } format', async () => {
+      const result = await convertOptionType({ value: 'Production' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10100' });
+    });
+
+    it('should extract and resolve { value: "Staging" } format (case-insensitive)', async () => {
+      const result = await convertOptionType({ value: 'staging' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10101' });
+    });
+
+    it('should extract and resolve { name: "Development" } format', async () => {
+      const result = await convertOptionType({ name: 'Development' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10102' });
+    });
+
+    it('should prefer { id } over { value } for passthrough', async () => {
+      const result = await convertOptionType({ id: '10100', value: 'Ignored' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10100', value: 'Ignored' });
+    });
+
+    it('should prefer { value } over { name } when both present', async () => {
+      // When value is present, use it (matches JIRA option field format)
+      const result = await convertOptionType({ value: 'Production', name: 'Ignored' }, fieldSchema, context);
+      expect(result).toEqual({ id: '10100' });
+    });
+
+    it('should throw ValidationError for { value: "NonExistent" }', async () => {
+      await expect(
+        convertOptionType({ value: 'NonExistent' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle { value: "" } empty string', async () => {
+      await expect(
+        convertOptionType({ value: '' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+  });
 });

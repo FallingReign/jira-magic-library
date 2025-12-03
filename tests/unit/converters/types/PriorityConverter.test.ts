@@ -294,4 +294,40 @@ describe('PriorityConverter', () => {
       ).rejects.toThrow(AmbiguityError);
     });
   });
+
+  describe('JIRA API Format Support', () => {
+    it('should extract and resolve { name: "High" } format', async () => {
+      const result = await convertPriorityType({ name: 'High' }, fieldSchema, context);
+      expect(result).toEqual({ id: '2' });
+    });
+
+    it('should extract and resolve { name: "medium" } format (case-insensitive)', async () => {
+      const result = await convertPriorityType({ name: 'medium' }, fieldSchema, context);
+      expect(result).toEqual({ id: '3' });
+    });
+
+    it('should prefer { id } over { name } for passthrough', async () => {
+      const result = await convertPriorityType({ id: '1', name: 'Ignored' }, fieldSchema, context);
+      expect(result).toEqual({ id: '1', name: 'Ignored' });
+    });
+
+    it('should throw ValidationError for { name: "NonExistent" }', async () => {
+      await expect(
+        convertPriorityType({ name: 'NonExistent' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle { name: "" } empty string', async () => {
+      await expect(
+        convertPriorityType({ name: '' }, fieldSchema, context)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle full JIRA API response object', async () => {
+      // Full JIRA API format with additional fields
+      const jiraFormat = { id: '2', name: 'High', self: 'https://jira.example.com/rest/api/2/priority/2', iconUrl: 'https://...' };
+      const result = await convertPriorityType(jiraFormat, fieldSchema, context);
+      expect(result).toEqual(jiraFormat); // Passthrough because id is present
+    });
+  });
 });

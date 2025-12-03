@@ -382,4 +382,40 @@ describe('ComponentConverter', () => {
       expect(result).toEqual({ id: '10001' });
     });
   });
+
+  describe('JIRA API Format Support', () => {
+    it('should extract and resolve { name: "Backend" } format', async () => {
+      const result = await convertComponentType({ name: 'Backend' }, mockFieldSchema, mockContext);
+      expect(result).toEqual({ id: '10001' });
+    });
+
+    it('should extract and resolve { name: "frontend" } format (case-insensitive)', async () => {
+      const result = await convertComponentType({ name: 'frontend' }, mockFieldSchema, mockContext);
+      expect(result).toEqual({ id: '10002' });
+    });
+
+    it('should prefer { id } over { name } for passthrough', async () => {
+      const result = await convertComponentType({ id: '10001', name: 'Ignored' }, mockFieldSchema, mockContext);
+      expect(result).toEqual({ id: '10001', name: 'Ignored' });
+    });
+
+    it('should throw ValidationError for { name: "NonExistent" }', async () => {
+      await expect(
+        convertComponentType({ name: 'NonExistent' }, mockFieldSchema, mockContext)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle { name: "" } empty string', async () => {
+      await expect(
+        convertComponentType({ name: '' }, mockFieldSchema, mockContext)
+      ).rejects.toThrow(ValidationError);
+    });
+
+    it('should handle full JIRA API response object', async () => {
+      // Full JIRA API format with additional fields
+      const jiraFormat = { id: '10001', name: 'Backend', self: 'https://jira.example.com/rest/api/2/component/10001' };
+      const result = await convertComponentType(jiraFormat, mockFieldSchema, mockContext);
+      expect(result).toEqual(jiraFormat); // Passthrough because id is present
+    });
+  });
 });
