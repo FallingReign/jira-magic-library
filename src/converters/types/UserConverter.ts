@@ -157,10 +157,10 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
   let users: JiraUser[] | null = null;
   let cacheStatus: 'hit' | 'stale' | 'miss' = 'miss';
 
-  // Try cache first (using project-scoped key, no issueType needed for users)
+  // Try cache first (using global key, no issueType needed for users)
   if (context.cache) {
     try {
-      const result = await context.cache.getLookup(context.projectKey, 'user');
+      const result = await context.cache.getLookup('global', 'user');
       if (result.value) {
         users = result.value as JiraUser[];
         cacheStatus = result.isStale ? 'stale' : 'hit';
@@ -186,14 +186,14 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
 
   // If stale, trigger background refresh (fire-and-forget with deduplication)
   if (cacheStatus === 'stale' && context.client && context.cache) {
-    const refreshKey = `user:${context.projectKey}`;
+    const refreshKey = `user:global`;
     const refreshStart = Date.now();
     // Background refresh with deduplication - don't await
     // refreshOnce ensures only one API call even if multiple stale hits occur
     context.cache.refreshOnce(refreshKey, async () => {
       const freshUsers = await fetchAllUsers(context);
       if (freshUsers && freshUsers.length > 0 && context.cache) {
-        await context.cache.setLookup(context.projectKey, 'user', freshUsers);
+        await context.cache.setLookup('global', 'user', freshUsers);
         const elapsed = Date.now() - refreshStart;
         // eslint-disable-next-line no-console
         console.log(`📦 [UserCache] REFRESHED - Cached ${freshUsers.length} users in ${elapsed}ms`);
@@ -214,7 +214,7 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     // Cache the full user list for future lookups
     if (context.cache && users && users.length > 0) {
       try {
-        await context.cache.setLookup(context.projectKey, 'user', users);
+        await context.cache.setLookup('global', 'user', users);
         // eslint-disable-next-line no-console
         console.log(`📦 [UserCache] CACHED - Stored ${users.length} users`);
       } catch {
