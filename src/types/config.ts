@@ -59,8 +59,17 @@ export interface JMLConfig {
 
   /**
    * Custom synonyms for parent field names (E3-S07b AC9)
-   * @example ['Superior', 'ParentTask', 'Owner']
-   * Default: ['Parent', 'Parent Link', 'Epic Link', 'Portfolio Parent']
+   * 
+   * These patterns are used for:
+   * 1. Schema discovery - finding parent fields in JIRA when plugin detection fails
+   * 2. Input recognition - additional keywords users can use besides the discovered field name
+   * 
+   * The library automatically discovers the actual parent field name from JIRA 
+   * (e.g., "Parent Link", "Container", "Epic Link") and uses that for input matching.
+   * The "parent" keyword always works. This config adds additional patterns.
+   * 
+   * @example ['Superior', 'Initiative', 'Portfolio Item']
+   * @default ['parent'] - The universal "parent" keyword
    */
   parentFieldSynonyms?: string[];
 

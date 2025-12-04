@@ -2,7 +2,7 @@ import { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
 import { ConfigurationError } from '../errors/ConfigurationError.js';
 import { VirtualFieldRegistry } from '../schema/VirtualFieldRegistry.js';
 import { ProjectSchema } from '../types/schema.js';
-import type { ParentFieldDiscovery } from '../hierarchy/ParentFieldDiscovery.js';
+import type { ParentFieldDiscovery, ParentFieldInfo } from '../hierarchy/ParentFieldDiscovery.js';
 import type { JiraClient } from '../client/JiraClient.js';
 import type { RedisCache } from '../cache/RedisCache.js';
 import type { JPOHierarchyDiscovery } from '../hierarchy/JPOHierarchyDiscovery.js';
@@ -12,6 +12,18 @@ import { resolveUniqueName } from '../utils/resolveUniqueName.js';
 import { ValidationError } from '../errors/ValidationError.js';
 import { findSystemField, isIdOnlyObject } from '../utils/findSystemField.js';
 import { normalizeFieldName } from '../utils/normalizeFieldName.js';
+import Fuse from 'fuse.js';
+
+/**
+ * Fuse.js configuration for fuzzy parent field matching.
+ * Uses same threshold as resolveUniqueName for consistency.
+ * minMatchCharLength is set higher to avoid false positives on short inputs like "Par".
+ */
+const PARENT_FUSE_OPTIONS = {
+  threshold: 0.3,
+  ignoreLocation: true,
+  minMatchCharLength: 4,
+};
 
 /**
  * Resolves human-readable field names to JIRA field IDs.
@@ -48,7 +60,11 @@ import { normalizeFieldName } from '../utils/normalizeFieldName.js';
  * ```
  */
 export class FieldResolver {
-  private readonly parentSynonyms: string[];
+  /**
+   * Custom parent synonyms (optional) - only used when parentFieldDiscovery is not configured.
+   * When parentFieldDiscovery is configured, parent field names are discovered dynamically from JIRA.
+   */
+  private readonly customParentSynonyms?: string[];
 
   constructor(
     private readonly schemaDiscovery: SchemaDiscovery,
@@ -58,8 +74,8 @@ export class FieldResolver {
     private readonly hierarchyDiscovery?: JPOHierarchyDiscovery,
     customParentSynonyms?: string[]
   ) {
-    // Merge custom synonyms with defaults (AC9)
-    this.parentSynonyms = customParentSynonyms || DEFAULT_PARENT_SYNONYMS;
+    // Store custom synonyms for fallback when discovery not configured
+    this.customParentSynonyms = customParentSynonyms;
   }
 
   /**
@@ -88,13 +104,17 @@ export class FieldResolver {
     const schema = await this.schemaDiscovery.getFieldsForIssueType(projectKey, issueType);
     const resolved: Record<string, unknown> = {};
     
+    // Pre-discover parent field info for dynamic synonym matching
+    // This enables users to use the actual JIRA field name (e.g., "Container", "Parent Link")
+    const parentFieldInfo = await this.discoverParentFieldInfo(projectKey, issueType);
+    
     // Track virtual fields by parent for grouping (E3-S02b)
     const virtualFieldRegistry = VirtualFieldRegistry.getInstance();
     const virtualFieldGroups = new Map<string, Record<string, unknown>>();
 
     for (const [fieldName, value] of Object.entries(input)) {
-      // E3-S06: Check if this is a parent synonym
-      if (this.isParentSynonym(fieldName)) {
+      // E3-S06: Check if this is a parent synonym (with fuzzy matching)
+      if (this.isParentSynonym(fieldName, parentFieldInfo)) {
         // Skip empty/null parent values (treat as no parent provided)
         if (
           value === undefined ||
@@ -574,22 +594,101 @@ export class FieldResolver {
   }
 
   /**
-   * Checks if a field name is a parent synonym.
+   * Discovers parent field info for the given project and issue type.
+   * Returns null if parentFieldDiscovery is not configured or field not found.
+   * 
+   * @param projectKey - Project key
+   * @param issueTypeName - Issue type name
+   * @returns Parent field info or null
+   */
+  private async discoverParentFieldInfo(
+    projectKey: string,
+    issueTypeName: string
+  ): Promise<ParentFieldInfo | null> {
+    if (!this.parentFieldDiscovery) {
+      return null;
+    }
+    return this.parentFieldDiscovery.getParentFieldInfo(projectKey, issueTypeName);
+  }
+
+  /**
+   * Checks if a field name is a parent synonym using fuzzy matching.
+   *
+   * Uses dynamically discovered parent field name from JIRA (if available),
+   * plus the universal "parent" keyword. Fuzzy matching handles typos like
+   * "Praent Link" → "Parent Link".
    *
    * @param fieldName - Field name to check
+   * @param parentFieldInfo - Discovered parent field info (null if not available)
    * @returns True if this is a parent synonym
    *
    * @example
    * ```typescript
-   * isParentSynonym('Parent')      // true
-   * isParentSynonym('Epic Link')   // true
-   * isParentSynonym('EPIC')        // true
-   * isParentSynonym('Summary')     // false
+   * // With discovered field "Parent Link"
+   * isParentSynonym('Parent Link', info)  // true (exact match)
+   * isParentSynonym('parent', info)       // true (universal keyword)
+   * isParentSynonym('Praent Link', info)  // true (fuzzy match)
+   * isParentSynonym('Container', info)    // false (different field)
    * ```
    */
-  private isParentSynonym(fieldName: string): boolean {
+  private isParentSynonym(fieldName: string, parentFieldInfo: ParentFieldInfo | null): boolean {
+    // Build the list of valid parent synonyms
+    const synonyms = this.buildParentSynonyms(parentFieldInfo);
+    
+    // Fast path: exact match (case-insensitive via normalization)
     const normalized = normalizeFieldName(fieldName);
-    return this.parentSynonyms.some((synonym: string) => normalizeFieldName(synonym) === normalized);
+    const exactMatch = synonyms.some(
+      (synonym) => normalizeFieldName(synonym) === normalized
+    );
+    if (exactMatch) {
+      return true;
+    }
+    
+    // Fuzzy matching for typo tolerance
+    const fuse = new Fuse(synonyms, PARENT_FUSE_OPTIONS);
+    const results = fuse.search(fieldName);
+    
+    // Consider a match if fuzzy search finds any result
+    // (threshold 0.3 is already strict enough)
+    return results.length > 0;
+  }
+
+  /**
+   * Builds the list of valid parent field synonyms.
+   * 
+   * Priority order:
+   * 1. Discovered field name from JIRA (e.g., "Parent Link", "Container")
+   * 2. Custom synonyms from JMLConfig.parentFieldSynonyms (if provided)
+   * 3. Default synonyms from DEFAULT_PARENT_SYNONYMS (always included)
+   * 
+   * @param parentFieldInfo - Discovered parent field info (null if not available)
+   * @returns Array of valid parent synonyms
+   */
+  private buildParentSynonyms(parentFieldInfo: ParentFieldInfo | null): string[] {
+    const synonyms: string[] = [];
+    
+    // Add discovered field name (highest priority)
+    if (parentFieldInfo && parentFieldInfo.name) {
+      synonyms.push(parentFieldInfo.name);
+    }
+    
+    // Add custom synonyms if configured
+    if (this.customParentSynonyms) {
+      for (const synonym of this.customParentSynonyms) {
+        if (!synonyms.includes(synonym)) {
+          synonyms.push(synonym);
+        }
+      }
+    }
+    
+    // Always include default parent synonyms (e.g., "parent") as universal keywords
+    for (const defaultSynonym of DEFAULT_PARENT_SYNONYMS) {
+      if (!synonyms.some((s) => normalizeFieldName(s) === normalizeFieldName(defaultSynonym))) {
+        synonyms.push(defaultSynonym);
+      }
+    }
+    
+    return synonyms;
   }
 
   /**

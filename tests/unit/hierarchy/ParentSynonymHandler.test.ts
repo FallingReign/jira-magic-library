@@ -39,6 +39,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     mockSchemaDiscovery = new SchemaDiscovery({} as any, {} as any, '') as jest.Mocked<SchemaDiscovery>;
     mockParentFieldDiscovery = {
       getParentFieldKey: jest.fn(),
+      getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' }),
     } as any;
     mockClient = {
       get: jest.fn(),
@@ -89,23 +90,18 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     resolveParentLink.mockResolvedValue('PROJ-123');
   });
 
-  describe('AC1: Accept Parent Synonyms (Case-Insensitive)', () => {
+  describe('AC1: Accept Parent Synonyms (Dynamic Discovery + Fallback)', () => {
+    // With dynamic discovery, valid synonyms are:
+    // 1. The discovered field name from getParentFieldInfo (e.g., "Parent Link")
+    // 2. Case variations of the discovered name (e.g., "parent link", "PARENT LINK")  
+    // 3. The universal "parent" keyword (always works)
     const synonyms = [
       'Parent',
       'parent',
       'PARENT',
-      'Epic Link',
-      'epic link',
-      'EPIC LINK',
-      'Epic',
-      'epic',
-      'EPIC',
-      'Parent Issue',
-      'parent issue',
-      'PARENT ISSUE',
-      'Parent Link',
-      'parent link',
-      'PARENT LINK',
+      'Parent Link',    // Matches discovered field name
+      'parent link',    // Case-insensitive match
+      'PARENT LINK',    // Case-insensitive match
     ];
 
     synonyms.forEach((synonym) => {
@@ -139,20 +135,38 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
         });
       });
     });
+
+    it('should recognize typos via fuzzy matching', async () => {
+      mockClient.get.mockResolvedValue({
+        values: [{ id: '10001', name: 'Story' }],
+      });
+
+      const input = {
+        Summary: 'Test story',
+        'Praent Link': 'PROJ-123', // Typo in "Parent Link"
+      };
+
+      const result = await resolver.resolveFields('PROJ', 'Story', input);
+
+      expect(result).toEqual({
+        summary: 'Test story',
+        customfield_10014: 'PROJ-123',
+      });
+    });
   });
 
   describe('AC2: Map to Discovered Parent Field', () => {
-    it('should map all synonyms to same discovered field', async () => {
+    it('should map valid synonyms to discovered field', async () => {
+      // With dynamic discovery, valid synonyms are discovered field name + "parent" keyword
       const testCases = [
-        { synonym: 'Parent', value: 'PROJ-100' },
-        { synonym: 'Epic Link', value: 'PROJ-200' },
-        { synonym: 'Epic', value: 'PROJ-300' },
-        { synonym: 'Parent Issue', value: 'PROJ-400' },
-        { synonym: 'Parent Link', value: 'PROJ-500' },
+        { synonym: 'Parent', value: 'PROJ-100' },      // Universal keyword
+        { synonym: 'Parent Link', value: 'PROJ-500' }, // Discovered field name
+        { synonym: 'parent link', value: 'PROJ-600' }, // Case-insensitive
       ];
 
       for (const { synonym, value } of testCases) {
         jest.clearAllMocks();
+        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' });
         mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
         mockClient.get.mockResolvedValue({
           values: [{ id: '10001', name: 'Story' }],
@@ -189,13 +203,16 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       });
     });
 
-    it('should use parent field discovery for each synonym', async () => {
+    it('should use parent field discovery when resolving parent synonym', async () => {
       mockClient.get.mockResolvedValue({
         values: [{ id: '10001', name: 'Story' }],
       });
+      // getParentFieldInfo is already mocked to return Parent Link
+      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
+      resolveParentLink.mockResolvedValue('PROJ-123');
 
       const input = {
-        Epic: 'PROJ-123',
+        'Parent Link': 'PROJ-123', // Use the discovered field name
       };
 
       await resolver.resolveFields('PROJ', 'Story', input);
@@ -237,7 +254,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       resolveParentLink.mockResolvedValue('PROJ-789');
 
       const input = {
-        'Epic Link': 'newsroom - phase 1',
+        'Parent Link': 'newsroom - phase 1', // Use discovered field name
       };
 
       const result = await resolver.resolveFields('PROJ', 'Story', input);
@@ -254,16 +271,18 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       expect(result.customfield_10014).toBe('PROJ-789');
     });
 
-    it('should work with any synonym for exact key', async () => {
+    it('should work with discovered field name and parent keyword', async () => {
       resolveParentLink.mockResolvedValue('PROJ-1234');
 
-      const synonyms = ['Parent', 'Epic', 'Epic Link', 'Parent Issue', 'Parent Link'];
+      // Now only the discovered field name ("Parent Link") and "parent" keyword work
+      const synonyms = ['Parent', 'Parent Link', 'parent link'];
 
       for (const synonym of synonyms) {
         jest.clearAllMocks();
         mockClient.get.mockResolvedValue({
           values: [{ id: '10001', name: 'Story' }],
         });
+        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' });
         resolveParentLink.mockResolvedValue('PROJ-1234');
 
         const input = { [synonym]: 'PROJ-1234' };
@@ -339,7 +358,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       resolveParentLink.mockResolvedValue('EPIC-456');
 
       const input = {
-        'Epic Link': 'EPIC-456',
+        'Parent Link': 'EPIC-456', // Use discovered field name
       };
 
       const result = await resolver.resolveFields('PROJ', 'Story', input);
@@ -407,6 +426,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
   describe('AC5: Handle Missing Parent Field', () => {
     it('should throw ConfigurationError when parent field not found', async () => {
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue(null);
       mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue(null);
 
       const input = {
@@ -420,10 +440,12 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     });
 
     it('should include project key in error message', async () => {
+      // When getParentFieldInfo returns null, only "parent" is a valid synonym
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue(null);
       mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue(null);
 
       const input = {
-        'Epic Link': 'SIMPLE-123',
+        'Parent': 'SIMPLE-123', // Changed from 'Epic Link' to 'Parent' which is always valid
       };
 
       try {
@@ -436,6 +458,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     });
 
     it('should suggest checking JIRA configuration', async () => {
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue(null);
       mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue(null);
 
       const input = {
@@ -452,18 +475,33 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       }
     });
 
-    it('should fail for all synonyms when no parent field', async () => {
+    it('should throw ConfigurationError when no parent field configured and using "parent" keyword', async () => {
+      // When getParentFieldInfo returns null, only "parent" is recognized as a synonym
+      // And when getParentFieldKey also returns null, it should throw ConfigurationError
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue(null);
       mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue(null);
 
-      const synonyms = ['Parent', 'Epic', 'Epic Link', 'Parent Issue', 'Parent Link'];
+      const input = { 'Parent': 'PROJ-123' };
 
-      for (const synonym of synonyms) {
-        const input = { [synonym]: 'PROJ-123' };
+      await expect(resolver.resolveFields('PROJ', 'Story', input)).rejects.toThrow(
+        ConfigurationError
+      );
+    });
 
-        await expect(resolver.resolveFields('PROJ', 'Story', input)).rejects.toThrow(
-          ConfigurationError
-        );
-      }
+    it('should use discovered field name as synonym when available', async () => {
+      // Mock returns "Epic Link" as the discovered field name
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Epic Link' });
+      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
+      mockClient.get.mockResolvedValue({
+        values: [{ id: '10001', name: 'Story' }],
+      });
+      resolveParentLink.mockResolvedValue('PROJ-123');
+
+      // "Epic Link" should now work because it matches the discovered field name
+      const input = { 'Epic Link': 'PROJ-123' };
+      const result = await resolver.resolveFields('PROJ', 'Story', input);
+      
+      expect(result.customfield_10014).toBe('PROJ-123');
     });
   });
 
@@ -576,16 +614,19 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       expect(result.customfield_10014).toBe('PROJ-123');
     });
 
-    it('should handle mixed case in multi-word synonyms', async () => {
+    it('should handle mixed case in parent synonyms', async () => {
       resolveParentLink.mockResolvedValue('PROJ-456');
 
-      const testCases = ['ePiC LiNk', 'pArEnT iSsUe', 'PARENT link'];
+      // Now only the discovered field name ("Parent Link") and "parent" keyword work
+      // Mixed case variations of these should still match
+      const testCases = ['pArEnT LiNk', 'PARENT LINK', 'parent'];
 
       for (const synonym of testCases) {
         jest.clearAllMocks();
         mockClient.get.mockResolvedValue({
           values: [{ id: '10001', name: 'Story' }],
         });
+        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' });
         resolveParentLink.mockResolvedValue('PROJ-456');
 
         const input = { [synonym]: 'PROJ-456' };
@@ -596,8 +637,11 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     });
 
     it('should not match partial synonym names', async () => {
+      // getParentFieldInfo returns Parent Link, so "Par" shouldn't match
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' });
+      
       const input = {
-        Par: 'PROJ-123', // Not a valid synonym
+        Par: 'PROJ-123', // Not a valid synonym - too short for fuzzy match
         summary: 'Valid field', // Add valid field
       };
 
@@ -607,7 +651,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       
       // Should skip unknown field with warning
       expect(Object.values(result)).not.toContain('PROJ-123');
-      // Should not call synonym handling
+      // Should not call parent field resolution (getParentFieldKey is only called when isParentSynonym matches)
       expect(mockParentFieldDiscovery.getParentFieldKey).not.toHaveBeenCalled();
       // Should warn about unknown field
       expect(consoleSpy).toHaveBeenCalledWith(

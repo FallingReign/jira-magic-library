@@ -7,7 +7,7 @@
 import inquirer from 'inquirer';
 import ora from 'ora';
 import { JML } from 'jira-magic-library';
-import { showHeader, success, error, info, warning } from '../ui/display.js';
+import { showHeader, success, error, info, warning, showCode, pause } from '../ui/display.js';
 import { confirm } from '../ui/prompts.js';
 
 /**
@@ -29,12 +29,14 @@ export async function runHierarchyDemo(config) {
       name: 'example',
       message: 'Choose a hierarchy example to run:',
       choices: [
-        { name: '1. 📋 Epic with Stories (exact keys)', value: 'epic-stories' },
-        { name: '2. ✅ Story with Subtasks (parent synonyms)', value: 'story-subtasks' },
-        { name: '3. 🏗️  Multi-level Hierarchy (up to 6 levels deep)', value: 'multi-level' },
-        { name: '4. 🔍 Parent Link by Summary Search', value: 'summary-search' },
-        { name: '5. ⚙️  Custom Parent Synonyms (config)', value: 'custom-synonyms' },
-        { name: '6. 🔀 Cascading Select All Formats', value: 'cascading-select' },
+        { name: '1. 🔎 Discover Parent Fields (read-only)', value: 'discover-parents' },
+        new inquirer.Separator(),
+        { name: '2. 📋 Epic with Stories (exact keys)', value: 'epic-stories' },
+        { name: '3. ✅ Story with Subtasks (parent synonyms)', value: 'story-subtasks' },
+        { name: '4. 🏗️  Multi-level Hierarchy (up to 6 levels deep)', value: 'multi-level' },
+        { name: '5. 🔍 Parent Link by Summary Search', value: 'summary-search' },
+        { name: '6. ⚙️  Custom Parent Synonyms (config)', value: 'custom-synonyms' },
+        { name: '7. 🔀 Cascading Select All Formats', value: 'cascading-select' },
         new inquirer.Separator(),
         { name: '↩️  Back to Main Menu', value: 'back' },
       ],
@@ -43,6 +45,18 @@ export async function runHierarchyDemo(config) {
   ]);
 
   if (example === 'back') {
+    return;
+  }
+
+  // Discover parents is read-only, skip the warning
+  if (example === 'discover-parents') {
+    const jml = new JML({
+      baseUrl: config.baseUrl,
+      auth: { token: config.token },
+      apiVersion: config.apiVersion || 'v2',
+      redis: config.redis || { host: 'localhost', port: 6379 },
+    });
+    await demoDiscoverParentFields(jml, config);
     return;
   }
 
@@ -98,6 +112,143 @@ export async function runHierarchyDemo(config) {
   }
 
   await new Promise(resolve => setTimeout(resolve, 2000));
+}
+
+/**
+ * Demo: Discover Parent Fields (read-only)
+ * 
+ * Discovers and displays parent fields for all issue types in a project.
+ * This is a read-only operation - no issues are created.
+ */
+async function demoDiscoverParentFields(jml, config) {
+  const projectKey = config.defaultProjectKey || 'DEMO';
+
+  console.log('\n🔎 Discovering Parent Fields & Valid Parents\n');
+  info(`Project: ${projectKey}\n`);
+  info('This discovers which field each issue type uses for parent references,\n');
+  info('and which issue types are valid parents based on the hierarchy.\n\n');
+
+  const spinner = ora('Fetching issue types and hierarchy...').start();
+
+  try {
+    // Get all issue types for the project and hierarchy structure
+    const [issueTypes, hierarchy] = await Promise.all([
+      jml.getIssueTypes(projectKey),
+      jml.getHierarchy(),
+    ]);
+    
+    // Build a map of issue type ID -> name for lookups
+    const issueTypeMap = new Map(issueTypes.map(t => [t.id, t.name]));
+    
+    spinner.succeed(`Found ${issueTypes.length} issue types` + (hierarchy ? ` with ${hierarchy.length}-level hierarchy` : ' (no JPO hierarchy)'));
+
+    // Collect all parent field data first (before displaying)
+    spinner.start('Discovering parent fields for all issue types...');
+    const results = [];
+    
+    for (const issueType of issueTypes) {
+      try {
+        const parentField = await jml.getParentField(projectKey, issueType.name);
+        
+        // Find valid parent types from hierarchy
+        let validParentTypes = [];
+        if (hierarchy) {
+          // Find child's level in hierarchy
+          const childLevel = hierarchy.find(level => level.issueTypeIds.includes(issueType.id));
+          if (childLevel) {
+            // Parent level is one higher (id + 1)
+            const parentLevel = hierarchy.find(level => level.id === childLevel.id + 1);
+            if (parentLevel) {
+              // Map parent level issue type IDs to names
+              validParentTypes = parentLevel.issueTypeIds
+                .map(id => issueTypeMap.get(id))
+                .filter(Boolean);
+            }
+          }
+        }
+        
+        results.push({
+          typeName: issueType.name,
+          parentField,
+          validParentTypes,
+          error: null,
+        });
+      } catch (err) {
+        results.push({
+          typeName: issueType.name,
+          parentField: null,
+          validParentTypes: [],
+          error: err.message,
+        });
+      }
+    }
+    
+    spinner.succeed('Discovery complete');
+
+    // Now display all results at once (no interleaved async operations)
+    console.log('\n┌──────────────────────────────────────────────────────────────────────────────────────────────┐');
+    console.log('│ Issue Type           │ Parent Field          │ Field Key            │ Valid Parents         │');
+    console.log('├──────────────────────────────────────────────────────────────────────────────────────────────┤');
+
+    for (const result of results) {
+      const typeName = result.typeName.padEnd(20);
+      const validParents = result.validParentTypes.length > 0 
+        ? result.validParentTypes.join(', ').slice(0, 21).padEnd(21)
+        : '(top level)'.padEnd(21);
+        
+      if (result.error) {
+        console.log(`│ ${typeName} │ ${'Error'.padEnd(21)} │ ${result.error.slice(0, 20).padEnd(20)} │ ${'-'.padEnd(21)} │`);
+      } else if (result.parentField) {
+        const fieldName = result.parentField.name.padEnd(21);
+        const fieldKey = result.parentField.key.padEnd(20);
+        console.log(`│ ${typeName} │ ${fieldName} │ ${fieldKey} │ ${validParents} │`);
+      } else {
+        console.log(`│ ${typeName} │ ${'(none)'.padEnd(21)} │ ${'-'.padEnd(20)} │ ${validParents} │`);
+      }
+    }
+
+    console.log('└──────────────────────────────────────────────────────────────────────────────────────────────┘');
+
+    // Show usage example
+    console.log('\n');
+    info('💡 How to use discovered parent fields:\n\n');
+
+    showCodeExample(`
+// Get parent field for a specific issue type
+const parentField = await jml.getParentField('${projectKey}', 'Story');
+
+if (parentField) {
+  console.log(\`Field: \${parentField.name} (\${parentField.key})\`);
+  // "Field: Parent Link (customfield_10014)"
+  
+  // Use the discovered field name in issue creation:
+  await jml.issues.create({
+    Project: '${projectKey}',
+    'Issue Type': 'Story',
+    Summary: 'My Story',
+    [parentField.name]: 'EPIC-123',  // Discovered field name
+    // OR simply use:
+    Parent: 'EPIC-123',               // "Parent" always works
+  });
+}
+
+// Discover all parent fields for a project
+const issueTypes = await jml.getIssueTypes('${projectKey}');
+for (const type of issueTypes) {
+  const parent = await jml.getParentField('${projectKey}', type.name);
+  console.log(\`\${type.name}: \${parent?.name ?? 'No parent field'}\`);
+}
+`);
+
+    success('\n✅ Discovery complete (read-only, no issues created)\n');
+    
+    await pause();
+    await jml.disconnect();
+
+  } catch (err) {
+    spinner.fail(`Failed: ${err.message}`);
+    throw err;
+  }
 }
 
 /**
@@ -558,33 +709,40 @@ const jml = new JML({
   baseUrl: '${config.baseUrl}',
   auth: { token: 'YOUR_TOKEN' },
   
-  // Add custom parent synonyms
+  // Add custom parent synonyms (extends defaults, not replaces)
   parentFieldSynonyms: [
-    'Custom Parent',
-    'My Parent Field',
     'Initiative',
-    'Portfolio Item'
+    'Portfolio Item',
+    'Superior'
   ]
 });
 
-// Now you can use any of these:
+// The library automatically discovers the parent field name from JIRA
+// (e.g., "Parent Link", "Container", "Epic Link") and uses that.
+// Custom synonyms are ADDED to the discovered name + "parent" keyword.
+
+// Now you can use:
 const story = await jml.issues.create({
   Project: 'DEMO',
   'Issue Type': 'Story',
   Summary: 'My Story',
-  'Custom Parent': 'EPIC-123',     // ← Custom synonym
-  // OR
-  Initiative: 'EPIC-123',           // ← Another custom synonym
-  // OR
-  Parent: 'EPIC-123',               // ← Default synonym still works
+  
+  // These always work:
+  'Parent Link': 'EPIC-123',        // ← Discovered from JIRA schema
+  Parent: 'EPIC-123',               // ← Universal "parent" keyword
+  
+  // Custom synonyms also work:
+  Initiative: 'EPIC-123',           // ← From parentFieldSynonyms config
 });
 
-// ✅ Custom synonyms MERGE with defaults (not replace)
-// Default synonyms: "Parent", "Epic Link", "Epic", "Parent Link", "Parent Issue"
+// ✅ Synonym priority:
+// 1. Discovered field name from JIRA (e.g., "Parent Link", "Container")
+// 2. Custom synonyms from parentFieldSynonyms config
+// 3. Default "parent" keyword (always works)
   `);
 
-  info('Custom synonyms extend (not replace) the default list\n');
-  info('This allows team-specific field names while keeping standard ones\n');
+  info('Custom synonyms extend (not replace) the discovered field name\n');
+  info('The library discovers the actual parent field from your JIRA instance\n');
 }
 
 /**

@@ -17,6 +17,8 @@ jest.mock('../../src/schema/SchemaDiscovery');
 jest.mock('../../src/converters/FieldResolver');
 jest.mock('../../src/converters/ConverterRegistry');
 jest.mock('../../src/operations/IssueOperations');
+jest.mock('../../src/hierarchy/ParentFieldDiscovery');
+jest.mock('../../src/hierarchy/JPOHierarchyDiscovery');
 
 describe('JML', () => {
   let mockClient: jest.Mocked<JiraClientImpl>;
@@ -369,6 +371,55 @@ describe('JML', () => {
         const jml = new JML(config);
         expect(jml).toBeInstanceOf(JML);
       });
+    });
+  });
+
+  describe('getParentField', () => {
+    it('should delegate to parentFieldDiscovery.getParentFieldInfo', async () => {
+      const { ParentFieldDiscovery } = await import('../../src/hierarchy/ParentFieldDiscovery.js');
+      const mockGetParentFieldInfo = jest.fn().mockResolvedValue({
+        key: 'customfield_10014',
+        name: 'Parent Link',
+      });
+      
+      (ParentFieldDiscovery as jest.MockedClass<typeof ParentFieldDiscovery>).mockImplementation(() => ({
+        getParentFieldKey: jest.fn(),
+        getParentFieldInfo: mockGetParentFieldInfo,
+      }) as any);
+
+      const jml = new JML({
+        baseUrl: 'https://jira.example.com',
+        auth: { token: 'test-token' },
+        apiVersion: 'v2',
+      });
+
+      const result = await jml.getParentField('ENG', 'Story');
+
+      expect(mockGetParentFieldInfo).toHaveBeenCalledWith('ENG', 'Story');
+      expect(result).toEqual({
+        key: 'customfield_10014',
+        name: 'Parent Link',
+      });
+    });
+
+    it('should return null when no parent field found', async () => {
+      const { ParentFieldDiscovery } = await import('../../src/hierarchy/ParentFieldDiscovery.js');
+      const mockGetParentFieldInfo = jest.fn().mockResolvedValue(null);
+      
+      (ParentFieldDiscovery as jest.MockedClass<typeof ParentFieldDiscovery>).mockImplementation(() => ({
+        getParentFieldKey: jest.fn(),
+        getParentFieldInfo: mockGetParentFieldInfo,
+      }) as any);
+
+      const jml = new JML({
+        baseUrl: 'https://jira.example.com',
+        auth: { token: 'test-token' },
+        apiVersion: 'v2',
+      });
+
+      const result = await jml.getParentField('ENG', 'Task');
+
+      expect(result).toBeNull();
     });
   });
 });

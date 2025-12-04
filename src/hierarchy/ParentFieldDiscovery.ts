@@ -2,7 +2,7 @@ import { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
 import type { CacheClient } from '../types/cache.js';
 import type { FieldSchema, ProjectSchema } from '../types/schema.js';
 import { NotFoundError } from '../errors/NotFoundError.js';
-import { DEFAULT_PARENT_SYNONYMS } from '../constants/field-constants.js';
+import { DEFAULT_PARENT_SYNONYMS, PARENT_FIELD_PLUGINS } from '../constants/field-constants.js';
 
 const CACHE_TTL_SECONDS = 3600;
 const CACHE_PREFIX = 'hierarchy';
@@ -22,6 +22,16 @@ interface FieldCandidate {
   fieldName: string;
   priority: number;
   sourceIssueType: string;
+}
+
+/**
+ * Information about a discovered parent field.
+ */
+export interface ParentFieldInfo {
+  /** The JIRA field key (e.g., "customfield_10014" or "parent") */
+  key: string;
+  /** The human-readable field name (e.g., "Parent Link", "Epic Link", "parent") */
+  name: string;
 }
 
 /**
@@ -107,6 +117,66 @@ export class ParentFieldDiscovery {
   }
 
   /**
+   * Discovers the parent field info (key and name) for a given project and issue type.
+   *
+   * Similar to getParentFieldKey but returns both the field key and human-readable name,
+   * enabling dynamic parent field synonym matching based on actual JIRA configuration.
+   *
+   * For Sub-tasks, returns the standard JIRA "parent" field.
+   * For other issue types, searches for JPO hierarchy custom fields (type "any") that
+   * match common parent field patterns.
+   *
+   * @param projectKey - The JIRA project key (e.g., "PROJ", "ENG")
+   * @param issueTypeName - The issue type name (e.g., "SuperEpic", "Epic", "Story", "Sub-task")
+   * @returns The parent field info with key and name, or null if not found
+   *
+   * @example
+   * ```typescript
+   * const discovery = new ParentFieldDiscovery(schemaDiscovery, cache);
+   * const fieldInfo = await discovery.getParentFieldInfo('PROJ', 'Story');
+   * console.log(fieldInfo); // { key: "customfield_10014", name: "Parent Link" }
+   *
+   * const subtaskFieldInfo = await discovery.getParentFieldInfo('PROJ', 'Sub-task');
+   * console.log(subtaskFieldInfo); // { key: "parent", name: "parent" }
+   * ```
+   */
+  async getParentFieldInfo(projectKey: string, issueTypeName: string): Promise<ParentFieldInfo | null> {
+    const cacheKey = this.getInfoCacheKey(projectKey, issueTypeName);
+
+    const cachedValue = await this.cache.get(cacheKey);
+    if (cachedValue) {
+      if (cachedValue === NULL_CACHE_VALUE) {
+        return null;
+      }
+      try {
+        return JSON.parse(cachedValue) as ParentFieldInfo;
+      } catch {
+        // Invalid cache entry, fall through to discovery
+      }
+    }
+
+    // Sub-tasks use standard JIRA parent field
+    if (this.isSubtaskIssueType(issueTypeName)) {
+      const info: ParentFieldInfo = { key: 'parent', name: 'parent' };
+      await this.cache.set(cacheKey, JSON.stringify(info), CACHE_TTL_SECONDS);
+      return info;
+    }
+
+    // For non-Sub-tasks, search for JPO hierarchy custom fields
+    const candidates = await this.findCandidatesForIssueType(projectKey, issueTypeName);
+
+    if (candidates.length === 0) {
+      await this.cache.set(cacheKey, NULL_CACHE_VALUE, CACHE_TTL_SECONDS);
+      return null;
+    }
+
+    const selected = this.selectCandidate(candidates);
+    const info: ParentFieldInfo = { key: selected.fieldKey, name: selected.fieldName };
+    await this.cache.set(cacheKey, JSON.stringify(info), CACHE_TTL_SECONDS);
+    return info;
+  }
+
+  /**
    * Finds parent field candidates for a specific issue type.
    * 
    * @param projectKey - Project key
@@ -160,18 +230,32 @@ export class ParentFieldDiscovery {
   }
 
   private evaluateField(field: FieldSchema): { priority: number } | null {
+    // Priority 1: Check for known parent field plugins (most reliable)
+    const pluginId = field.schema?.custom;
+    if (pluginId && PARENT_FIELD_PLUGINS.includes(pluginId)) {
+      // Plugin matches get highest priority (lower number = higher priority)
+      const pluginIndex = PARENT_FIELD_PLUGINS.indexOf(pluginId);
+      return { priority: pluginIndex };
+    }
+
+    // Priority 2: Fall back to name pattern matching
+    // Offset by plugin count so plugin matches always win
+    const patternOffset = PARENT_FIELD_PLUGINS.length;
     const fieldName = field.name.toLowerCase().trim();
+    
+    // Exact match first
     for (let i = 0; i < this.parentFieldPatterns.length; i += 1) {
       const pattern = this.parentFieldPatterns[i]?.toLowerCase();
       if (pattern && fieldName === pattern) {
-        return { priority: i };
+        return { priority: patternOffset + i };
       }
     }
 
+    // Then partial/contains match
     for (let i = 0; i < this.parentFieldPatterns.length; i += 1) {
       const pattern = this.parentFieldPatterns[i]?.toLowerCase();
       if (pattern && fieldName.includes(pattern)) {
-        return { priority: i + this.parentFieldPatterns.length };
+        return { priority: patternOffset + i + this.parentFieldPatterns.length };
       }
     }
 
@@ -207,6 +291,10 @@ export class ParentFieldDiscovery {
 
   private getCacheKey(projectKey: string, issueTypeName: string): string {
     return `${CACHE_PREFIX}:${projectKey}:${issueTypeName}:parent-field`;
+  }
+
+  private getInfoCacheKey(projectKey: string, issueTypeName: string): string {
+    return `${CACHE_PREFIX}:${projectKey}:${issueTypeName}:parent-field-info`;
   }
 }
 

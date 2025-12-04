@@ -3,20 +3,28 @@
  */
 
 /**
- * Default synonyms for parent field names used in field resolution.
- * Can be overridden via JMLConfig.parentFieldSynonyms
+ * Known plugin identifiers for parent/hierarchy link fields.
+ * These are checked first in ParentFieldDiscovery before falling back to name patterns.
  * 
- * These are used when searching for parent fields in JIRA schemas,
- * allowing users to use common names like "Parent" instead of specific
- * field names like "Epic Link" or "Parent Link".
+ * Plugin-based detection is more reliable than name matching because it identifies
+ * the field by its implementation rather than display name (which can be customized).
+ */
+export const PARENT_FIELD_PLUGINS: string[] = [
+  'com.pyxis.greenhopper.jira:gh-epic-link',    // GreenHopper/JIRA Software Epic Link
+  'com.atlassian.jpo:jpo-custom-field-parent',  // JPO/Advanced Roadmaps Parent Link
+];
+
+/**
+ * Default patterns for parent field name matching.
+ * Used for:
+ * 1. Schema discovery - fallback when plugin-based detection doesn't find a match
+ * 2. Input recognition - universal keywords that always work for parent field references
  * 
- * Order matters for ParentFieldDiscovery scoring (earlier = higher priority).
- * Consolidated from FieldResolver's PARENT_SYNONYMS and ParentFieldDiscovery's PARENT_FIELD_PATTERNS.
+ * The library automatically discovers the actual parent field name from JIRA
+ * and uses that for input matching. These defaults are always included as fallbacks.
+ * 
+ * Can be extended via JMLConfig.parentFieldSynonyms
  */
 export const DEFAULT_PARENT_SYNONYMS: string[] = [
   'parent',
-  'epic link',
-  'epic',
-  'parent link',
-  'parent issue',
 ];

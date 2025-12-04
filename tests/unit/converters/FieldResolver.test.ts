@@ -704,7 +704,7 @@ describe('FieldResolver', () => {
 
   // AC4: Field Resolver Integration Tests with Parent Field Discovery
   describe('AC4: Parent Field Resolution Integration', () => {
-    let mockParentFieldDiscovery: { getParentFieldKey: jest.Mock };
+    let mockParentFieldDiscovery: { getParentFieldKey: jest.Mock; getParentFieldInfo: jest.Mock };
     let mockClient: { get: jest.Mock };
     let mockCache: any;
     let mockHierarchyDiscovery: any;
@@ -713,6 +713,7 @@ describe('FieldResolver', () => {
       // Create mock ParentFieldDiscovery
       mockParentFieldDiscovery = {
         getParentFieldKey: jest.fn(),
+        getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'customfield_10100', name: 'Parent Link' }),
       };
 
       // Create mock JiraClient
@@ -998,7 +999,10 @@ describe('FieldResolver', () => {
 
     it('should format parent value as object when parent field type is issuelink', async () => {
       // Setup mocks for parent field resolution
-      const mockParentFieldDiscovery = { getParentFieldKey: jest.fn() };
+      const mockParentFieldDiscovery = {
+        getParentFieldKey: jest.fn(),
+        getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'parent', name: 'Parent' }),
+      };
       const mockClient = { get: jest.fn() };
       const mockCache = { get: jest.fn(), set: jest.fn() }; // Required for parent link resolution
       const mockHierarchyDiscovery = { getHierarchy: jest.fn() };

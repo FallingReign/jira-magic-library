@@ -19,6 +19,7 @@ const createSchema = (
     name: string;
     schemaType?: string;
     type?: string;
+    customPlugin?: string;
   }>
 ): ProjectSchema => {
   const fieldEntries = fields.map<FieldSchema>((field) => ({
@@ -28,6 +29,7 @@ const createSchema = (
     required: false,
     schema: {
       type: field.schemaType ?? 'any',
+      custom: field.customPlugin,
     },
   }));
 
@@ -77,7 +79,7 @@ describe('ParentFieldDiscovery', () => {
     cache.get.mockResolvedValue(null);
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
-        { key: 'customfield_10014', name: 'Epic Link' },
+        { key: 'customfield_10014', name: 'Epic Link', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' },
         { key: 'summary', name: 'Summary', schemaType: 'string', type: 'string' },
       ])
     );
@@ -119,14 +121,15 @@ describe('ParentFieldDiscovery', () => {
       createSchema('Story', [
         { key: 'customfield_10015', name: 'Parent Issue' },
         { key: 'customfield_10016', name: 'Parent' },
-        { key: 'customfield_10017', name: 'Epic Link' },
+        { key: 'customfield_10017', name: 'Epic Link', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' },
       ])
     );
 
     const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
     const result = await discovery.getParentFieldKey('TEST', 'Story');
 
-    expect(result).toBe('customfield_10016');
+    // Plugin match (Epic Link) wins over name-only matches
+    expect(result).toBe('customfield_10017');
     expect(logger.warn).toHaveBeenCalled();
   });
 
@@ -172,7 +175,7 @@ describe('ParentFieldDiscovery', () => {
     cache.get.mockResolvedValue(null);
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Task', [
-        { key: 'customfield_exact', name: 'Parent Link' },
+        { key: 'customfield_exact', name: 'Parent' },
         { key: 'customfield_partial', name: 'Task Parent Reference' },
       ])
     );
@@ -188,7 +191,7 @@ describe('ParentFieldDiscovery', () => {
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_a', name: 'Parent Issue' },
-        { key: 'customfield_b', name: 'Parent Link' },
+        { key: 'customfield_b', name: 'Parent Link', customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent' },
       ])
     );
 
@@ -197,7 +200,7 @@ describe('ParentFieldDiscovery', () => {
     const discovery = new ParentFieldDiscovery(schemaDiscovery, cache);
     const result = await discovery.getParentFieldKey('TEST', 'Story');
 
-    expect(result).toBe('customfield_b');
+    expect(result).toBe('customfield_b'); // Plugin match wins over name-only match
     expect(consoleSpy).toHaveBeenCalled();
 
     consoleSpy.mockRestore();
@@ -218,17 +221,17 @@ describe('ParentFieldDiscovery', () => {
     it('returns different parent fields for different issue types in same project', async () => {
       cache.get.mockResolvedValue(null);
       
-      // Mock Epic schema with customfield_10100
+      // Mock Epic schema with customfield_10100 (JPO parent link)
       schemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(
         createSchema('Epic', [
-          { key: 'customfield_10100', name: 'Parent Link' },
+          { key: 'customfield_10100', name: 'Parent Link', customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent' },
         ])
       );
 
-      // Mock Story schema with customfield_10014
+      // Mock Story schema with customfield_10014 (Epic Link)
       schemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(
         createSchema('Story', [
-          { key: 'customfield_10014', name: 'Epic Link' },
+          { key: 'customfield_10014', name: 'Epic Link', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' },
         ])
       );
 
@@ -247,7 +250,7 @@ describe('ParentFieldDiscovery', () => {
       
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('SuperEpic', [
-          { key: 'customfield_10102', name: 'Parent Link' },
+          { key: 'customfield_10102', name: 'Parent Link', customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent' },
         ])
       );
 
@@ -335,12 +338,74 @@ describe('ParentFieldDiscovery', () => {
     );
   });
 
+  describe('plugin-based detection', () => {
+    it('detects GreenHopper Epic Link by plugin ID', async () => {
+      cache.get.mockResolvedValue(null);
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('Story', [
+          { key: 'customfield_epic', name: 'My Custom Epic Field', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' },
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldKey('TEST', 'Story');
+
+      expect(result).toBe('customfield_epic');
+    });
+
+    it('detects JPO Parent Link by plugin ID', async () => {
+      cache.get.mockResolvedValue(null);
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('Epic', [
+          { key: 'customfield_parent', name: 'Custom Parent', customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent' },
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldKey('TEST', 'Epic');
+
+      expect(result).toBe('customfield_parent');
+    });
+
+    it('prioritizes plugin match over name pattern match', async () => {
+      cache.get.mockResolvedValue(null);
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('Story', [
+          { key: 'customfield_name', name: 'Parent' }, // Name pattern match
+          { key: 'customfield_plugin', name: 'Some Random Name', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' }, // Plugin match
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldKey('TEST', 'Story');
+
+      // Plugin match should win over name pattern match
+      expect(result).toBe('customfield_plugin');
+    });
+
+    it('falls back to name pattern when no plugin match', async () => {
+      cache.get.mockResolvedValue(null);
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('Story', [
+          { key: 'customfield_custom', name: 'Custom Parent Field' }, // Matches "parent" keyword
+          { key: 'customfield_other', name: 'Other Field', customPlugin: 'com.example.unrelated:custom-field' },
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldKey('TEST', 'Story');
+
+      // Should fall back to name pattern match
+      expect(result).toBe('customfield_custom');
+    });
+  });
+
   it('skips fields that do not match parent patterns', async () => {
     cache.get.mockResolvedValue(null);
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_unrelated', name: 'Sprint' }, // type: any but not parent-related
-        { key: 'customfield_parent', name: 'Parent Link' }, // Should match
+        { key: 'customfield_parent', name: 'Parent Link', customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent' }, // Should match via plugin
       ])
     );
 
@@ -355,8 +420,8 @@ describe('ParentFieldDiscovery', () => {
     cache.get.mockResolvedValue(null);
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
-        { key: 'customfield_z', name: 'ZZZ Parent Link' }, // Partial match, priority 6
-        { key: 'customfield_a', name: 'AAA Parent Link' }, // Partial match, priority 6
+        { key: 'customfield_z', name: 'ZZZ Parent Field' }, // Partial match on 'parent'
+        { key: 'customfield_a', name: 'AAA Parent Field' }, // Partial match on 'parent'
       ])
     );
 
@@ -384,5 +449,102 @@ describe('ParentFieldDiscovery', () => {
       3600
     );
   });
-});
 
+  describe('getParentFieldInfo', () => {
+    it('returns cached field info when available', async () => {
+      cache.get.mockResolvedValue(JSON.stringify({ key: 'customfield_123', name: 'Parent Link' }));
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldInfo('TEST', 'Story');
+
+      expect(result).toEqual({ key: 'customfield_123', name: 'Parent Link' });
+      expect(schemaDiscovery.getFieldsForIssueType).not.toHaveBeenCalled();
+      expect(cache.set).not.toHaveBeenCalled();
+    });
+
+    it('returns null when cached sentinel present', async () => {
+      cache.get.mockResolvedValue('null');
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldInfo('TEST', 'Story');
+
+      expect(result).toBeNull();
+      expect(schemaDiscovery.getFieldsForIssueType).not.toHaveBeenCalled();
+    });
+
+    it('discovers parent field info and caches result', async () => {
+      cache.get.mockResolvedValue(null);
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('Story', [
+          {
+            key: 'customfield_10014',
+            name: 'Parent Link',
+            customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent',
+          },
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldInfo('TEST', 'Story');
+
+      expect(result).toEqual({ key: 'customfield_10014', name: 'Parent Link' });
+      expect(cache.set).toHaveBeenCalledWith(
+        'hierarchy:TEST:Story:parent-field-info',
+        JSON.stringify({ key: 'customfield_10014', name: 'Parent Link' }),
+        3600
+      );
+    });
+
+    it('returns parent info with key and name "parent" for Sub-task', async () => {
+      cache.get.mockResolvedValue(null);
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldInfo('TEST', 'Sub-task');
+
+      expect(result).toEqual({ key: 'parent', name: 'parent' });
+      expect(schemaDiscovery.getFieldsForIssueType).not.toHaveBeenCalled();
+      expect(cache.set).toHaveBeenCalledWith(
+        'hierarchy:TEST:Sub-task:parent-field-info',
+        JSON.stringify({ key: 'parent', name: 'parent' }),
+        3600
+      );
+    });
+
+    it('returns null when no parent field found', async () => {
+      cache.get.mockResolvedValue(null);
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('SimpleTask', [
+          { key: 'summary', name: 'Summary', schemaType: 'string', type: 'string' },
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldInfo('TEST', 'SimpleTask');
+
+      expect(result).toBeNull();
+      expect(cache.set).toHaveBeenCalledWith(
+        'hierarchy:TEST:SimpleTask:parent-field-info',
+        'null',
+        3600
+      );
+    });
+
+    it('recovers from invalid cached JSON', async () => {
+      cache.get.mockResolvedValue('invalid json');
+      schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
+        createSchema('Story', [
+          {
+            key: 'customfield_10014',
+            name: 'Epic Link',
+            customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link',
+          },
+        ])
+      );
+
+      const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
+      const result = await discovery.getParentFieldInfo('TEST', 'Story');
+
+      expect(result).toEqual({ key: 'customfield_10014', name: 'Epic Link' });
+    });
+  });
+});

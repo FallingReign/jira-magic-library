@@ -44,6 +44,7 @@ export {
   isValidParent,
 } from './hierarchy/JPOHierarchyDiscovery.js';
 export { ParentFieldDiscovery } from './hierarchy/ParentFieldDiscovery.js';
+export type { ParentFieldInfo } from './hierarchy/ParentFieldDiscovery.js';
 
 // Parser API (E4-S01)
 export { parseInput } from './parsers/InputParser.js';

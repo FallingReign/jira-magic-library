@@ -16,6 +16,7 @@ import type { IssuesAPI } from './operations/IssueOperations.js';
 import { ConnectionError } from './errors/index.js';
 import type { JMLConfig } from './types/config.js';
 import { ParentFieldDiscovery } from './hierarchy/ParentFieldDiscovery.js';
+import type { ParentFieldInfo } from './hierarchy/ParentFieldDiscovery.js';
 import { JPOHierarchyDiscovery } from './hierarchy/JPOHierarchyDiscovery.js';
 import type { HierarchyLevel } from './types/hierarchy.js';
 import { ValidationService } from './validation/ValidationService.js';
@@ -68,6 +69,7 @@ export class JML {
   private readonly cache: RedisCache;
   private readonly schemaDiscovery: SchemaDiscovery;
   private readonly hierarchyDiscovery: JPOHierarchyDiscovery;
+  private readonly parentFieldDiscovery: ParentFieldDiscovery;
   private readonly validationService: ValidationService;
   private readonly config: JMLConfig;
 
@@ -105,7 +107,7 @@ export class JML {
 
     // Initialize hierarchy components (E3-S03, E3-S04, E3-S06)
     this.hierarchyDiscovery = new JPOHierarchyDiscovery(this.client, this.cache);
-    const parentFieldDiscovery = new ParentFieldDiscovery(
+    this.parentFieldDiscovery = new ParentFieldDiscovery(
       this.schemaDiscovery, 
       this.cache,
       undefined, // logger
@@ -115,7 +117,7 @@ export class JML {
     // Initialize field resolver with parent synonym support (E3-S06, AC9)
     const fieldResolver = new FieldResolver(
       this.schemaDiscovery,
-      parentFieldDiscovery,
+      this.parentFieldDiscovery,
       this.client,
       this.cache,
       this.hierarchyDiscovery,
@@ -252,6 +254,55 @@ export class JML {
    */
   async getHierarchy(options?: { refresh?: boolean }): Promise<HierarchyLevel[] | null> {
     return await this.hierarchyDiscovery.getHierarchy(options);
+  }
+
+  /**
+   * Discover the parent field for a specific project and issue type
+   * 
+   * Returns information about the parent field used for linking issues
+   * in a hierarchy. The library uses this to determine which field name
+   * users can use for parent references (e.g., "Parent Link", "Epic Link").
+   * 
+   * Detection priority:
+   * 1. Plugin-based detection (most reliable) - JPO or GreenHopper plugins
+   * 2. Name pattern matching - fields matching "parent" patterns
+   * 3. Returns null if no parent field found
+   * 
+   * Results are cached for 1 hour to minimize API calls.
+   * 
+   * @param projectKey - JIRA project key (e.g., "ENG")
+   * @param issueTypeName - Issue type name (e.g., "Story", "Epic")
+   * @returns Promise resolving to parent field info or null if not found
+   * 
+   * @example
+   * ```typescript
+   * // Discover parent field for Stories
+   * const parentField = await jml.getParentField('ENG', 'Story');
+   * if (parentField) {
+   *   console.log(`Parent field: ${parentField.name} (${parentField.key})`);
+   *   // "Parent field: Parent Link (customfield_10014)"
+   *   
+   *   // Now you know you can use this in issue creation:
+   *   await jml.issues.create({
+   *     Project: 'ENG',
+   *     'Issue Type': 'Story',
+   *     Summary: 'My Story',
+   *     [parentField.name]: 'EPIC-123',  // Use discovered field name
+   *     // OR
+   *     Parent: 'EPIC-123',               // "Parent" always works
+   *   });
+   * }
+   * 
+   * // Discover parent fields for all issue types
+   * const issueTypes = await jml.getIssueTypes('ENG');
+   * for (const type of issueTypes) {
+   *   const parent = await jml.getParentField('ENG', type.name);
+   *   console.log(`${type.name}: ${parent?.name ?? 'No parent field'}`);
+   * }
+   * ```
+   */
+  async getParentField(projectKey: string, issueTypeName: string): Promise<ParentFieldInfo | null> {
+    return await this.parentFieldDiscovery.getParentFieldInfo(projectKey, issueTypeName);
   }
 
   /**
