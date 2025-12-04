@@ -796,4 +796,185 @@ describe('RedisCache', () => {
       expect(cache.isAvailable).toBe(false);
     });
   });
+
+  describe('refreshOnce()', () => {
+    it('should execute refresh function and resolve', async () => {
+      // Arrange
+      let executed = false;
+      const refreshFn = async () => {
+        executed = true;
+      };
+
+      // Act
+      await cache.refreshOnce('test-key', refreshFn);
+
+      // Assert
+      expect(executed).toBe(true);
+    });
+
+    it('should deduplicate concurrent refresh calls for the same key', async () => {
+      // Arrange
+      let callCount = 0;
+      const refreshFn = async () => {
+        callCount++;
+        // Simulate slow API call
+        await new Promise(resolve => setTimeout(resolve, 50));
+      };
+
+      // Act - Call refreshOnce 5 times concurrently with same key
+      await Promise.all([
+        cache.refreshOnce('same-key', refreshFn),
+        cache.refreshOnce('same-key', refreshFn),
+        cache.refreshOnce('same-key', refreshFn),
+        cache.refreshOnce('same-key', refreshFn),
+        cache.refreshOnce('same-key', refreshFn),
+      ]);
+
+      // Assert - Should only execute once!
+      expect(callCount).toBe(1);
+    });
+
+    it('should allow separate refreshes for different keys', async () => {
+      // Arrange
+      const calls: string[] = [];
+      const createRefreshFn = (key: string) => async () => {
+        calls.push(key);
+        await new Promise(resolve => setTimeout(resolve, 10));
+      };
+
+      // Act - Different keys should all execute
+      await Promise.all([
+        cache.refreshOnce('key-1', createRefreshFn('key-1')),
+        cache.refreshOnce('key-2', createRefreshFn('key-2')),
+        cache.refreshOnce('key-3', createRefreshFn('key-3')),
+      ]);
+
+      // Assert - All three should execute
+      expect(calls).toHaveLength(3);
+      expect(calls).toContain('key-1');
+      expect(calls).toContain('key-2');
+      expect(calls).toContain('key-3');
+    });
+
+    it('should clean up after refresh completes', async () => {
+      // Arrange
+      const refreshFn = async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      };
+
+      // Act - First refresh
+      await cache.refreshOnce('cleanup-key', refreshFn);
+
+      // Assert - Not refreshing anymore
+      expect(cache.isRefreshing('cleanup-key')).toBe(false);
+
+      // Act - Can refresh again after completion
+      let secondCallExecuted = false;
+      await cache.refreshOnce('cleanup-key', async () => {
+        secondCallExecuted = true;
+      });
+
+      // Assert - Second call executed
+      expect(secondCallExecuted).toBe(true);
+    });
+
+    it('should clean up even if refresh fails', async () => {
+      // Arrange
+      const failingRefreshFn = async () => {
+        throw new Error('Refresh failed');
+      };
+
+      // Act & Assert - Should reject
+      await expect(cache.refreshOnce('fail-key', failingRefreshFn)).rejects.toThrow('Refresh failed');
+
+      // Assert - Not refreshing anymore (cleaned up)
+      expect(cache.isRefreshing('fail-key')).toBe(false);
+    });
+
+    it('should propagate errors to all waiting callers', async () => {
+      // Arrange
+      const failingRefreshFn = async () => {
+        await new Promise(resolve => setTimeout(resolve, 10));
+        throw new Error('Shared error');
+      };
+
+      // Act - Multiple concurrent calls should all get the same error
+      const results = await Promise.allSettled([
+        cache.refreshOnce('error-key', failingRefreshFn),
+        cache.refreshOnce('error-key', failingRefreshFn),
+        cache.refreshOnce('error-key', failingRefreshFn),
+      ]);
+
+      // Assert - All should reject with same error
+      expect(results.every(r => r.status === 'rejected')).toBe(true);
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          expect(result.reason.message).toBe('Shared error');
+        }
+      }
+    });
+
+    it('should report isRefreshing correctly during refresh', async () => {
+      // Arrange
+      let resolveRefresh: () => void;
+      const refreshFn = async () => {
+        await new Promise<void>(resolve => {
+          resolveRefresh = resolve;
+        });
+      };
+
+      // Act - Start refresh (don't await)
+      const refreshPromise = cache.refreshOnce('progress-key', refreshFn);
+
+      // Assert - Should be refreshing
+      expect(cache.isRefreshing('progress-key')).toBe(true);
+
+      // Complete the refresh
+      resolveRefresh!();
+      await refreshPromise;
+
+      // Assert - No longer refreshing
+      expect(cache.isRefreshing('progress-key')).toBe(false);
+    });
+
+    it('should log refresh start and completion', async () => {
+      // Arrange
+      const refreshFn = async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+      };
+
+      // Act
+      await cache.refreshOnce('log-key', refreshFn);
+
+      // Assert - Should log start and completion
+      expect(consoleLogSpy).toHaveBeenCalledWith('[CACHE] Starting refresh for: log-key');
+      expect(consoleLogSpy).toHaveBeenCalledWith('[CACHE] Refresh complete for: log-key');
+    });
+
+    it('should log when joining existing refresh', async () => {
+      // Arrange
+      let resolveRefresh: () => void;
+      const refreshFn = async () => {
+        await new Promise<void>(resolve => {
+          resolveRefresh = resolve;
+        });
+      };
+
+      // Act - Start first refresh
+      const firstPromise = cache.refreshOnce('join-key', refreshFn);
+
+      // Second call should join existing
+      const secondPromise = cache.refreshOnce('join-key', async () => {
+        // This should NOT execute
+      });
+
+      // Assert - Should log that it's joining existing
+      expect(consoleLogSpy).toHaveBeenCalledWith('[CACHE] Refresh already in progress for: join-key');
+
+      // Complete
+      resolveRefresh!();
+      await Promise.all([firstPromise, secondPromise]);
+    });
+  });
 });
+

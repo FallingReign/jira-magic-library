@@ -27,6 +27,19 @@ export interface LookupCacheResult {
 export interface LookupCache {
   getLookup(projectKey: string, fieldType: string, issueType?: string): Promise<LookupCacheResult>;
   setLookup(projectKey: string, fieldType: string, data: unknown[], issueType?: string): Promise<void>;
+  
+  /**
+   * Execute a refresh function with deduplication
+   * 
+   * If a refresh is already in progress for this key, returns the existing
+   * promise instead of starting a new one. This prevents duplicate API calls
+   * when multiple stale cache hits occur for the same data.
+   * 
+   * @param key Unique key identifying this refresh operation
+   * @param refreshFn Async function that fetches fresh data and updates cache
+   * @returns Promise that resolves when refresh is complete
+   */
+  refreshOnce(key: string, refreshFn: () => Promise<void>): Promise<void>;
 }
 
 /**

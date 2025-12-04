@@ -184,11 +184,14 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     console.log(`📦 [UserCache] MISS - Fetching user directory from API...`);
   }
 
-  // If stale, trigger background refresh (fire-and-forget)
+  // If stale, trigger background refresh (fire-and-forget with deduplication)
   if (cacheStatus === 'stale' && context.client && context.cache) {
+    const refreshKey = `user:${context.projectKey}`;
     const refreshStart = Date.now();
-    // Background refresh - don't await
-    fetchAllUsers(context).then(async (freshUsers) => {
+    // Background refresh with deduplication - don't await
+    // refreshOnce ensures only one API call even if multiple stale hits occur
+    context.cache.refreshOnce(refreshKey, async () => {
+      const freshUsers = await fetchAllUsers(context);
       if (freshUsers && freshUsers.length > 0 && context.cache) {
         await context.cache.setLookup(context.projectKey, 'user', freshUsers);
         const elapsed = Date.now() - refreshStart;

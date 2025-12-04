@@ -112,6 +112,13 @@ export class RedisCache implements CacheClient, LookupCache {
   private readonly keyPrefix = 'jml:';
   private isAvailable = false;
   private readonly logger: Logger;
+  
+  /**
+   * Tracks in-flight refresh operations to prevent duplicate API calls.
+   * When multiple stale cache hits occur for the same key, only one
+   * refresh is triggered - others wait for the same promise.
+   */
+  private refreshInFlight = new Map<string, Promise<void>>();
 
   /**
    * Creates a new Redis cache instance
@@ -509,5 +516,62 @@ export class RedisCache implements CacheClient, LookupCache {
       parts.push(issueType);
     }
     return parts.join(':');
+  }
+
+  /**
+   * Execute a refresh function with deduplication.
+   * 
+   * If a refresh is already in progress for this key, returns the existing
+   * promise instead of starting a new one. This prevents duplicate API calls
+   * when multiple stale cache hits occur for the same data.
+   * 
+   * @param key Unique key identifying this refresh operation (e.g., cache key)
+   * @param refreshFn Async function that fetches fresh data and updates cache
+   * @returns Promise that resolves when refresh is complete
+   * 
+   * @example
+   * // Multiple concurrent calls to this will only trigger ONE API call
+   * await cache.refreshOnce('lookup:TEST:users', async () => {
+   *   const users = await fetchUsersFromJira();
+   *   await cache.setLookup('TEST', 'users', users);
+   * });
+   */
+  async refreshOnce(key: string, refreshFn: () => Promise<void>): Promise<void> {
+    // Check if refresh already in progress for this key
+    const existing = this.refreshInFlight.get(key);
+    if (existing) {
+      this.logger.log(`[CACHE] Refresh already in progress for: ${key}`);
+      return existing;
+    }
+
+    // Start new refresh and track it
+    this.logger.log(`[CACHE] Starting refresh for: ${key}`);
+    const refreshPromise = refreshFn()
+      .then(() => {
+        this.logger.log(`[CACHE] Refresh complete for: ${key}`);
+      })
+      .catch((err) => {
+        this.logger.warn(`[CACHE] Refresh failed for: ${key}`, err);
+        throw err; // Re-throw so callers can handle
+      })
+      .finally(() => {
+        // Clean up to prevent memory leaks
+        this.refreshInFlight.delete(key);
+      });
+
+    this.refreshInFlight.set(key, refreshPromise);
+    return refreshPromise;
+  }
+
+  /**
+   * Check if a refresh is currently in progress for a key
+   * 
+   * Useful for testing and debugging.
+   * 
+   * @param key The refresh key to check
+   * @returns True if refresh is in progress
+   */
+  isRefreshing(key: string): boolean {
+    return this.refreshInFlight.has(key);
   }
 }

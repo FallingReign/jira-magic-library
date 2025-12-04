@@ -120,16 +120,21 @@ export class SchemaDiscovery {
   }
 
   /**
-   * Refresh schema in background (fire-and-forget)
+   * Refresh schema in background (fire-and-forget with deduplication)
    * Used by stale-while-revalidate pattern
+   * 
+   * Uses cache.refreshOnce to ensure only one API call even if
+   * multiple stale cache hits occur concurrently.
    */
   private refreshSchemaInBackground(
     projectKey: string,
     issueTypeName: string,
     cacheKey: string
   ): void {
-    // Fire and forget - don't await, don't block caller
-    this.fetchAndCacheSchema(projectKey, issueTypeName, cacheKey).catch(err => {
+    // Fire and forget with deduplication - don't await, don't block caller
+    this.cache.refreshOnce(cacheKey, async () => {
+      await this.fetchAndCacheSchema(projectKey, issueTypeName, cacheKey);
+    }).catch(err => {
       console.warn(`Background schema refresh failed for ${projectKey}/${issueTypeName}:`, err);
     });
   }

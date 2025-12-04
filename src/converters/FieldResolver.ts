@@ -395,11 +395,18 @@ export class FieldResolver {
   }
 
   /**
-   * Refresh projects list in background (fire-and-forget)
+   * Refresh projects list in background (fire-and-forget with deduplication)
    * Used by stale-while-revalidate pattern
+   * 
+   * Uses cache.refreshOnce to ensure only one API call even if
+   * multiple stale cache hits occur concurrently.
    */
   private refreshProjectsInBackground(cacheKey: string): void {
-    this.fetchAndCacheProjects(cacheKey).catch(() => {
+    if (!this.cache) return;
+    
+    this.cache.refreshOnce(cacheKey, async () => {
+      await this.fetchAndCacheProjects(cacheKey);
+    }).catch(() => {
       // Silently ignore background refresh errors
     });
   }
