@@ -89,11 +89,13 @@ export const convertComponentType: FieldConverter = async (value, fieldSchema, c
   // Cache key: lookup:{projectKey}:component (no issueType)
   if (context.cache) {
     try {
-      components = await context.cache.getLookup(
+      const result = await context.cache.getLookup(
         context.projectKey,
         'component',
         undefined  // Components are project-level, not issue-type specific
-      ) as LookupValue[] | null;
+      );
+      components = result.value as LookupValue[] | null;
+      // Note: We don't do background refresh here - fallback to allowedValues is fine
     } catch {
       // Cache error - fall back to allowedValues
       components = null;

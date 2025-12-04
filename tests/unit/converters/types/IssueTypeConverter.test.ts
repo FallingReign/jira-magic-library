@@ -127,7 +127,7 @@ describe('IssueTypeConverter', () => {
     };
 
     // Default: cache miss, API returns issue types
-    mockCache.get.mockResolvedValue(null);
+    mockCache.get.mockResolvedValue({ value: null, isStale: false });
     mockClient.get.mockImplementation((url: string) => {
       if (url.includes('/issuetypes')) {
         return Promise.resolve({ values: mockIssueTypes });
@@ -543,7 +543,7 @@ describe('IssueTypeConverter', () => {
         subtask: false,
       });
 
-      mockCache.get.mockResolvedValueOnce(cached);
+      mockCache.get.mockResolvedValueOnce({ value: cached, isStale: false });
 
       const result = await convertIssueTypeType('Bug', fieldSchema, context);
 
@@ -724,7 +724,7 @@ describe('IssueTypeConverter', () => {
   describe('Edge Cases: JPO Hierarchy Graceful Degradation', () => {
     it('should gracefully degrade when JPO hierarchy returns null', async () => {
       // Cache miss first
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
       
       // Mock fetchAllIssueTypes to return issue types (correct format: values array)
       mockClient.get.mockResolvedValueOnce({
@@ -782,7 +782,7 @@ describe('IssueTypeConverter', () => {
   describe('Edge Cases: Cache Error Handling', () => {
     it('should handle cache.set errors silently', async () => {
       // Cache miss first
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
       
       // Make cache.set throw an error
       mockCache.set.mockRejectedValueOnce(new Error('Redis connection failed'));
@@ -802,7 +802,7 @@ describe('IssueTypeConverter', () => {
   describe('Edge Cases: Network Errors During Fetch', () => {
     it('should wrap non-NotFoundError errors in NotFoundError', async () => {
       // Ensure cache returns nothing
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
       
       // Simulate a network error (not a 404)
       mockClient.get.mockRejectedValueOnce(new Error('Network timeout'));
@@ -814,7 +814,7 @@ describe('IssueTypeConverter', () => {
 
     it('should include project key in error message when wrapping fetch errors', async () => {
       // Ensure cache returns nothing
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
       
       // Simulate a different network error
       mockClient.get.mockRejectedValueOnce(new Error('Connection refused'));
@@ -825,7 +825,7 @@ describe('IssueTypeConverter', () => {
     });
 
     it('should wrap unexpected API errors with detailed message', async () => {
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
       mockClient.get.mockImplementationOnce((url: string) => {
         if (url.includes('/issuetypes')) {
           return Promise.reject(new Error('Boom'));

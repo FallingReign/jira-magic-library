@@ -54,7 +54,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('returns cached field key when available', async () => {
-    cache.get.mockResolvedValue('customfield_123');
+    cache.get.mockResolvedValue({ value: 'customfield_123', isStale: false });
 
     const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
     const result = await discovery.getParentFieldKey('TEST', 'Story');
@@ -65,7 +65,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('returns null when cached sentinel present', async () => {
-    cache.get.mockResolvedValue('null');
+    cache.get.mockResolvedValue({ value: 'null', isStale: false });
 
     const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
     const result = await discovery.getParentFieldKey('TEST', 'Story');
@@ -76,7 +76,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('discovers parent field and caches result', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_10014', name: 'Epic Link', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' },
@@ -96,7 +96,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('logs and returns null when no candidates found', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'summary', name: 'Summary', schemaType: 'string', type: 'string' },
@@ -116,7 +116,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('selects highest priority candidate when multiple matches', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_10015', name: 'Parent Issue' },
@@ -134,7 +134,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('returns null when issue type not found', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockRejectedValue(
       new NotFoundError('Issue type not found')
     );
@@ -151,7 +151,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('returns null when issue type exists but has no parent field', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('SimpleTask', [
         { key: 'summary', name: 'Summary', schemaType: 'string', type: 'string' },
@@ -172,7 +172,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('prefers exact matches over partial matches', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Task', [
         { key: 'customfield_exact', name: 'Parent' },
@@ -187,7 +187,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('uses default logger when none provided', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_a', name: 'Parent Issue' },
@@ -207,7 +207,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('rethrows unknown errors from schema discovery', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     const unknownError = new Error('Database connection failed');
     schemaDiscovery.getFieldsForIssueType.mockRejectedValue(unknownError);
 
@@ -219,7 +219,7 @@ describe('ParentFieldDiscovery', () => {
   // AC3: Different issue types return different parent fields
   describe('AC3: Hierarchy-Aware Parent Field Resolution', () => {
     it('returns different parent fields for different issue types in same project', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       
       // Mock Epic schema with customfield_10100 (JPO parent link)
       schemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(
@@ -246,7 +246,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('caches parent fields separately per issue type', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('SuperEpic', [
@@ -264,7 +264,7 @@ describe('ParentFieldDiscovery', () => {
       schemaDiscovery.getFieldsForIssueType.mockClear();
       
       // Second call - should use cache
-      cache.get.mockResolvedValue('customfield_10102'); // Return cached value
+      cache.get.mockResolvedValue({ value: 'customfield_10102', isStale: false }); // Return cached value
       
       const result2 = await discovery.getParentFieldKey('PROJ', 'SuperEpic');
 
@@ -282,7 +282,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('caches null results per issue type', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('SimpleTask', [
@@ -300,7 +300,7 @@ describe('ParentFieldDiscovery', () => {
       schemaDiscovery.getFieldsForIssueType.mockClear();
       
       // Second call - should use cached null
-      cache.get.mockResolvedValue('null'); // Return cached null sentinel
+      cache.get.mockResolvedValue({ value: 'null', isStale: false }); // Return cached null sentinel
       
       const result2 = await discovery.getParentFieldKey('PROJ', 'SimpleTask');
 
@@ -319,7 +319,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('cache TTL is 1 hour (3600 seconds)', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Task', [
@@ -340,7 +340,7 @@ describe('ParentFieldDiscovery', () => {
 
   describe('plugin-based detection', () => {
     it('detects GreenHopper Epic Link by plugin ID', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('Story', [
           { key: 'customfield_epic', name: 'My Custom Epic Field', customPlugin: 'com.pyxis.greenhopper.jira:gh-epic-link' },
@@ -354,7 +354,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('detects JPO Parent Link by plugin ID', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('Epic', [
           { key: 'customfield_parent', name: 'Custom Parent', customPlugin: 'com.atlassian.jpo:jpo-custom-field-parent' },
@@ -368,7 +368,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('prioritizes plugin match over name pattern match', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('Story', [
           { key: 'customfield_name', name: 'Parent' }, // Name pattern match
@@ -384,7 +384,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('falls back to name pattern when no plugin match', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('Story', [
           { key: 'customfield_custom', name: 'Custom Parent Field' }, // Matches "parent" keyword
@@ -401,7 +401,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('skips fields that do not match parent patterns', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_unrelated', name: 'Sprint' }, // type: any but not parent-related
@@ -417,7 +417,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('uses field name as tie-breaker when priorities are equal', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
     schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
       createSchema('Story', [
         { key: 'customfield_z', name: 'ZZZ Parent Field' }, // Partial match on 'parent'
@@ -433,7 +433,7 @@ describe('ParentFieldDiscovery', () => {
   });
 
   it('returns "parent" for Sub-task issue types without querying schema', async () => {
-    cache.get.mockResolvedValue(null);
+    cache.get.mockResolvedValue({ value: null, isStale: false });
 
     const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
     const result = await discovery.getParentFieldKey('TEST', 'Sub-task');
@@ -452,7 +452,7 @@ describe('ParentFieldDiscovery', () => {
 
   describe('getParentFieldInfo', () => {
     it('returns cached field info when available', async () => {
-      cache.get.mockResolvedValue(JSON.stringify({ key: 'customfield_123', name: 'Parent Link' }));
+      cache.get.mockResolvedValue({ value: JSON.stringify({ key: 'customfield_123', name: 'Parent Link' }), isStale: false });
 
       const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
       const result = await discovery.getParentFieldInfo('TEST', 'Story');
@@ -463,7 +463,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('returns null when cached sentinel present', async () => {
-      cache.get.mockResolvedValue('null');
+      cache.get.mockResolvedValue({ value: 'null', isStale: false });
 
       const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
       const result = await discovery.getParentFieldInfo('TEST', 'Story');
@@ -473,7 +473,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('discovers parent field info and caches result', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('Story', [
           {
@@ -496,7 +496,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('returns parent info with key and name "parent" for Sub-task', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
 
       const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
       const result = await discovery.getParentFieldInfo('TEST', 'Sub-task');
@@ -512,7 +512,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('returns null when no parent field found', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('SimpleTask', [
           { key: 'summary', name: 'Summary', schemaType: 'string', type: 'string' },
@@ -531,7 +531,7 @@ describe('ParentFieldDiscovery', () => {
     });
 
     it('recovers from invalid cached JSON', async () => {
-      cache.get.mockResolvedValue('invalid json');
+      cache.get.mockResolvedValue({ value: 'invalid json', isStale: false });
       schemaDiscovery.getFieldsForIssueType.mockResolvedValue(
         createSchema('Story', [
           {

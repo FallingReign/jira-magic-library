@@ -2,10 +2,10 @@ import { JiraClient } from '../client/JiraClient.js';
 import { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
 import { FieldResolver } from '../converters/FieldResolver.js';
 import { ConverterRegistry } from '../converters/ConverterRegistry.js';
-import { Issue, CreateIssueOptions } from '../types/index.js';
+import { Issue } from '../types/index.js';
 import { BulkResult, BulkManifest } from '../types/bulk.js';
 import { LookupCache, GenericCache } from '../types/converter.js';
-import type { JMLConfig } from '../types/config.js';
+import type { JMLConfig, AmbiguityPolicyConfig, FuzzyMatchConfig } from '../types/config.js';
 import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
 import { ManifestStorage } from './ManifestStorage.js';
 import { JiraBulkApiWrapper } from './JiraBulkApiWrapper.js';
@@ -39,6 +39,18 @@ export interface IssuesCreateOptions {
    * are retried and merged into the original manifest.
    */
   retry?: string;
+  /**
+   * Per-call ambiguity policy override.
+   * Merges with instance-level config, with per-call taking precedence.
+   * @example { user: 'error' }
+   */
+  ambiguityPolicy?: AmbiguityPolicyConfig;
+  /**
+   * Per-call fuzzy matching override.
+   * Merges with instance-level config, with per-call taking precedence.
+   * @example { user: { enabled: true, threshold: 0.3 } }
+   */
+  fuzzyMatch?: FuzzyMatchConfig;
 }
 
 /**
@@ -91,6 +103,34 @@ export class IssueOperations implements IssuesAPI {
       this.manifestStorage = new ManifestStorage(cache as unknown as RedisCache);
       this.bulkApiWrapper = new JiraBulkApiWrapper(client);
     }
+  }
+
+  /**
+   * Merge per-call config overrides with instance config
+   * 
+   * Per-call options take precedence over instance config.
+   * Nested objects (ambiguityPolicy, fuzzyMatch) are merged shallowly.
+   * 
+   * @param options - Per-call options with optional config overrides
+   * @returns Merged config for converter context
+   * @private
+   */
+  private mergeConfig(options?: IssuesCreateOptions): JMLConfig | undefined {
+    if (!options?.ambiguityPolicy && !options?.fuzzyMatch) {
+      return this.config; // No overrides, use instance config as-is
+    }
+
+    return {
+      ...this.config,
+      // Shallow merge ambiguityPolicy (per-call takes precedence)
+      ambiguityPolicy: options.ambiguityPolicy 
+        ? { ...this.config?.ambiguityPolicy, ...options.ambiguityPolicy }
+        : this.config?.ambiguityPolicy,
+      // Shallow merge fuzzyMatch (per-call takes precedence)  
+      fuzzyMatch: options.fuzzyMatch
+        ? { ...this.config?.fuzzyMatch, ...options.fuzzyMatch }
+        : this.config?.fuzzyMatch,
+    } as JMLConfig;
   }
 
   /**
@@ -467,7 +507,7 @@ export class IssueOperations implements IssuesAPI {
    * to support the unified create() API in E4-S04.
    * 
    * @param input - Issue data with human-readable field names
-   * @param options - Optional settings (validate for dry-run mode)
+   * @param options - Optional settings (validate for dry-run mode, per-call config overrides)
    * @returns Created issue with key, id, and self URL
    * 
    * @throws {Error} If Project or Issue Type is missing
@@ -477,11 +517,14 @@ export class IssueOperations implements IssuesAPI {
    */
   private async createSingle(
     input: Record<string, unknown>,
-    options?: CreateIssueOptions
+    options?: IssuesCreateOptions
   ): Promise<Issue> {
     // Strip library-internal fields that shouldn't go to JIRA
     // uid is used for hierarchy tracking in bulk operations
     const { uid: _uid, ...cleanInput } = input;
+    
+    // Merge per-call config overrides with instance config
+    const mergedConfig = this.mergeConfig(options);
     
     // S4: Defer project/issueType extraction to FieldResolver
     // This handles all formats: string, object with key/id, object with name
@@ -504,7 +547,7 @@ export class IssueOperations implements IssuesAPI {
         cache: this.cache,
         cacheClient: this.cache as unknown as GenericCache, // RedisCache implements both LookupCache and GenericCache
         client: this.client,
-        config: this.config // Pass config for converter customization (AC8, AC9)
+        config: mergedConfig // Pass merged config for converter customization (AC8, AC9, per-call overrides)
       }
     );
 

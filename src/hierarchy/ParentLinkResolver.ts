@@ -136,9 +136,9 @@ async function resolveBySummary(
   // Check cache first
   const cacheKey = `parent-link:${projectKey}:${normalizedSummary}`;
   try {
-    const cached = await cache.get(cacheKey);
-    if (cached) {
-      return cached;
+    const result = await cache.get(cacheKey);
+    if (result.value) {
+      return result.value;
     }
   } catch {
     // Cache error - continue to API

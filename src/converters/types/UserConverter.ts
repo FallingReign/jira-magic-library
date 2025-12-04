@@ -1,6 +1,6 @@
 /**
  * User Type Converter
- * Story: E2-S08, BACKLOG-S1 (ambiguity policy)
+ * Story: E2-S08, BACKLOG-S1 (ambiguity policy), BACKLOG-S2 (fuzzy matching)
  *
  * Converts user values for fields with type: "user"
  *
@@ -19,12 +19,15 @@
  * - Email lookup via JIRA API
  * - Display name lookup via JIRA API
  * - Policy-driven ambiguity handling (first/error/score)
+ * - Fuzzy matching for typo tolerance (BACKLOG-S2)
  * - Server vs Cloud format auto-detection
- * - Lookup caching (reduces API calls)
+ * - Full user directory caching (reduces API calls for bulk operations)
+ * - Stale-while-revalidate cache pattern
  * - Graceful cache degradation
  */
 
-import type { FieldConverter } from '../../types/converter.js';
+import Fuse from 'fuse.js';
+import type { FieldConverter, ConversionContext } from '../../types/converter.js';
 import { ValidationError } from '../../errors/ValidationError.js';
 import { AmbiguityError } from '../../errors/AmbiguityError.js';
 import type { AmbiguityPolicy, JMLConfig } from '../../types/config.js';
@@ -38,12 +41,13 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const USER_AMBIGUITY_POLICIES: AmbiguityPolicy[] = ['first', 'error', 'score'];
 
-type MatchReason = 'email-exact' | 'username-exact' | 'username-prefix' | 'display-partial';
+type MatchReason = 'email-exact' | 'username-exact' | 'username-prefix' | 'display-partial' | 'fuzzy-match';
 
 const MATCH_CONFIDENCE: Record<MatchReason, number> = {
   'email-exact': 1,
   'username-exact': 0.95,
   'username-prefix': 0.7,
+  'fuzzy-match': 0.5,
   'display-partial': 0.4,
 };
 
@@ -62,6 +66,53 @@ interface UserMatch {
   user: JiraUser;
   reason: MatchReason;
   confidence: number;
+}
+
+/**
+ * Fetch all users from JIRA with pagination (Server/DC only)
+ * 
+ * Uses the "." wildcard which matches all users in JIRA Server/DC.
+ * Paginates through results since API caps at 1000 per request.
+ * 
+ * Note: This approach is Server/DC specific. Cloud would need
+ * a different strategy (e.g., /rest/api/3/users/search).
+ * 
+ * @param context - Converter context with client
+ * @returns Array of all users
+ */
+async function fetchAllUsers(context: ConversionContext): Promise<JiraUser[]> {
+  if (!context.client) {
+    return [];
+  }
+
+  const allUsers: JiraUser[] = [];
+  let startAt = 0;
+  const maxResults = 1000; // API max per request
+
+  while (true) {
+    // Use "." as wildcard - matches all users in JIRA Server/DC
+    const batch = (await context.client.get('/rest/api/2/user/search', {
+      username: '.',
+      startAt,
+      maxResults,
+    })) as JiraUser[];
+
+    if (!batch || batch.length === 0) {
+      break;
+    }
+
+    allUsers.push(...batch);
+
+    // Increment by actual results returned, not maxResults
+    startAt += batch.length;
+
+    // If we got fewer than requested, we've reached the end
+    if (batch.length < maxResults) {
+      break;
+    }
+  }
+
+  return allUsers;
 }
 
 export const convertUserType: FieldConverter = async (value, fieldSchema, context) => {
@@ -97,53 +148,72 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     );
   }
 
-  // Determine if it's an email or display name
+  // Determine if it looks like an email (for matching strategy)
+  // We no longer reject "invalid" emails - fuzzy matching can handle partial emails
   const isEmail = EMAIL_REGEX.test(searchTerm);
 
-  // Validate email format if it looks like an email
-  if (!isEmail && searchTerm.includes('@')) {
-    throw new ValidationError(
-      `Invalid email format for field "${fieldSchema.name}": "${searchTerm}"`,
-      { field: fieldSchema.id, value }
-    );
-  }
-
-  // Get user list from cache or API
+  // Get full user directory from cache or API
+  // We cache ALL users and filter locally for faster bulk operations
   let users: JiraUser[] | null = null;
+  let cacheStatus: 'hit' | 'stale' | 'miss' = 'miss';
 
-  // Try cache first
+  // Try cache first (using project-scoped key, no issueType needed for users)
   if (context.cache) {
     try {
-      users = await context.cache.getLookup(
-        context.projectKey,
-        'user',
-        context.issueType
-      ) as JiraUser[] | null;
+      const result = await context.cache.getLookup(context.projectKey, 'user');
+      if (result.value) {
+        users = result.value as JiraUser[];
+        cacheStatus = result.isStale ? 'stale' : 'hit';
+      }
     } catch {
       // Cache error - fall back to API
       users = null;
+      cacheStatus = 'miss';
     }
   }
 
-  // Fall back to API query
-  if (!users && context.client) {
-    // Query JIRA user search API
-    // Server: GET /rest/api/2/user/search?username={query}
-    // Returns array of users
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    users = (await context.client.get('/rest/api/2/user/search', {
-      username: searchTerm,
-    })) as JiraUser[];
+  // Log cache status
+  if (cacheStatus === 'hit') {
+    // eslint-disable-next-line no-console
+    console.log(`📦 [UserCache] HIT - Using cached user directory (${users?.length || 0} users)`);
+  } else if (cacheStatus === 'stale') {
+    // eslint-disable-next-line no-console
+    console.log(`📦 [UserCache] STALE - Using stale data, refreshing in background...`);
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(`📦 [UserCache] MISS - Fetching user directory from API...`);
+  }
 
-    // Cache for future use
+  // If stale, trigger background refresh (fire-and-forget)
+  if (cacheStatus === 'stale' && context.client && context.cache) {
+    const refreshStart = Date.now();
+    // Background refresh - don't await
+    fetchAllUsers(context).then(async (freshUsers) => {
+      if (freshUsers && freshUsers.length > 0 && context.cache) {
+        await context.cache.setLookup(context.projectKey, 'user', freshUsers);
+        const elapsed = Date.now() - refreshStart;
+        // eslint-disable-next-line no-console
+        console.log(`📦 [UserCache] REFRESHED - Cached ${freshUsers.length} users in ${elapsed}ms`);
+      }
+    }).catch(() => {
+      // Ignore background refresh errors
+    });
+  }
+
+  // Fall back to API - fetch ALL users (paginated) if cache miss
+  if (!users && context.client) {
+    const fetchStart = Date.now();
+    users = await fetchAllUsers(context);
+    const elapsed = Date.now() - fetchStart;
+    // eslint-disable-next-line no-console
+    console.log(`📦 [UserCache] FETCHED - Got ${users?.length || 0} users from API in ${elapsed}ms`);
+
+    // Cache the full user list for future lookups
     if (context.cache && users && users.length > 0) {
       try {
-        await context.cache.setLookup(
-          context.projectKey,
-          'user',
-          users,
-          context.issueType
-        );
+        await context.cache.setLookup(context.projectKey, 'user', users);
+        // eslint-disable-next-line no-console
+        console.log(`📦 [UserCache] CACHED - Stored ${users.length} users`);
       } catch {
         // Ignore cache write errors
       }
@@ -235,6 +305,27 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     }
   }
 
+  // BACKLOG-S2: Fuzzy matching for typo tolerance
+  // Only attempt if no exact matches found and fuzzy is enabled
+  if (matchedUsers.length === 0) {
+    const fuzzyConfig = (context.config as Partial<JMLConfig>)?.fuzzyMatch?.user;
+    const fuzzyEnabled = fuzzyConfig?.enabled !== false; // default: true
+
+    if (fuzzyEnabled) {
+      const threshold = fuzzyConfig?.threshold ?? 0.3;
+      const fuzzyMatches = performFuzzyUserMatch(activeUsers, searchTerm, threshold);
+      
+      fuzzyMatches.forEach((match) => {
+        addMatch(match.user, 'fuzzy-match');
+      });
+
+      if (debug && fuzzyMatches.length > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`   🔍 Fuzzy matched ${fuzzyMatches.length} user(s) for typo "${searchTerm}"`);
+      }
+    }
+  }
+
   if (debug && matchedUsers.length > 0) {
     // eslint-disable-next-line no-console
     console.log(`   ✓ Matched ${matchedUsers.length} user(s)`);
@@ -278,7 +369,7 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     if (policy === 'error') {
       throwAmbiguityError(searchTerm, fieldSchema, matchedUsers);
     } else if (policy === 'score') {
-      selectedUserMatch = selectBestUserMatch(matchedUsers);
+      selectedUserMatch = selectBestUserMatch(matchedUsers, searchTerm, fieldSchema);
     }
     // policy === 'first' already uses first result (JIRA order)
   }
@@ -296,22 +387,92 @@ function resolveUserAmbiguityPolicy(policy: unknown): AmbiguityPolicy {
   return 'first';
 }
 
-function selectBestUserMatch(matches: UserMatch[]): UserMatch {
-  const sorted = [...matches].sort((a, b) => {
-    if (b.confidence !== a.confidence) {
-      return b.confidence - a.confidence;
+/**
+ * Compute combined similarity score using Fuse.js across all user fields.
+ * Scores each field independently and returns the sum of all scores.
+ * This ensures that a user who matches on multiple fields (e.g., email AND displayName)
+ * scores better than one who only matches on one field.
+ * 
+ * Returns combined score where lower is better (consistent with Fuse.js scoring).
+ */
+function computeSecondarySimilarity(user: JiraUser, searchTerm: string): number {
+  const fields = ['name', 'displayName', 'emailAddress'] as const;
+  let totalScore = 0;
+
+  for (const field of fields) {
+    const value = user[field];
+    if (!value) {
+      // Missing field gets worst score (1.0)
+      totalScore += 1;
+      continue;
     }
-    const displayCompare = compareStrings(a.user.displayName, b.user.displayName);
+
+    const fuse = new Fuse([{ value }], {
+      keys: ['value'],
+      threshold: 1.0, // Allow all matches, we just want the score
+      ignoreLocation: true,
+      includeScore: true,
+      useExtendedSearch: false,
+      isCaseSensitive: false,
+    });
+
+    const results = fuse.search(searchTerm);
+    // Add field score (0 = perfect, 1 = no match)
+    totalScore += results[0]?.score ?? 1;
+  }
+
+  // Return combined score (0-3 range, lower is better)
+  return totalScore;
+}
+
+function selectBestUserMatch(
+  matches: UserMatch[],
+  searchTerm: string,
+  fieldSchema: { name: string; id: string }
+): UserMatch {
+  // First, compute secondary similarity scores for all candidates
+  const withSecondary = matches.map((match) => ({
+    match,
+    secondaryScore: computeSecondarySimilarity(match.user, searchTerm),
+  }));
+
+  const sorted = withSecondary.sort((a, b) => {
+    // Primary: confidence (higher is better)
+    if (b.match.confidence !== a.match.confidence) {
+      return b.match.confidence - a.match.confidence;
+    }
+    // Secondary: fuse.js similarity to search term (lower is better)
+    if (a.secondaryScore !== b.secondaryScore) {
+      return a.secondaryScore - b.secondaryScore;
+    }
+    // Tertiary: alphabetical tie-breakers for determinism
+    const displayCompare = compareStrings(a.match.user.displayName, b.match.user.displayName);
     if (displayCompare !== 0) {
       return displayCompare;
     }
-    const emailCompare = compareStrings(a.user.emailAddress, b.user.emailAddress);
+    const emailCompare = compareStrings(a.match.user.emailAddress, b.match.user.emailAddress);
     if (emailCompare !== 0) {
       return emailCompare;
     }
-    return compareStrings(a.user.name, b.user.name);
+    return compareStrings(a.match.user.name, b.match.user.name);
   });
-  return sorted[0]!;
+
+  // Check if top 2 candidates are still tied after all criteria
+  if (sorted.length >= 2) {
+    const first = sorted[0]!;
+    const second = sorted[1]!;
+
+    const stillTied =
+      first.match.confidence === second.match.confidence &&
+      first.secondaryScore === second.secondaryScore;
+
+    if (stillTied) {
+      // Even after secondary scoring, they're identical - throw ambiguity error
+      throwTiedScoreError(searchTerm, fieldSchema, matches, first.secondaryScore);
+    }
+  }
+
+  return sorted[0]!.match;
 }
 
 function compareStrings(a?: string, b?: string): number {
@@ -326,21 +487,72 @@ function throwAmbiguityError(
   fieldSchema: { name: string; id: string },
   candidates: UserMatch[]
 ): never {
+  // Compute combined scores for display
+  const withScores = candidates.map((match) => ({
+    match,
+    combinedScore: computeSecondarySimilarity(match.user, searchTerm),
+  })).sort((a, b) => {
+    // Sort by confidence first, then by combined score
+    if (b.match.confidence !== a.match.confidence) {
+      return b.match.confidence - a.match.confidence;
+    }
+    return a.combinedScore - b.combinedScore;
+  });
+
+  // Limit to top 5 candidates for cleaner output
+  const topCandidates = withScores.slice(0, 5);
+  const totalCount = withScores.length;
+
+  const formattedCandidates = topCandidates.map(({ match, combinedScore }, i) => ({
+    index: i + 1,
+    displayName: match.user.displayName,
+    username: match.user.name || match.user.accountId || 'unknown',
+    email: match.user.emailAddress,
+    confidence: Number(match.confidence.toFixed(3)),
+    combinedScore: Number(combinedScore.toFixed(3)),
+    matchType: match.reason,
+  }));
+
+  const truncationNote = totalCount > 5 ? `\n  ... and ${totalCount - 5} more` : '';
+
+  throw new AmbiguityError(
+    `Ambiguous value "${searchTerm}" for field "${fieldSchema.name}". Multiple users found:\n` +
+      formattedCandidates
+        .map((c) => `  ${c.index}. ${c.displayName} (${c.username}, ${c.email})`)
+        .join('\n') +
+      truncationNote +
+      '\n\nPlease use email address for exact matching or specify a different ambiguity policy.',
+    {
+      field: fieldSchema.id,
+      input: searchTerm,
+      candidates: formattedCandidates,
+      totalCandidates: totalCount,
+    }
+  );
+}
+
+function throwTiedScoreError(
+  searchTerm: string,
+  fieldSchema: { name: string; id: string },
+  candidates: UserMatch[],
+  tiedScore: number
+): never {
   const formattedCandidates = candidates.map((match, i) => ({
     index: i + 1,
-    name: match.user.displayName,
-    id: match.user.name || match.user.accountId || 'unknown',
+    displayName: match.user.displayName,
+    username: match.user.name || match.user.accountId || 'unknown',
     email: match.user.emailAddress,
     confidence: Number(match.confidence.toFixed(3)),
     matchType: match.reason,
   }));
 
   throw new AmbiguityError(
-    `Ambiguous value "${searchTerm}" for field "${fieldSchema.name}". Multiple users found:\n` +
+    `Ambiguous value "${searchTerm}" for field "${fieldSchema.name}". ` +
+      `Multiple users have identical scores (similarity: ${(1 - tiedScore).toFixed(3)}):\n` +
       formattedCandidates
-        .map((c) => `  ${c.index}. ${c.name} (${c.id}, ${c.email})`)
+        .map((c) => `  ${c.index}. ${c.displayName} (${c.username}, ${c.email})`)
         .join('\n') +
-      '\n\nPlease use email address for exact matching or specify a different ambiguity policy.',
+      '\n\nPlease use email address for exact matching.',
     {
       field: fieldSchema.id,
       input: searchTerm,
@@ -364,10 +576,51 @@ function formatUserResult(user: JiraUser, fieldSchema: { name: string; id: strin
 }
 
 /**
+ * Perform fuzzy matching against user list using fuse.js
+ * 
+ * BACKLOG-S2: Fuzzy user matching for typo tolerance
+ * 
+ * Searches across displayName and emailAddress fields to find
+ * users that approximately match the search term.
+ * 
+ * @param users - List of active JIRA users to search
+ * @param searchTerm - User input (potentially with typos)
+ * @param threshold - Fuse.js threshold (0.0=exact, 0.3=balanced, 1.0=match all)
+ * @returns Array of fuzzy matches sorted by score (best first)
+ */
+function performFuzzyUserMatch(
+  users: JiraUser[],
+  searchTerm: string,
+  threshold: number
+): { user: JiraUser; score: number }[] {
+  // Configure fuse.js for user matching
+  // Search ALL fields - email, displayName, and username
+  // Since we cache the full directory, there's no cost to searching everything
+  const keys = ['emailAddress', 'displayName', 'name'];
+
+  const fuse = new Fuse(users, {
+    keys,
+    threshold,
+    ignoreLocation: true,
+    minMatchCharLength: 2,
+    includeScore: true,
+  });
+
+  const results = fuse.search(searchTerm);
+
+  // Return matches sorted by score (fuse.js score: 0=perfect, 1=no match)
+  return results.map((result) => ({
+    user: result.item,
+    score: result.score ?? 1,
+  }));
+}
+
+/**
  * Internal helpers exposed for targeted unit testing.
  * Not part of the public API.
  */
 export const __userConverterInternals = {
   compareStrings,
   selectBestUserMatch,
+  computeSecondarySimilarity,
 };

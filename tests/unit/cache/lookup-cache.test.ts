@@ -37,10 +37,11 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       await cache.setLookup('TEST', 'priority', priorities);
 
+      // Hard TTL is 1 week, soft TTL (15 min) is in the envelope for staleness check
       expect(mockRedis.setex).toHaveBeenCalledWith(
         'jml:lookup:TEST:priority',
-        900, // 15 minutes TTL
-        JSON.stringify(priorities)
+        604800, // 1 week hard TTL
+        expect.stringMatching(/^\{"value":".*","expiresAt":\d+\}$/)
       );
     });
 
@@ -52,10 +53,11 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       await cache.setLookup('TEST', 'component', components, 'Story');
 
+      // Hard TTL is 1 week for all cached values
       expect(mockRedis.setex).toHaveBeenCalledWith(
         'jml:lookup:TEST:component:Story',
-        900,
-        JSON.stringify(components)
+        604800,
+        expect.stringMatching(/^\{"value":".*","expiresAt":\d+\}$/)
       );
     });
 
@@ -67,10 +69,11 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       await cache.setLookup('TEST', 'version', versions, 'Bug');
 
+      // Hard TTL is 1 week for all cached values
       expect(mockRedis.setex).toHaveBeenCalledWith(
         'jml:lookup:TEST:version:Bug',
-        900,
-        JSON.stringify(versions)
+        604800,
+        expect.stringMatching(/^\{"value":".*","expiresAt":\d+\}$/)
       );
     });
 
@@ -82,10 +85,11 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       await cache.setLookup('TEST', 'user', users);
 
+      // Hard TTL is 1 week for all cached values
       expect(mockRedis.setex).toHaveBeenCalledWith(
         'jml:lookup:TEST:user',
-        900,
-        JSON.stringify(users)
+        604800,
+        expect.stringMatching(/^\{"value":".*","expiresAt":\d+\}$/)
       );
     });
   });
@@ -115,13 +119,14 @@ describe('RedisCache - Lookup Cache Methods', () => {
   });
 
   describe('AC3: TTL = 15 Minutes', () => {
-    it('should set TTL to 900 seconds (15 minutes)', async () => {
+    it('should set soft TTL to 900 seconds (15 minutes) in envelope, hard TTL 24h', async () => {
       const data = [{ id: '1', name: 'Test' }];
       await cache.setLookup('PROJ', 'priority', data);
 
+      // Hard TTL is 1 week for Redis cleanup, soft TTL (15 min) is in the envelope
       expect(mockRedis.setex).toHaveBeenCalledWith(
         expect.any(String),
-        900, // 15 minutes = 900 seconds
+        604800, // 1 week hard TTL
         expect.any(String)
       );
     });
@@ -138,7 +143,8 @@ describe('RedisCache - Lookup Cache Methods', () => {
       const result = await cache.getLookup('TEST', 'priority');
 
       expect(mockRedis.get).toHaveBeenCalledWith('jml:lookup:TEST:priority');
-      expect(result).toEqual(priorities);
+      expect(result.value).toEqual(priorities);
+      expect(result.isStale).toBe(false);
     });
 
     it('should retrieve cached component list for specific issuetype', async () => {
@@ -148,7 +154,8 @@ describe('RedisCache - Lookup Cache Methods', () => {
       const result = await cache.getLookup('TEST', 'component', 'Story');
 
       expect(mockRedis.get).toHaveBeenCalledWith('jml:lookup:TEST:component:Story');
-      expect(result).toEqual(components);
+      expect(result.value).toEqual(components);
+      expect(result.isStale).toBe(false);
     });
 
     it('should return null on cache miss', async () => {
@@ -156,7 +163,8 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       const result = await cache.getLookup('TEST', 'priority');
 
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
     });
 
     it('should return null on invalid JSON', async () => {
@@ -170,7 +178,8 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       const result = await cache.getLookup('TEST', 'priority');
 
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalled();
     });
   });
@@ -194,7 +203,8 @@ describe('RedisCache - Lookup Cache Methods', () => {
       const result = await unavailableCache.getLookup('TEST', 'priority');
 
       // With offline queue enabled, call IS attempted (queued) even when unavailable
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(mockRedis.get).toHaveBeenCalledWith('jml:lookup:TEST:priority');
     });
 
@@ -223,7 +233,8 @@ describe('RedisCache - Lookup Cache Methods', () => {
 
       const result = await cache.getLookup('TEST', 'priority');
 
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(mockLogger.warn).toHaveBeenCalled();
     });
   });

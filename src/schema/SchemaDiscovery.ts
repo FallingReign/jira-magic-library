@@ -71,8 +71,10 @@ export class SchemaDiscovery {
   /**
    * Gets the field schema for a specific project and issue type.
    * 
-   * Fetches from cache if available, otherwise calls the JIRA createmeta API.
-   * The schema is cached for 15 minutes after fetching.
+   * Uses stale-while-revalidate caching:
+   * - Fresh cache: Returns immediately
+   * - Stale cache: Returns immediately, refreshes in background
+   * - No cache: Fetches from API (blocks)
    * 
    * Uses a two-step process:
    * 1. GET /rest/api/2/issue/createmeta/{projectKey}/issuetypes - Get issue type ID
@@ -95,17 +97,51 @@ export class SchemaDiscovery {
   ): Promise<ProjectSchema> {
     const cacheKey = this.getCacheKey(projectKey, issueTypeName);
 
-    // Check cache first
+    // Check cache with staleness info (stale-while-revalidate)
     try {
-      const cached = await this.cache.get(cacheKey);
-      if (cached) {
-        return JSON.parse(cached) as ProjectSchema;
+      const cacheResult = await this.cache.get(cacheKey);
+      if (cacheResult.value) {
+        const schema = JSON.parse(cacheResult.value) as ProjectSchema;
+        
+        if (cacheResult.isStale) {
+          // Return stale value immediately, refresh in background
+          this.refreshSchemaInBackground(projectKey, issueTypeName, cacheKey);
+        }
+        
+        return schema;
       }
     } catch (error) {
       // Cache error - log and continue to fetch from API
       console.warn('Cache read error, fetching from API:', error);
     }
 
+    // No cache - fetch from API (blocking)
+    return this.fetchAndCacheSchema(projectKey, issueTypeName, cacheKey);
+  }
+
+  /**
+   * Refresh schema in background (fire-and-forget)
+   * Used by stale-while-revalidate pattern
+   */
+  private refreshSchemaInBackground(
+    projectKey: string,
+    issueTypeName: string,
+    cacheKey: string
+  ): void {
+    // Fire and forget - don't await, don't block caller
+    this.fetchAndCacheSchema(projectKey, issueTypeName, cacheKey).catch(err => {
+      console.warn(`Background schema refresh failed for ${projectKey}/${issueTypeName}:`, err);
+    });
+  }
+
+  /**
+   * Fetch schema from JIRA API and cache it
+   */
+  private async fetchAndCacheSchema(
+    projectKey: string,
+    issueTypeName: string,
+    cacheKey: string
+  ): Promise<ProjectSchema> {
     // Step 1: Get available issue types for the project to find the ID
     const issueTypesData = await this.client.get<JiraApiResponse>(
       `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`

@@ -30,6 +30,39 @@ export interface AmbiguityPolicyConfig {
 }
 
 /**
+ * Fuzzy matching configuration for field converters.
+ * Uses fuse.js under the hood for typo-tolerant matching.
+ */
+export interface FuzzyMatchUserConfig {
+  /**
+   * Enable fuzzy matching for user fields.
+   * When enabled, typos like "Jon Smith" → "John Smith" are tolerated.
+   * @default true
+   */
+  enabled?: boolean;
+
+  /**
+   * Fuse.js threshold for fuzzy matching.
+   * - 0.0 = exact match only
+   * - 0.3 = balanced typo tolerance (default, recommended)
+   * - 0.6 = loose matching
+   * - 1.0 = match everything
+   * @default 0.3
+   */
+  threshold?: number;
+}
+
+/**
+ * Fuzzy matching configuration for all field types.
+ */
+export interface FuzzyMatchConfig {
+  /**
+   * Fuzzy matching settings for user fields (Assignee, Reporter, etc.)
+   */
+  user?: FuzzyMatchUserConfig;
+}
+
+/**
  * Main configuration interface for the JIRA Magic Library
  */
 export interface JMLConfig {
@@ -78,6 +111,12 @@ export interface JMLConfig {
    * Defaults applied per converter if not provided.
    */
   ambiguityPolicy?: AmbiguityPolicyConfig;
+
+  /**
+   * Fuzzy matching configuration for typo-tolerant field resolution.
+   * @example { user: { enabled: true, threshold: 0.3 } }
+   */
+  fuzzyMatch?: FuzzyMatchConfig;
 }
 
 /**

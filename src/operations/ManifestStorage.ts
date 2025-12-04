@@ -127,13 +127,13 @@ export class ManifestStorage {
   async getManifest(manifestId: string): Promise<BulkManifest | null> {
     try {
       const key = `bulk:manifest:${manifestId}`;
-      const value = await this.cache.get(key);
+      const result = await this.cache.get(key);
       
-      if (!value) {
+      if (!result.value) {
         return null; // Not found or expired
       }
 
-      return JSON.parse(value) as BulkManifest;
+      return JSON.parse(result.value) as BulkManifest;
     } catch (error) {
       this.logger.warn('Failed to retrieve manifest from Redis:', error);
       return null; // Graceful degradation

@@ -371,19 +371,43 @@ export class FieldResolver {
   private async fetchAllProjects(): Promise<Array<{ id: string; key: string; name: string }>> {
     const cacheKey = `jml:projects:${this.cache ? 'cached' : 'nocache'}`;
     
-    // Check cache first
+    // Check cache with staleness info (stale-while-revalidate)
     if (this.cache) {
       try {
-        const cached = await this.cache.get(cacheKey);
-        if (cached) {
-          return JSON.parse(cached) as Array<{ id: string; key: string; name: string }>;
+        const cacheResult = await this.cache.get(cacheKey);
+        if (cacheResult.value) {
+          const projects = JSON.parse(cacheResult.value) as Array<{ id: string; key: string; name: string }>;
+          
+          if (cacheResult.isStale) {
+            // Return stale value immediately, refresh in background
+            this.refreshProjectsInBackground(cacheKey);
+          }
+          
+          return projects;
         }
       } catch {
         // Cache read error - continue to fetch
       }
     }
 
-    // Fetch from API
+    // No cache - fetch from API (blocking)
+    return this.fetchAndCacheProjects(cacheKey);
+  }
+
+  /**
+   * Refresh projects list in background (fire-and-forget)
+   * Used by stale-while-revalidate pattern
+   */
+  private refreshProjectsInBackground(cacheKey: string): void {
+    this.fetchAndCacheProjects(cacheKey).catch(() => {
+      // Silently ignore background refresh errors
+    });
+  }
+
+  /**
+   * Fetch projects from JIRA API and cache them
+   */
+  private async fetchAndCacheProjects(cacheKey: string): Promise<Array<{ id: string; key: string; name: string }>> {
     const projects = await this.client!.get<Array<{ id: string; key: string; name: string }>>(
       '/rest/api/2/project'
     );

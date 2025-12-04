@@ -131,9 +131,9 @@ export const convertIssueTypeType: FieldConverter = async (value, fieldSchema, c
   const cacheKey = getCacheKey(baseUrl, projectKey, trimmedName, hierarchyLevel);
   if (context.cacheClient) {
     try {
-      const cached = await context.cacheClient.get(cacheKey);
-      if (cached) {
-        return JSON.parse(cached) as ResolvedIssueType;
+      const result = await context.cacheClient.get(cacheKey);
+      if (result.value) {
+        return JSON.parse(result.value) as ResolvedIssueType;
       }
     } catch {
       // Cache read error - silent, continue to fetch from API

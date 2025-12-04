@@ -289,7 +289,7 @@ describe('ManifestStorage', () => {
         },
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(manifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(manifest), isStale: false });
 
       const result = await storage.getManifest('bulk-test');
 
@@ -298,7 +298,7 @@ describe('ManifestStorage', () => {
     });
 
     it('should return null if manifest not found', async () => {
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
 
       const result = await storage.getManifest('bulk-nonexistent');
 
@@ -306,7 +306,7 @@ describe('ManifestStorage', () => {
     });
 
     it('should return null if manifest expired', async () => {
-      mockCache.get.mockResolvedValue(null); // Redis returns null for expired keys
+      mockCache.get.mockResolvedValue({ value: null, isStale: false }); // Redis returns null for expired keys
 
       const result = await storage.getManifest('bulk-expired');
 
@@ -329,7 +329,7 @@ describe('ManifestStorage', () => {
         },
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(manifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(manifest), isStale: false });
 
       const result = await storage.getManifest('bulk-test');
 
@@ -354,7 +354,7 @@ describe('ManifestStorage', () => {
         },
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(originalManifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(originalManifest), isStale: false });
 
       const retryResults = {
         succeeded: [3, 5], // Previously failed, now succeeded
@@ -385,7 +385,7 @@ describe('ManifestStorage', () => {
         errors: {},
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(originalManifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(originalManifest), isStale: false });
 
       const retryResults = {
         succeeded: [2, 4],
@@ -422,7 +422,7 @@ describe('ManifestStorage', () => {
         },
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(originalManifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(originalManifest), isStale: false });
 
       const retryResults = {
         succeeded: [1], // Fixed!
@@ -453,7 +453,7 @@ describe('ManifestStorage', () => {
         errors: {},
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(originalManifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(originalManifest), isStale: false });
 
       const retryResults = {
         succeeded: [1],
@@ -518,7 +518,7 @@ describe('ManifestStorage', () => {
     });
 
     it('should handle malformed JSON during retrieve', async () => {
-      mockCache.get.mockResolvedValue('{ invalid json }');
+      mockCache.get.mockResolvedValue({ value: '{ invalid json }', isStale: false });
 
       const result = await storage.getManifest('bulk-test');
 
@@ -550,7 +550,7 @@ describe('ManifestStorage', () => {
         errors: { '1': { status: 400, errors: { field: 'error' } } },
       };
 
-      mockCache.get.mockResolvedValue(JSON.stringify(originalManifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(originalManifest), isStale: false });
       mockCache.set.mockRejectedValue(new Error('Redis write failed'));
 
       const retryResults = {
@@ -584,7 +584,7 @@ describe('ManifestStorage', () => {
       };
 
       await storage.storeManifest(manifest);
-      mockCache.get.mockResolvedValue(JSON.stringify(manifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(manifest), isStale: false });
 
       const result = await storage.getManifest('bulk-empty');
 
@@ -646,7 +646,7 @@ describe('ManifestStorage', () => {
       };
 
       await storage.storeManifest(manifest);
-      mockCache.get.mockResolvedValue(JSON.stringify(manifest));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(manifest), isStale: false });
 
       const result = await storage.getManifest('bulk-large');
 

@@ -218,6 +218,37 @@ Or via environment variable (used by `loadConfig()`):
 JIRA_USER_AMBIGUITY_POLICY=score
 ```
 
+### Fuzzy User Matching
+
+When looking up users by name or email, the library supports fuzzy matching to tolerate typos and partial names. This is enabled by default.
+
+**Typo tolerance examples:**
+- `"Jon Smith"` → `"John Smith"` (missing letter)
+- `"john.smtih@example.com"` → `"john.smith@example.com"` (transposition)
+- `"J Smith"` → `"John Smith"` (partial/abbreviated)
+
+Configure via code:
+
+```ts
+const jml = new JML({
+  baseUrl: process.env.JIRA_BASE_URL!,
+  auth: { token: process.env.JIRA_PAT! },
+  fuzzyMatch: {
+    user: {
+      enabled: true,       // default: true
+      threshold: 0.3,      // 0.0 = exact, 0.3 = balanced, 1.0 = loose (default: 0.3)
+    }
+  }
+});
+```
+
+| Option | Description |
+|--------|-------------|
+| `fuzzyMatch.user.enabled` | Enable/disable fuzzy matching for user fields. Default: `true`. |
+| `fuzzyMatch.user.threshold` | fuse.js threshold (0.0–1.0). Lower = stricter. Default: `0.3`. |
+
+When multiple fuzzy matches are found, the `ambiguityPolicy.user` setting determines behavior.
+
 ---
 
 ## Demos & Scripts

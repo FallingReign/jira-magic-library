@@ -79,11 +79,13 @@ export const convertPriorityType: FieldConverter = async (value, fieldSchema, co
   // Try cache first
   if (context.cache) {
     try {
-      priorities = await context.cache.getLookup(
+      const result = await context.cache.getLookup(
         context.projectKey,
         'priority',
         context.issueType
-      ) as LookupValue[] | null;
+      );
+      priorities = result.value as LookupValue[] | null;
+      // Note: We don't do background refresh here - fallback to allowedValues is fine
     } catch {
       // Cache error - fall back to allowedValues
       priorities = null;

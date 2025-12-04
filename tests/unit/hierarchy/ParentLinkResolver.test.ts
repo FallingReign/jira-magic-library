@@ -716,7 +716,7 @@ describe('ParentLinkResolver', () => {
   describe('AC7: Cache Results', () => {
     it('should cache resolved parent key from summary search', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.post.mockResolvedValue({
         total: 1,
         issues: [
@@ -751,7 +751,7 @@ describe('ParentLinkResolver', () => {
 
     it('should return cached value if available', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue('PROJ-999');
+      mockCache.get.mockResolvedValue({ value: 'PROJ-999', isStale: false });
 
       // Act
       const result = await resolveParentLink(
@@ -771,7 +771,7 @@ describe('ParentLinkResolver', () => {
 
     it('should use 5 minute TTL (300 seconds)', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.post.mockResolvedValue({
         total: 1,
         issues: [
@@ -823,7 +823,7 @@ describe('ParentLinkResolver', () => {
 
     it('should normalize cache key (lowercase, trim)', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.post.mockResolvedValue({
         total: 1,
         issues: [
@@ -942,7 +942,7 @@ describe('ParentLinkResolver', () => {
 
     it('should handle cache set errors gracefully', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockCache.set.mockRejectedValue(new Error('Cache write error'));
       mockClient.post.mockResolvedValue({
         total: 1,

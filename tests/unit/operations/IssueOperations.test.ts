@@ -1265,12 +1265,12 @@ describe('IssueOperations', () => {
           uidMap: { 'epic-1': 'ENG-100' }, // This indicates hierarchy operation
         };
 
-        // Mock manifest storage
+        // Mock manifest storage - returns { value, isStale } format
         mockCacheForHierarchy.get.mockImplementation(async (key: string) => {
           if (key.includes('bulk-hier-123')) {
-            return JSON.stringify(manifest);
+            return { value: JSON.stringify(manifest), isStale: false };
           }
-          return null;
+          return { value: null, isStale: false };
         });
 
         // Input with hierarchy

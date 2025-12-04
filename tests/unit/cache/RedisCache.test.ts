@@ -51,7 +51,8 @@ describe('RedisCache', () => {
       const result = await cache.get('test-key');
 
       // Assert
-      expect(result).toBe('test-value');
+      expect(result.value).toBe('test-value');
+      expect(result.isStale).toBe(false);
     });
 
     it('should return null for missing key', async () => {
@@ -59,7 +60,8 @@ describe('RedisCache', () => {
       const result = await cache.get('nonexistent-key');
 
       // Assert
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
     });
 
     it('should prefix key with jml:', async () => {
@@ -70,7 +72,8 @@ describe('RedisCache', () => {
       const result = await cache.get('schema:ENG:Bug');
 
       // Assert
-      expect(result).toBe('schema-data');
+      expect(result.value).toBe('schema-data');
+      expect(result.isStale).toBe(false);
     });
 
     it('should return null and warn on Redis error', async () => {
@@ -81,7 +84,8 @@ describe('RedisCache', () => {
       const result = await cache.get('test-key');
 
       // Assert
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Cache get failed'),
         expect.any(Error)
@@ -94,23 +98,27 @@ describe('RedisCache', () => {
       // Act
       await cache.set('test-key', 'test-value', 900);
 
-      // Assert
-      const value = await mockRedis.get('jml:test-key');
-      expect(value).toBe('test-value');
+      // Assert - value is wrapped with metadata for SWR
+      const rawValue = await mockRedis.get('jml:test-key');
+      const parsed = JSON.parse(rawValue as string);
+      expect(parsed.value).toBe('test-value');
+      expect(parsed.expiresAt).toBeGreaterThan(Date.now());
 
-      // Check TTL was set
+      // Check TTL was set (1 week hard TTL for Redis cleanup)
       const ttl = await mockRedis.ttl('jml:test-key');
       expect(ttl).toBeGreaterThan(0);
-      expect(ttl).toBeLessThanOrEqual(900);
+      expect(ttl).toBeLessThanOrEqual(604800); // 1 week
     });
 
     it('should prefix key with jml:', async () => {
       // Act
       await cache.set('schema:ENG:Bug', 'schema-data', 900);
 
-      // Assert
+      // Assert - value is wrapped with metadata for SWR
       const value = await mockRedis.get('jml:schema:ENG:Bug');
-      expect(value).toBe('schema-data');
+      const parsed = JSON.parse(value as string);
+      expect(parsed.value).toBe('schema-data');
+      expect(parsed.expiresAt).toBeGreaterThan(Date.now());
     });
 
     it('should handle errors gracefully and warn', async () => {
@@ -130,11 +138,11 @@ describe('RedisCache', () => {
       await cache.set('key1', 'value1', 300);
       await cache.set('key2', 'value2', 1800);
 
-      // Assert
+      // Assert - All values get 1 week hard TTL (soft TTL is in the envelope)
       const ttl1 = await mockRedis.ttl('jml:key1');
       const ttl2 = await mockRedis.ttl('jml:key2');
-      expect(ttl1).toBeLessThanOrEqual(300);
-      expect(ttl2).toBeLessThanOrEqual(1800);
+      expect(ttl1).toBeLessThanOrEqual(604800); // 1 week
+      expect(ttl2).toBeLessThanOrEqual(604800); // 1 week
     });
   });
 
@@ -313,7 +321,8 @@ describe('RedisCache', () => {
       const result = await cache.get('test-key');
 
       // Assert - returns null instead of throwing
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(consoleWarnSpy).toHaveBeenCalled();
     });
 
@@ -595,7 +604,8 @@ describe('RedisCache', () => {
       const result = await cache.get('test-key');
 
       // Assert - with offline queue enabled, call IS attempted but returns null on error
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(unavailableClient.get).toHaveBeenCalledWith('jml:test-key');
       
       // Cleanup
@@ -616,7 +626,12 @@ describe('RedisCache', () => {
       
       // Act & Assert - with offline queue, call IS attempted but fails gracefully
       await expect(cache.set('test-key', 'value', 900)).resolves.toBeUndefined();
-      expect(unavailableClient.setex).toHaveBeenCalledWith('jml:test-key', 900, 'value');
+      // Hard TTL is 1 week, value is wrapped with metadata (soft TTL in envelope)
+      expect(unavailableClient.setex).toHaveBeenCalledWith(
+        'jml:test-key', 
+        604800, // 1 week hard TTL
+        expect.stringMatching(/^\{"value":"value","expiresAt":\d+\}$/)
+      );
       
       // Cleanup
       await cache.disconnect();
@@ -677,14 +692,15 @@ describe('RedisCache', () => {
       
       // Initially available (test instance)
       const result1 = await cache.get('test-key');
-      expect(result1).toBe('value');
+      expect(result1.value).toBe('value');
       
       // Emit end event
       client.emit('end');
       
       // With offline queue, call IS still attempted but fails → returns null
       const result2 = await cache.get('test-key');
-      expect(result2).toBeNull();
+      expect(result2.value).toBeNull();
+      expect(result2.isStale).toBe(false);
       expect(client.get).toHaveBeenCalledTimes(2); // Both calls attempted
       
       // Cleanup
@@ -707,7 +723,8 @@ describe('RedisCache', () => {
       
       // With offline queue, call IS still attempted but fails → returns null
       const result = await cache.get('test-key');
-      expect(result).toBeNull();
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
       expect(client.get).toHaveBeenCalled();
       
       // Cleanup

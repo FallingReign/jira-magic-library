@@ -27,7 +27,7 @@ describe('ProjectConverter', () => {
 
     // Mock cache client
     mockCache = {
-      get: jest.fn().mockResolvedValue(null),
+      get: jest.fn().mockResolvedValue({ value: null, isStale: false }),
       set: jest.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<CacheClient>;
 
@@ -350,8 +350,8 @@ describe('ProjectConverter', () => {
 
     it('should use cached project list on second call', async () => {
       const cachedResult = { key: 'PROJ' };
-      mockCache.get.mockResolvedValueOnce(null); // First call: no individual cache
-      mockCache.get.mockResolvedValueOnce(null); // First call: no projects cache
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false }); // First call: no individual cache
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false }); // First call: no projects cache
       mockClient.get.mockResolvedValueOnce([
         { id: '10000', key: 'PROJ', name: 'My Project' },
       ]);
@@ -359,7 +359,7 @@ describe('ProjectConverter', () => {
       await convertProjectType('My Project', fieldSchema, context);
       
       // Second call: use cached result
-      mockCache.get.mockResolvedValueOnce(JSON.stringify(cachedResult));
+      mockCache.get.mockResolvedValueOnce({ value: JSON.stringify(cachedResult), isStale: false });
       mockClient.get.mockClear();
 
       await convertProjectType('My Project', fieldSchema, context);
@@ -369,7 +369,7 @@ describe('ProjectConverter', () => {
 
     it('should use cached individual lookup on second call', async () => {
       const cachedResult = { key: 'PROJ' };
-      mockCache.get.mockResolvedValueOnce(JSON.stringify(cachedResult));
+      mockCache.get.mockResolvedValueOnce({ value: JSON.stringify(cachedResult), isStale: false });
 
       const result = await convertProjectType('My Project', fieldSchema, context);
 
@@ -450,8 +450,8 @@ describe('ProjectConverter', () => {
 
     it('should fetch from API when cache misses', async () => {
       mockCache.get
-        .mockResolvedValueOnce(null) // Individual cache miss
-        .mockResolvedValueOnce(null); // Projects list cache miss
+        .mockResolvedValueOnce({ value: null, isStale: false }) // Individual cache miss
+        .mockResolvedValueOnce({ value: null, isStale: false }); // Projects list cache miss
       mockClient.get.mockResolvedValueOnce([
         { id: '10000', key: 'PROJ', name: 'My Project' },
       ]);
@@ -469,8 +469,8 @@ describe('ProjectConverter', () => {
     it('should use cached projects list when available', async () => {
       const cachedProjects = [{ id: '10000', key: 'PROJ', name: 'My Project' }];
       mockCache.get
-        .mockResolvedValueOnce(null) // Individual cache miss
-        .mockResolvedValueOnce(JSON.stringify(cachedProjects)); // Projects list cache hit
+        .mockResolvedValueOnce({ value: null, isStale: false }) // Individual cache miss
+        .mockResolvedValueOnce({ value: JSON.stringify(cachedProjects), isStale: false }); // Projects list cache hit
 
       await convertProjectType('My Project', fieldSchema, context);
 
@@ -550,7 +550,7 @@ describe('ProjectConverter', () => {
 
     it('should handle cache.set throwing error (line 215)', async () => {
       // Cache miss first
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
 
       // Make cache.set throw an error - covers line 215 catch block
       mockCache.set.mockRejectedValueOnce(new Error('Redis connection lost'));
@@ -569,7 +569,7 @@ describe('ProjectConverter', () => {
 
     it('should handle cache error when fetching all projects list (line 234)', async () => {
       // Cache miss for individual project
-      mockCache.get.mockResolvedValueOnce(null);
+      mockCache.get.mockResolvedValueOnce({ value: null, isStale: false });
 
       // API returns project list instead (indicates name lookup)
       mockClient.get.mockResolvedValueOnce([

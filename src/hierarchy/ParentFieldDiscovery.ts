@@ -88,7 +88,8 @@ export class ParentFieldDiscovery {
   async getParentFieldKey(projectKey: string, issueTypeName: string): Promise<string | null> {
     const cacheKey = this.getCacheKey(projectKey, issueTypeName);
 
-    const cachedValue = await this.cache.get(cacheKey);
+    const result = await this.cache.get(cacheKey);
+    const cachedValue = result.value;
     if (cachedValue) {
       return cachedValue === NULL_CACHE_VALUE ? null : cachedValue;
     }
@@ -147,7 +148,8 @@ export class ParentFieldDiscovery {
   async getParentFieldInfo(projectKey: string, issueTypeName: string): Promise<ParentFieldInfo | null> {
     const cacheKey = this.getInfoCacheKey(projectKey, issueTypeName);
 
-    const cachedValue = await this.cache.get(cacheKey);
+    const result = await this.cache.get(cacheKey);
+    const cachedValue = result.value;
     if (cachedValue) {
       if (cachedValue === NULL_CACHE_VALUE) {
         return null;

@@ -37,7 +37,8 @@ export class JPOHierarchyDiscovery {
     let cachedValue: string | null = null;
 
     try {
-      cachedValue = await this.cache.get(HIERARCHY_CACHE_KEY);
+      const result = await this.cache.get(HIERARCHY_CACHE_KEY);
+      cachedValue = result.value;
     } catch (error) {
       this.logger.warn('Failed to read JPO hierarchy from cache', error);
     }

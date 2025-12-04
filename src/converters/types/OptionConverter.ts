@@ -81,11 +81,13 @@ export const convertOptionType: FieldConverter = async (value, fieldSchema, cont
   // Try cache first
   if (context.cache) {
     try {
-      options = (await context.cache.getLookup(
+      const result = await context.cache.getLookup(
         context.projectKey,
         'option',
         context.issueType
-      )) as LookupValue[] | null;
+      );
+      options = result.value as LookupValue[] | null;
+      // Note: We don't do background refresh here - fallback to allowedValues is fine
     } catch {
       // Cache error - fall back to allowedValues
       options = null;

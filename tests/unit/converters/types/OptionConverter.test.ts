@@ -96,10 +96,10 @@ describe('OptionConverter', () => {
     });
 
     it('should work with allowedValues from cache if available', async () => {
-      mockCache.getLookup.mockResolvedValue([
+      mockCache.getLookup.mockResolvedValue({ value: [
         { id: '999', name: 'Cached Production' },
         { id: '888', name: 'Cached Staging' },
-      ]);
+      ], isStale: false });
 
       const schemaWithoutAllowed: FieldSchema = {
         ...fieldSchema,
@@ -115,7 +115,7 @@ describe('OptionConverter', () => {
 
   describe('AC4: Use Ambiguity Detection', () => {
     it('should throw AmbiguityError if multiple options match name', async () => {
-      mockCache.getLookup.mockResolvedValue(null); // Ensure cache miss
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false }); // Ensure cache miss
       
       const ambiguousSchema: FieldSchema = {
         ...fieldSchema,
@@ -132,7 +132,7 @@ describe('OptionConverter', () => {
     });
 
     it('should include candidate list in ambiguity error', async () => {
-      mockCache.getLookup.mockResolvedValue(null); // Ensure cache miss
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false }); // Ensure cache miss
       
       const ambiguousSchema: FieldSchema = {
         ...fieldSchema,
@@ -153,7 +153,7 @@ describe('OptionConverter', () => {
     });
 
     it('should NOT be ambiguous if exact match found', async () => {
-      mockCache.getLookup.mockResolvedValue(null); // Ensure cache miss
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false }); // Ensure cache miss
       
       const schema: FieldSchema = {
         ...fieldSchema,
@@ -179,7 +179,7 @@ describe('OptionConverter', () => {
     });
 
     it('should include available options in not found error', async () => {
-      mockCache.getLookup.mockResolvedValue(null); // Ensure cache miss
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false }); // Ensure cache miss
       
       try {
         await convertOptionType('Testing', fieldSchema, context);
@@ -229,7 +229,7 @@ describe('OptionConverter', () => {
         allowedValues: undefined,
       };
 
-      mockCache.getLookup.mockResolvedValue(null);
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
 
       await expect(
         convertOptionType('Production', schemaWithoutAllowed, context)

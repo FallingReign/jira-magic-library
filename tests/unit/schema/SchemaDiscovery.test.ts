@@ -23,6 +23,7 @@ describe('SchemaDiscovery', () => {
 
     mockCache = {
       get: jest.fn(),
+      getWithMeta: jest.fn().mockResolvedValue({ value: null, isStale: false }),
       set: jest.fn(),
       del: jest.fn(),
       clear: jest.fn(),
@@ -122,7 +123,7 @@ describe('SchemaDiscovery', () => {
 
     it('should fetch schema from API on cache miss', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.get
         .mockResolvedValueOnce(mockIssueTypes)  // Step 1: Get issue types
         .mockResolvedValueOnce(mockFieldsData);  // Step 2: Get fields
@@ -141,7 +142,7 @@ describe('SchemaDiscovery', () => {
 
     it('should cache schema after fetching from API', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.get
         .mockResolvedValueOnce(mockIssueTypes)
         .mockResolvedValueOnce(mockFieldsData);
@@ -176,7 +177,7 @@ describe('SchemaDiscovery', () => {
           },
         },
       };
-      mockCache.get.mockResolvedValue(JSON.stringify(cachedSchema));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(cachedSchema), isStale: false });
 
       // Act
       const schema = await discovery.getFieldsForIssueType('ENG', 'Bug');
@@ -188,7 +189,7 @@ describe('SchemaDiscovery', () => {
 
     it('should parse field definitions correctly', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.get
         .mockResolvedValueOnce(mockIssueTypes)
         .mockResolvedValueOnce(mockFieldsData);
@@ -234,7 +235,7 @@ describe('SchemaDiscovery', () => {
 
     it('should map JIRA schema types to internal types', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.get
         .mockResolvedValueOnce(mockIssueTypes)
         .mockResolvedValueOnce(mockFieldsData);
@@ -253,7 +254,7 @@ describe('SchemaDiscovery', () => {
 
     it('should throw NotFoundError if project does not exist', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.get.mockResolvedValue({ values: [] });
 
       // Act & Assert
@@ -267,7 +268,7 @@ describe('SchemaDiscovery', () => {
 
     it('should throw NotFoundError if issue type does not exist in project', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       const response = {
         values: [
           { id: '1', name: 'Bug' },
@@ -300,7 +301,7 @@ describe('SchemaDiscovery', () => {
 
     it('should handle cache set errors gracefully', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockCache.set.mockRejectedValue(new Error('Redis write failed'));
       mockClient.get
         .mockResolvedValueOnce(mockIssueTypes)
@@ -312,7 +313,7 @@ describe('SchemaDiscovery', () => {
 
     it('should throw NotFoundError when no fields returned for issue type', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       const emptyFieldsResponse = {
         values: [],
         maxResults: 50,
@@ -332,7 +333,7 @@ describe('SchemaDiscovery', () => {
 
     it('should parse cascading select fields with children correctly', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       const cascadingFieldData = {
         values: [
           {
@@ -427,7 +428,8 @@ describe('SchemaDiscovery', () => {
     };
 
     beforeEach(() => {
-      mockCache.get.mockResolvedValue(JSON.stringify(mockSchema));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(mockSchema), isStale: false });
+      mockCache.getWithMeta.mockResolvedValue({ value: JSON.stringify(mockSchema), isStale: false });
     });
 
     it('should resolve field name to ID', async () => {
@@ -481,7 +483,8 @@ describe('SchemaDiscovery', () => {
           },
         },
       };
-      mockCache.get.mockResolvedValue(JSON.stringify(schemaWithSpecialChars));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(schemaWithSpecialChars), isStale: false });
+      mockCache.getWithMeta.mockResolvedValue({ value: JSON.stringify(schemaWithSpecialChars), isStale: false });
 
       // Act
       const fieldId = await discovery.getFieldIdByName('ENG', 'Bug', 'Component/s');
@@ -500,7 +503,7 @@ describe('SchemaDiscovery', () => {
 
     it('should fetch schema only on first use', async () => {
       // Arrange
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
       mockClient.get
         .mockResolvedValueOnce({ values: [{ id: '1', name: 'Bug' }] })  // Step 1
         .mockResolvedValueOnce({
@@ -536,7 +539,7 @@ describe('SchemaDiscovery', () => {
           },
         },
       };
-      mockCache.get.mockResolvedValue(JSON.stringify(cachedSchema));
+      mockCache.get.mockResolvedValue({ value: JSON.stringify(cachedSchema), isStale: false });
 
       // Act
       await discovery.getFieldIdByName('ENG', 'Bug', 'Summary');
@@ -750,7 +753,7 @@ describe('SchemaDiscovery', () => {
         .mockResolvedValueOnce(mockIssueTypes)
         .mockResolvedValueOnce(mockFieldsData);
 
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
 
       // Act
       const schema = await discovery.getFieldsForIssueType('ENG', 'Task');
@@ -801,7 +804,7 @@ describe('SchemaDiscovery', () => {
         .mockResolvedValueOnce(mockIssueTypes)
         .mockResolvedValueOnce(mockFieldsData);
 
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
 
       // Act
       const schema = await discovery.getFieldsForIssueType('ENG', 'Task');
@@ -838,7 +841,7 @@ describe('SchemaDiscovery', () => {
         .mockResolvedValueOnce(mockIssueTypes)
         .mockResolvedValueOnce(mockFieldsData);
 
-      mockCache.get.mockResolvedValue(null);
+      mockCache.get.mockResolvedValue({ value: null, isStale: false });
 
       // Act
       const schema = await discovery.getFieldsForIssueType('ENG', 'Task');

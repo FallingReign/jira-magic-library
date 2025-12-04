@@ -8,8 +8,13 @@
 import { JMLError } from './JMLError.js';
 
 export interface AmbiguityCandidate {
-  id: string;
-  name: string;
+  /** Display name of the candidate */
+  displayName?: string;
+  /** Username or account ID of the candidate */
+  username?: string;
+  /** Legacy fields for backward compatibility */
+  id?: string;
+  name?: string;
   [key: string]: unknown;
 }
 

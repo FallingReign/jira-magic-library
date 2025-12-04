@@ -43,7 +43,7 @@ describe('JPOHierarchyDiscovery', () => {
 
   describe('getHierarchy', () => {
     it('returns cached hierarchy when available', async () => {
-      cache.get.mockResolvedValue(JSON.stringify(hierarchySample));
+      cache.get.mockResolvedValue({ value: JSON.stringify(hierarchySample), isStale: false });
 
       const result = await discovery.getHierarchy();
 
@@ -57,7 +57,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('fetches from API on cache miss and caches sorted data', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue(hierarchySample);
 
       const result = await discovery.getHierarchy();
@@ -76,9 +76,9 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('forces refresh when requested even if cached', async () => {
-      cache.get.mockResolvedValue(JSON.stringify([
+      cache.get.mockResolvedValue({ value: JSON.stringify([
         { id: 0, title: 'Sub-task', issueTypeIds: ['16101'] },
-      ]));
+      ]), isStale: false });
       client.get.mockResolvedValue(hierarchySample);
 
       const result = await discovery.getHierarchy({ refresh: true });
@@ -93,7 +93,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('stores null in cache when API returns 404 (JPO unavailable)', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockRejectedValue(new NotFoundError('Not found'));
 
       const result = await discovery.getHierarchy();
@@ -104,7 +104,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('treats cached "null" as no hierarchy', async () => {
-      cache.get.mockResolvedValue('null');
+      cache.get.mockResolvedValue({ value: 'null', isStale: false });
 
       const result = await discovery.getHierarchy();
 
@@ -113,7 +113,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('invalid data from API throws SchemaError', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue([{ title: 'Missing id', issueTypeIds: [] }]);
 
       await expect(discovery.getHierarchy()).rejects.toBeInstanceOf(SchemaError);
@@ -121,7 +121,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('warns but succeeds when issueTypeIds array empty', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue([
         { id: 0, title: 'Sub-task', issueTypeIds: [] },
       ]);
@@ -140,8 +140,8 @@ describe('JPOHierarchyDiscovery', () => {
         { id: 1, title: 'Story', issueTypeIds: ['10001'] },
       ];
 
-      cache.get.mockResolvedValueOnce(JSON.stringify(cached));
-      cache.get.mockResolvedValueOnce(JSON.stringify(cached));
+      cache.get.mockResolvedValueOnce({ value: JSON.stringify(cached), isStale: false });
+      cache.get.mockResolvedValueOnce({ value: JSON.stringify(cached), isStale: false });
       client.get.mockResolvedValueOnce(hierarchySample);
 
       const result = await discovery.getHierarchy({ refresh: true });
@@ -168,7 +168,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('warns when cached data is malformed JSON', async () => {
-      cache.get.mockResolvedValue('{invalid json');
+      cache.get.mockResolvedValue({ value: '{invalid json', isStale: false });
       client.get.mockResolvedValue(hierarchySample);
 
       const result = await discovery.getHierarchy();
@@ -181,7 +181,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('warns when cache write fails', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       cache.set.mockRejectedValue(new Error('Redis write failed'));
       client.get.mockResolvedValue(hierarchySample);
 
@@ -195,7 +195,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('throws SchemaError when API returns non-array', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue({ invalid: 'not an array' });
 
       await expect(discovery.getHierarchy()).rejects.toThrow(SchemaError);
@@ -203,7 +203,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('throws SchemaError when level is not an object', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue(['string instead of object']);
 
       await expect(discovery.getHierarchy()).rejects.toThrow(SchemaError);
@@ -211,7 +211,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('throws SchemaError when level has empty title', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue([
         { id: 0, title: '   ', issueTypeIds: ['10001'] }
       ]);
@@ -221,7 +221,7 @@ describe('JPOHierarchyDiscovery', () => {
     });
 
     it('throws SchemaError when issueTypeIds is missing', async () => {
-      cache.get.mockResolvedValue(null);
+      cache.get.mockResolvedValue({ value: null, isStale: false });
       client.get.mockResolvedValue([
         { id: 0, title: 'Story' }
       ]);

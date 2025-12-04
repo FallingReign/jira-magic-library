@@ -89,11 +89,13 @@ export const convertVersionType: FieldConverter = async (value, fieldSchema, con
   // Cache key: lookup:{projectKey}:version (no issueType)
   if (context.cache) {
     try {
-      versions = await context.cache.getLookup(
+      const result = await context.cache.getLookup(
         context.projectKey,
         'version',
         undefined  // Versions are project-level, not issue-type specific
-      ) as LookupValue[] | null;
+      );
+      versions = result.value as LookupValue[] | null;
+      // Note: We don't do background refresh here - fallback to allowedValues is fine
     } catch {
       // Cache error - fall back to allowedValues
       versions = null;

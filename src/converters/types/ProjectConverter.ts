@@ -196,8 +196,8 @@ async function tryGetCache(cache: CacheClient | undefined, key: string): Promise
   if (!cache) return null;
   
   try {
-    const cached = await cache.get(key);
-    return cached ? JSON.parse(cached) : null;
+    const result = await cache.get(key);
+    return result.value ? JSON.parse(result.value) : null;
   } catch {
     return null; // Silent failure - graceful degradation
   }

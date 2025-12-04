@@ -156,48 +156,88 @@ export class RedisCache implements CacheClient, LookupCache {
   }
 
   /**
-   * Get a value from the cache
+   * Hard TTL for Redis key expiration (1 week)
+   * 
+   * This is just to prevent infinite Redis growth for abandoned entries.
+   * The soft TTL (expiresAt in envelope) determines staleness for background
+   * refresh. Since we always return stale data and refresh in background,
+   * this only matters for entries that are never accessed again.
+   */
+  private readonly HARD_TTL_SECONDS = 7 * 24 * 60 * 60; // 1 week
+
+  /**
+   * Get a value from the cache with stale-while-revalidate support
+   * 
+   * Returns both the value and whether it's stale. By default, stale values
+   * are returned - callers should trigger background refresh when isStale=true.
    * 
    * @param key Cache key (will be prefixed with jml:)
-   * @returns Cached value or null if not found or on error
+   * @param options.rejectStale If true, returns null for stale values (bypasses SWR)
+   * @returns CacheResult with value and isStale flag
    */
-  async get(key: string): Promise<string | null> {
+  async get(key: string, options?: { rejectStale?: boolean }): Promise<{ value: string | null; isStale: boolean }> {
     try {
-      // With lazyConnect + enableOfflineQueue, first command triggers connection
-      // and queues until connected
-      const result = await this.client.get(this.keyPrefix + key);
-      // Mark as available after successful operation
+      const raw = await this.client.get(this.keyPrefix + key);
       if (!this.isAvailable) {
         this.isAvailable = true;
       }
-      return result;
+      
+      if (!raw) {
+        return { value: null, isStale: false };
+      }
+
+      // Try to parse as SWR envelope {value, expiresAt}
+      // Fall back to treating as raw value for backward compatibility
+      try {
+        const envelope = JSON.parse(raw) as { value: string; expiresAt: number };
+        if (envelope.value !== undefined && envelope.expiresAt !== undefined) {
+          const isStale = Date.now() > envelope.expiresAt;
+          
+          // If rejectStale is true, treat stale as cache miss
+          if (isStale && options?.rejectStale) {
+            return { value: null, isStale: false };
+          }
+          
+          return { value: envelope.value, isStale };
+        }
+      } catch {
+        // Not JSON or not an envelope - treat as legacy raw value (always fresh)
+      }
+      
+      // Legacy format: raw value without envelope (treat as fresh)
+      return { value: raw, isStale: false };
     } catch (err) {
       this.logger.warn('Cache get failed:', err);
-      // Mark as unavailable on failure
       this.isAvailable = false;
-      return null;
+      return { value: null, isStale: false };
     }
   }
 
   /**
-   * Set a value in the cache with TTL
+   * Set a value in the cache with soft TTL (supports stale-while-revalidate)
+   * 
+   * Stores value with soft expiry timestamp. After soft TTL, value is "stale"
+   * but still returned - callers should trigger background refresh.
+   * Hard TTL is 24 hours just to prevent infinite Redis growth.
    * 
    * @param key Cache key (will be prefixed with jml:)
    * @param value Value to store
-   * @param ttlSeconds Time to live in seconds
+   * @param ttlSeconds Soft TTL - value is "stale" after this but still usable
    */
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {
     try {
-      // With lazyConnect + enableOfflineQueue, first command triggers connection
-      // and queues until connected
-      await this.client.setex(this.keyPrefix + key, ttlSeconds, value);
-      // Mark as available after successful operation
+      // Store as envelope with soft expiry timestamp
+      const envelope = {
+        value,
+        expiresAt: Date.now() + (ttlSeconds * 1000),
+      };
+      // Hard TTL is 24h - just for Redis cleanup, not for staleness
+      await this.client.setex(this.keyPrefix + key, this.HARD_TTL_SECONDS, JSON.stringify(envelope));
       if (!this.isAvailable) {
         this.isAvailable = true;
       }
     } catch (err) {
       this.logger.warn('Cache set failed:', err);
-      // Mark as unavailable on failure
       this.isAvailable = false;
     }
   }
@@ -349,31 +389,31 @@ export class RedisCache implements CacheClient, LookupCache {
    * @param projectKey JIRA project key
    * @param fieldType Type of lookup field
    * @param issueType Optional issue type for issuetype-specific lookups
-   * @returns Cached lookup array or null if not found/on error
+   * @returns Object with value (array or null) and isStale flag
    * 
    * @example
-   * const priorities = await cache.getLookup('TEST', 'priority');
-   * const components = await cache.getLookup('TEST', 'component', 'Story');
+   * const { value, isStale } = await cache.getLookup('TEST', 'priority');
+   * const { value, isStale } = await cache.getLookup('TEST', 'component', 'Story');
    */
   async getLookup(
     projectKey: string,
     fieldType: string,
     issueType?: string
-  ): Promise<unknown[] | null> {
+  ): Promise<{ value: unknown[] | null; isStale: boolean }> {
     const key = this.buildLookupKey(projectKey, fieldType, issueType);
-    // Use CacheClient.get() for consistent error handling and graceful degradation
     const result = await this.get(key);
     
-    if (!result) {
-      return null; // Cache miss
+    if (!result.value) {
+      return { value: null, isStale: false }; // Cache miss
     }
 
-    // Parse JSON (errors caught by get() method)
+    // Parse JSON
     try {
-      return JSON.parse(result) as unknown[];
+      const parsed = JSON.parse(result.value) as unknown[];
+      return { value: parsed, isStale: result.isStale };
     } catch (err) {
       this.logger.warn('Cache getLookup JSON parse failed:', err);
-      return null;
+      return { value: null, isStale: false };
     }
   }
 

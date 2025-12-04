@@ -130,7 +130,7 @@ describe('PriorityConverter', () => {
         { id: '20', name: 'Major' },
       ];
 
-      mockCache.getLookup.mockResolvedValue(cachedPriorities);
+      mockCache.getLookup.mockResolvedValue({ value: cachedPriorities, isStale: false });
 
       const schemaWithoutAllowed: FieldSchema = {
         ...fieldSchema,
@@ -144,7 +144,7 @@ describe('PriorityConverter', () => {
     });
 
     it('should cache priorities after fetching from allowedValues', async () => {
-      mockCache.getLookup.mockResolvedValue(null); // Cache miss
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false }); // Cache miss
 
       await convertPriorityType('High', fieldSchema, context);
 
@@ -214,7 +214,7 @@ describe('PriorityConverter', () => {
     });
 
     it('should throw ValidationError if no allowedValues and no cache', async () => {
-      mockCache.getLookup.mockResolvedValue(null);
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
 
       const schemaWithoutAllowed: FieldSchema = {
         ...fieldSchema,
@@ -267,7 +267,7 @@ describe('PriorityConverter', () => {
     });
 
     it('should handle empty allowedValues array', async () => {
-      mockCache.getLookup.mockResolvedValue(null);
+      mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
 
       const emptySchema: FieldSchema = {
         ...fieldSchema,

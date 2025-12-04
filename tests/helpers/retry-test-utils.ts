@@ -19,11 +19,12 @@ export function setupManifestInCache(
   manifest: BulkManifest
 ): void {
   // Mock to handle the `bulk:manifest:` prefix used by ManifestStorage
+  // Returns { value, isStale } format matching new cache API
   mockCache.get = jest.fn().mockImplementation((key: string) => {
     if (key.startsWith('bulk:manifest:')) {
-      return Promise.resolve(JSON.stringify(manifest));
+      return Promise.resolve({ value: JSON.stringify(manifest), isStale: false });
     }
-    return Promise.resolve(null);
+    return Promise.resolve({ value: null, isStale: false });
   });
 }
 

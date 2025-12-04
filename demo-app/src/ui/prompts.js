@@ -84,7 +84,7 @@ export async function showMainMenu() {
         { name: '📄 Hierarchy Bulk Import: CSV Example', value: 'hierarchy-csv' },
         { name: '📝 Hierarchy Bulk Import: YAML Example', value: 'hierarchy-yaml' },
         { name: '📚 Field Type Reference (Browse Converters)', value: 'field-reference' },
-        { name: '💡 User Ambiguity Policy Explorer', value: 'user-ambiguity' },
+        { name: '🔍 User Lookup & Fuzzy Matching Explorer', value: 'user-ambiguity' },
         new inquirer.Separator(),
         { name: '🧪 Integration Tests', value: null, disabled: true },
         { name: '   🏗️  Hierarchy Bulk Creation (E4-S13)', value: 'integration-hierarchy' },

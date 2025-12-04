@@ -12,10 +12,20 @@ export interface ConverterRegistryLike {
 }
 
 /**
+ * Result from getLookup - includes staleness info for stale-while-revalidate
+ */
+export interface LookupCacheResult {
+  /** The cached value, or null if not found */
+  value: unknown[] | null;
+  /** True if the value exists but is past its soft expiry (stale) */
+  isStale: boolean;
+}
+
+/**
  * Minimal cache interface for lookup converters
  */
 export interface LookupCache {
-  getLookup(projectKey: string, fieldType: string, issueType?: string): Promise<unknown[] | null>;
+  getLookup(projectKey: string, fieldType: string, issueType?: string): Promise<LookupCacheResult>;
   setLookup(projectKey: string, fieldType: string, data: unknown[], issueType?: string): Promise<void>;
 }
 
@@ -23,7 +33,7 @@ export interface LookupCache {
  * Minimal generic cache interface for converters
  */
 export interface GenericCache {
-  get(key: string): Promise<string | null>;
+  get(key: string): Promise<{ value: string | null; isStale: boolean }>;
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
 }
 

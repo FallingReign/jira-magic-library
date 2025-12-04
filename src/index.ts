@@ -10,7 +10,7 @@
 
 // Main JML class
 export { JML } from './jml.js';
-export type { JMLConfig } from './types/config.js';
+export type { JMLConfig, AmbiguityPolicyConfig, FuzzyMatchConfig } from './types/config.js';
 export type {
   IssuesAPI,
   IssuesCreateInput,

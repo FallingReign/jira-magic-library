@@ -48,10 +48,11 @@ async function main() {
     config = await setupCredentials();
   }
 
-  // Test connection
+  // Test connection and create shared JML instance
   const spinner = ora('Testing connection to JIRA...').start();
+  let jml;
   try {
-    const jml = new JML({
+    jml = new JML({
       baseUrl: config.baseUrl,
       auth: { token: config.token },
       apiVersion: config.apiVersion || 'v2',
@@ -59,7 +60,7 @@ async function main() {
     });
 
     const serverInfo = await jml.validateConnection();
-    await jml.disconnect();
+    // Note: Don't disconnect here - keep the connection for the entire session
 
     spinner.succeed(`Connected to JIRA ${serverInfo.version} (${serverInfo.deploymentType})`);
     success(`Base URL: ${config.baseUrl}\n`);
@@ -69,6 +70,21 @@ async function main() {
     console.log('\nPlease check your credentials and try again.\n');
     process.exit(1);
   }
+
+  // Ensure cleanup on exit
+  const cleanup = async () => {
+    if (jml) {
+      await jml.disconnect().catch(() => {});
+    }
+  };
+  process.on('SIGINT', async () => {
+    await cleanup();
+    process.exit(0);
+  });
+  process.on('SIGTERM', async () => {
+    await cleanup();
+    process.exit(0);
+  });
 
   // Main application loop
   let running = true;
@@ -149,7 +165,7 @@ async function main() {
 
       case 'user-ambiguity':
         clear();
-        await runUserAmbiguityDemo(config);
+        await runUserAmbiguityDemo(config, jml);
         clear();
         break;
 
@@ -198,6 +214,8 @@ async function main() {
     }
   }
 
+  // Clean disconnect
+  await cleanup();
   console.log('\n👋 Thanks for trying JIRA Magic Library!\n');
   console.log('Learn more: https://github.com/your-org/jira-magic-library\n');
   process.exit(0);

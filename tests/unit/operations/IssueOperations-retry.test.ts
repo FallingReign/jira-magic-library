@@ -120,7 +120,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
     it('should throw error if manifest not found', async () => {
       const manifestId = 'bulk-nonexistent';
-      mockCache.get = jest.fn().mockResolvedValue(null);
+      mockCache.get = jest.fn().mockResolvedValue({ value: null, isStale: false });
 
       await expect(issueOps.create(testInput.slice(0, 1), { retry: manifestId })).rejects.toThrow(
         'Manifest bulk-nonexistent not found or expired'
@@ -129,7 +129,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
     it('should throw error if manifest is expired', async () => {
       const manifestId = 'bulk-expired';
-      mockCache.get = jest.fn().mockResolvedValue(null);
+      mockCache.get = jest.fn().mockResolvedValue({ value: null, isStale: false });
 
       await expect(issueOps.create(testInput.slice(0, 1), { retry: manifestId })).rejects.toThrow(
         'Manifest bulk-expired not found or expired'

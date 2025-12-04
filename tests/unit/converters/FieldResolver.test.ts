@@ -1257,11 +1257,17 @@ describe('FieldResolver', () => {
       });
 
       it('should use cache for project list', async () => {
-        // Create mock cache
+        // Create mock cache with SWR support
         const mockCache = {
           get: jest.fn().mockResolvedValue(JSON.stringify([
             { id: '10000', key: 'CACHED', name: 'Cached Project' },
           ])),
+          get: jest.fn().mockResolvedValue({
+            value: JSON.stringify([
+              { id: '10000', key: 'CACHED', name: 'Cached Project' },
+            ]),
+            isStale: false,
+          }),
           set: jest.fn().mockResolvedValue(undefined),
         };
         const cachedClient = {
@@ -1341,7 +1347,7 @@ describe('FieldResolver', () => {
       it('should handle cache write errors gracefully', async () => {
         // Create mock cache that throws on write
         const mockCache = {
-          get: jest.fn().mockResolvedValue(null), // Cache miss
+          get: jest.fn().mockResolvedValue({ value: null, isStale: false }), // Cache miss
           set: jest.fn().mockRejectedValue(new Error('Cache write error')),
         };
         const clientWithCache = {
