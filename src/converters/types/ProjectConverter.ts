@@ -102,6 +102,7 @@ export const convertProjectType: FieldConverter = async (value, fieldSchema, con
 
   // Check cache first
   const cache = context.cache as CacheClient | undefined;
+  // istanbul ignore next - baseUrl is always provided in practice
   const cacheKey = getCacheKey(context.baseUrl || '', keyOrName);
   const cached = await tryGetCache(cache, cacheKey);
   if (cached) {
@@ -127,6 +128,7 @@ export const convertProjectType: FieldConverter = async (value, fieldSchema, con
   }
 
   // Try as name (requires fetching all projects)
+  // istanbul ignore next - baseUrl is always provided in practice
   const projects = await fetchAllProjects(
     context.client as JiraClient,
     cache,

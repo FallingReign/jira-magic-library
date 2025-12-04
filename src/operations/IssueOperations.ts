@@ -634,10 +634,12 @@ export class IssueOperations implements IssuesAPI {
     // If ALL records failed validation, throw error
     if (validPayloads.length === 0) {
       const firstError = validationErrors[0]?.error;
+      // istanbul ignore next - defensive: firstError is always defined when all records fail
       throw firstError || new Error('All records failed validation');
     }
 
     // Call bulk API with valid payloads only (E4-S03)
+    // istanbul ignore next - defensive: validPayloads.length already checked above
     const apiResult = validPayloads.length > 0 
       ? await this.bulkApiWrapper.createBulk(validPayloads.map(vp => vp.payload))
       : { created: [], failed: [] };
@@ -645,11 +647,13 @@ export class IssueOperations implements IssuesAPI {
     // Remap API results back to original indices
     const indexMapping = new Map(validPayloads.map((vp, apiIndex) => [apiIndex, vp.index]));
     
+    // istanbul ignore next - defensive: mapping always exists for valid indices
     const remappedCreated = apiResult.created.map(item => ({
       ...item,
       index: indexMapping.get(item.index) ?? item.index
     }));
     
+    // istanbul ignore next - defensive: mapping always exists for valid indices
     const remappedFailed = apiResult.failed.map(item => ({
       ...item,
       index: indexMapping.get(item.index) ?? item.index

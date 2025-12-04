@@ -707,13 +707,16 @@ describe('FieldResolver', () => {
     let mockParentFieldDiscovery: { getParentFieldKey: jest.Mock; getParentFieldInfo: jest.Mock };
     let mockClient: { get: jest.Mock };
     let mockCache: any;
-    let mockHierarchyDiscovery: any;
 
     beforeEach(() => {
       // Create mock ParentFieldDiscovery
       mockParentFieldDiscovery = {
         getParentFieldKey: jest.fn(),
-        getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'customfield_10100', name: 'Parent Link' }),
+        getParentFieldInfo: jest.fn().mockResolvedValue({ 
+          key: 'customfield_10100', 
+          name: 'Parent Link',
+          plugin: 'com.atlassian.jpo:jpo-custom-field-parent'
+        }),
       };
 
       // Create mock JiraClient
@@ -721,21 +724,19 @@ describe('FieldResolver', () => {
         get: jest.fn(),
       };
 
-      // Create mock cache and hierarchy discovery
+      // Create mock cache
       mockCache = {};
-      mockHierarchyDiscovery = {};
 
       // Recreate resolver with all dependencies
       resolver = new FieldResolver(
         mockSchemaDiscovery,
         mockParentFieldDiscovery as any,
         mockClient as any,
-        mockCache,
-        mockHierarchyDiscovery
+        mockCache
       );
     });
 
-    it('should pass issue type name to getParentFieldKey when resolving parent synonym', async () => {
+    it('should pass issue type name to getParentFieldInfo when resolving parent synonym', async () => {
       // Mock schema with parent field
       const schemaWithParent = {
         ...mockSchema,
@@ -752,17 +753,14 @@ describe('FieldResolver', () => {
       };
       mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue(schemaWithParent);
 
-      // Mock parent field discovery to return SuperEpic's parent field
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10100');
-
-      // Mock issue type API response
-      mockClient.get.mockResolvedValueOnce({
-        values: [
-          { id: '10001', name: 'SuperEpic' }
-        ]
+      // Mock parent field discovery to return SuperEpic's parent field info with plugin
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ 
+        key: 'customfield_10100', 
+        name: 'Parent Link',
+        plugin: 'com.atlassian.jpo:jpo-custom-field-parent'
       });
 
-      // Mock parent issue GET response (for ParentLinkResolver)
+      // Mock parent issue GET response (for ParentLinkResolver key validation)
       mockClient.get.mockResolvedValueOnce({
         key: 'ZUL-100',
         fields: {
@@ -773,12 +771,6 @@ describe('FieldResolver', () => {
         }
       });
 
-      // Mock hierarchy discovery for validation
-      mockHierarchyDiscovery.getHierarchy = jest.fn().mockResolvedValue([
-        { id: 4, title: 'Container', issueTypeIds: ['10002'] },
-        { id: 3, title: 'SuperEpic', issueTypeIds: ['10001'] }
-      ]);
-
       const input = {
         'Summary': 'Test SuperEpic',
         'Parent': 'ZUL-100', // Parent synonym
@@ -786,16 +778,15 @@ describe('FieldResolver', () => {
 
       await resolver.resolveFields('ZUL', 'SuperEpic', input);
 
-      // Verify getParentFieldKey was called with BOTH project key AND issue type name
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledWith('ZUL', 'SuperEpic');
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledTimes(1);
+      // Verify getParentFieldInfo was called with project key AND issue type name
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('ZUL', 'SuperEpic');
     });
 
     it('should throw ConfigurationError with project key when parent field not found', async () => {
       mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue(mockSchema);
 
       // Mock parent field discovery to return null (no parent field found)
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue(null);
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue(null);
 
       const input = {
         'Summary': 'Test Task',
@@ -810,8 +801,8 @@ describe('FieldResolver', () => {
         .rejects
         .toThrow(/Project ZUL does not have a parent field configured/);
       
-      // Verify getParentFieldKey was called with issue type
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledWith('ZUL', 'SimpleTask');
+      // Verify getParentFieldInfo was called with issue type
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('ZUL', 'SimpleTask');
     });
 
     it('should resolve different parent fields for Epic vs Story in same project', async () => {
@@ -847,26 +838,25 @@ describe('FieldResolver', () => {
 
       // First call (Epic)
       mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(epicSchema);
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValueOnce('customfield_10100');
-      
-      // Mock issue type API response for Epic
-      mockClient.get.mockResolvedValueOnce({
-        values: [{ id: '10002', name: 'Epic' }]
+      // getParentFieldInfo is called twice: once for synonym check, once for resolution
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValueOnce({
+        key: 'customfield_10100',
+        name: 'Parent Link',
+        plugin: 'com.atlassian.jpo:jpo-custom-field-parent'
+      });
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValueOnce({
+        key: 'customfield_10100',
+        name: 'Parent Link',
+        plugin: 'com.atlassian.jpo:jpo-custom-field-parent'
       });
       
-      // Mock parent issue GET response for Epic
+      // Mock parent issue GET response for Epic (key validation)
       mockClient.get.mockResolvedValueOnce({
         key: 'PROJ-1',
         fields: {
           issuetype: { id: '10003', name: 'SuperEpic' }
         }
       });
-      
-      // Mock hierarchy for Epic
-      mockHierarchyDiscovery.getHierarchy = jest.fn().mockResolvedValueOnce([
-        { id: 3, title: 'SuperEpic', issueTypeIds: ['10003'] },
-        { id: 2, title: 'Epic', issueTypeIds: ['10002'] }
-      ]);
 
       const epicInput = {
         'Summary': 'Test Epic',
@@ -877,26 +867,25 @@ describe('FieldResolver', () => {
 
       // Second call (Story)
       mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(storySchema);
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValueOnce('customfield_10014');
-      
-      // Mock issue type API response for Story
-      mockClient.get.mockResolvedValueOnce({
-        values: [{ id: '10001', name: 'Story' }]
+      // getParentFieldInfo is called twice: once for synonym check, once for resolution
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValueOnce({
+        key: 'customfield_10014',
+        name: 'Epic Link',
+        plugin: 'com.pyxis.greenhopper.jira:gh-epic-link'
+      });
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValueOnce({
+        key: 'customfield_10014',
+        name: 'Epic Link',
+        plugin: 'com.pyxis.greenhopper.jira:gh-epic-link'
       });
       
-      // Mock parent issue GET response for Story
+      // Mock parent issue GET response for Story (key validation)
       mockClient.get.mockResolvedValueOnce({
         key: 'PROJ-2',
         fields: {
           issuetype: { id: '10002', name: 'Epic' }
         }
       });
-      
-      // Mock hierarchy for Story
-      mockHierarchyDiscovery.getHierarchy = jest.fn().mockResolvedValueOnce([
-        { id: 2, title: 'Epic', issueTypeIds: ['10002'] },
-        { id: 1, title: 'Story', issueTypeIds: ['10001'] }
-      ]);
 
       const storyInput = {
         'Summary': 'Test Story',
@@ -909,9 +898,9 @@ describe('FieldResolver', () => {
       expect(epicResult).toHaveProperty('customfield_10100', 'PROJ-1');
       expect(storyResult).toHaveProperty('customfield_10014', 'PROJ-2');
 
-      // Verify getParentFieldKey was called with correct issue types
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenNthCalledWith(1, 'PROJ', 'Epic');
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenNthCalledWith(2, 'PROJ', 'Story');
+      // Verify getParentFieldInfo was called with correct issue types
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'Epic');
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'Story');
     });
 
     it('should throw ConfigurationError when parent field discovery not configured', async () => {
@@ -937,11 +926,14 @@ describe('FieldResolver', () => {
         mockSchemaDiscovery,
         mockParentFieldDiscovery as any,
         undefined, // No client
-        mockCache,
-        mockHierarchyDiscovery
+        mockCache
       );
 
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValueOnce('customfield_10014');
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValueOnce({
+        key: 'customfield_10014',
+        name: 'Parent Link',
+        plugin: 'com.atlassian.jpo:jpo-custom-field-parent'
+      });
 
       const input = {
         parent: 'PROJ-1',
@@ -953,35 +945,8 @@ describe('FieldResolver', () => {
       ).rejects.toThrow('Required dependencies not configured for parent link resolution');
     });
 
-    it('should throw ConfigurationError when issue type not found in project', async () => {
-      const resolver = new FieldResolver(
-        mockSchemaDiscovery,
-        mockParentFieldDiscovery as any,
-        mockClient as any,
-        mockCache,
-        mockHierarchyDiscovery
-      );
-
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValueOnce('customfield_10014');
-      
-      // Mock API returning issue types without the requested one
-      mockClient.get.mockResolvedValueOnce({
-        values: [
-          { id: '10001', name: 'Bug' },
-          { id: '10002', name: 'Epic' }
-          // 'Story' not in list
-        ]
-      });
-
-      const input = {
-        parent: 'PROJ-1',
-        summary: 'Test'
-      };
-
-      await expect(
-        resolver.resolveFields('PROJ', 'Story', input)
-      ).rejects.toThrow("Issue type 'Story' not found in project 'PROJ'");
-    });
+    // NOTE: This test was removed - issue type lookup is no longer needed
+    // since we now pass issue type NAME (not ID) to resolveParentLink
   });
 
   describe('Additional Branch Coverage', () => {
@@ -1001,11 +966,10 @@ describe('FieldResolver', () => {
       // Setup mocks for parent field resolution
       const mockParentFieldDiscovery = {
         getParentFieldKey: jest.fn(),
-        getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'parent', name: 'Parent' }),
+        getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'parent', name: 'Parent', plugin: undefined }),
       };
       const mockClient = { get: jest.fn() };
       const mockCache = { get: jest.fn(), set: jest.fn() }; // Required for parent link resolution
-      const mockHierarchyDiscovery = { getHierarchy: jest.fn() };
 
       // Create schema with issuelink type parent field (standard JIRA parent)
       const schemaWithIssueLinkParent = {
@@ -1027,22 +991,13 @@ describe('FieldResolver', () => {
         mockSchemaDiscovery,
         mockParentFieldDiscovery as any,
         mockClient as any,
-        mockCache as any, // cache required
-        mockHierarchyDiscovery as any
+        mockCache as any
       );
 
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('parent');
-      mockClient.get.mockResolvedValueOnce({
-        values: [{ id: '10001', name: 'Sub-task' }]
-      });
       mockClient.get.mockResolvedValueOnce({
         key: 'PROJ-100',
         fields: { issuetype: { id: '10002', name: 'Story' } }
       });
-      mockHierarchyDiscovery.getHierarchy.mockResolvedValue([
-        { id: 1, title: 'Story', issueTypeIds: ['10002'] },
-        { id: 0, title: 'Sub-task', issueTypeIds: ['10001'] }
-      ]);
 
       const input = {
         summary: 'Test Sub-task',
@@ -1105,9 +1060,7 @@ describe('FieldResolver', () => {
       resolverWithClient = new FieldResolver(
         mockSchemaDiscovery,
         undefined, // parentFieldDiscovery
-        mockClient as any, // client for API calls
-        undefined, // cache
-        undefined  // hierarchyDiscovery
+        mockClient as any // client for API calls
       );
     });
 
@@ -1613,6 +1566,51 @@ describe('FieldResolver', () => {
         await expect(resolverWithClient.resolveFieldsWithExtraction(input))
           .rejects.toThrow(/Issue type 'true' not found/);
       });
+
+      it('should throw error when project value cannot be extracted', async () => {
+        const input = {
+          // Object with nested value - extractFieldValue preserves this (Rule 3)
+          // Then findSystemField can't extract key/name/id, returns null
+          project: { nested: { key: 'ENG' } },
+          issuetype: { name: 'Bug' },
+          summary: 'Test',
+        };
+
+        // findSystemField returns extracted: null when no extractable property exists
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('Project value must be a string or object with key, name, id, or value property');
+      });
+
+      it('should throw error when issueType value cannot be extracted', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          // Object with nested value - extractFieldValue preserves this (Rule 3)
+          // Then findSystemField can't extract key/name/id, returns null
+          issuetype: { nested: { value: 'Bug' } },
+          summary: 'Test',
+        };
+
+        // findSystemField returns extracted: null when no extractable property exists
+        await expect(resolverWithClient.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('Issue Type value must be a string or object with key, name, id, or value property');
+      });
+
+      it('should throw error when resolving issue type by name without client', async () => {
+        // Need to use project ID format which also fails without client
+        // The issue type resolution check is unreachable without client
+        // because project resolution happens first and also needs client
+        // This is actually dead code - the !this.client check in resolveIssueType
+        // can never be reached because project resolution would fail first
+        // Let's verify the project resolution fails before issue type resolution
+        const input = {
+          project: 'ENG', // String needs resolution via client
+          issuetype: 'Bug',
+          summary: 'Test',
+        };
+
+        await expect(resolver.resolveFieldsWithExtraction(input))
+          .rejects.toThrow('JiraClient required for project resolution');
+      });
     });
 
     describe('Field passthrough for JIRA format', () => {
@@ -1640,6 +1638,99 @@ describe('FieldResolver', () => {
 
         // IssueType should be preserved in resolved fields
         expect(result.fields).toHaveProperty('issuetype', { name: 'Bug' });
+      });
+    });
+
+    describe('Epic Name Auto-Population', () => {
+      it('should auto-populate Epic Name from Summary when creating Epic', async () => {
+        // Setup schema with Epic Name field
+        const epicSchema: ProjectSchema = {
+          projectKey: 'ENG',
+          issueTypeName: 'Epic',
+          fields: {
+            summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } },
+            project: { id: 'project', name: 'Project', type: 'project', required: true, schema: { type: 'project' } },
+            issuetype: { id: 'issuetype', name: 'Issue Type', type: 'issuetype', required: true, schema: { type: 'issuetype' } },
+            customfield_10104: { id: 'customfield_10104', name: 'Epic Name', type: 'string', required: true, schema: { type: 'string' } },
+          },
+        };
+        mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue(epicSchema);
+
+        const input = {
+          project: { key: 'ENG' },  // Object with key doesn't need API resolution
+          issuetype: { name: 'Epic' },
+          summary: 'My Epic Summary',
+        };
+
+        // Use resolver without client since project is already in object form
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // Epic Name should be auto-populated with Summary value
+        expect(result.fields).toHaveProperty('customfield_10104', 'My Epic Summary');
+      });
+
+      it('should not override Epic Name if already provided', async () => {
+        const epicSchema: ProjectSchema = {
+          projectKey: 'ENG',
+          issueTypeName: 'Epic',
+          fields: {
+            summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } },
+            project: { id: 'project', name: 'Project', type: 'project', required: true, schema: { type: 'project' } },
+            issuetype: { id: 'issuetype', name: 'Issue Type', type: 'issuetype', required: true, schema: { type: 'issuetype' } },
+            customfield_10104: { id: 'customfield_10104', name: 'Epic Name', type: 'string', required: true, schema: { type: 'string' } },
+          },
+        };
+        mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue(epicSchema);
+
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { name: 'Epic' },
+          summary: 'My Epic Summary',
+          'Epic Name': 'Custom Epic Name',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // Should keep the provided Epic Name, not override with Summary
+        expect(result.fields).toHaveProperty('customfield_10104', 'Custom Epic Name');
+      });
+
+      it('should not auto-populate Epic Name for non-Epic issue types', async () => {
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { name: 'Bug' },
+          summary: 'My Bug Summary',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // Bug should not have Epic Name auto-populated
+        expect(result.fields).not.toHaveProperty('customfield_10104');
+      });
+
+      it('should handle Epic with no Epic Name field in schema', async () => {
+        // Schema without Epic Name field
+        const epicSchemaNoEpicName: ProjectSchema = {
+          projectKey: 'ENG',
+          issueTypeName: 'Epic',
+          fields: {
+            summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } },
+            project: { id: 'project', name: 'Project', type: 'project', required: true, schema: { type: 'project' } },
+            issuetype: { id: 'issuetype', name: 'Issue Type', type: 'issuetype', required: true, schema: { type: 'issuetype' } },
+          },
+        };
+        mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue(epicSchemaNoEpicName);
+
+        const input = {
+          project: { key: 'ENG' },
+          issuetype: { name: 'Epic' },
+          summary: 'My Epic Summary',
+        };
+
+        const result = await resolver.resolveFieldsWithExtraction(input);
+
+        // Should not fail, just not add Epic Name
+        expect(result.fields).not.toHaveProperty('customfield_10104');
       });
     });
   });

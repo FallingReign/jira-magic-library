@@ -153,15 +153,15 @@ async function buildJpoHierarchyPayload(jml, projectKey, timestamp) {
 
 function buildFallbackHierarchy(projectKey, timestamp) {
   const epicUid = `epic-${timestamp}`;
-  const story1Uid = `story1-${timestamp}`;
-  const story2Uid = `story2-${timestamp}`;
+  const task1Uid = `task1-${timestamp}`;
+  const task2Uid = `task2-${timestamp}`;
 
   const subtasks = Array.from({ length: 10 }).map((_, i) => ({
     uid: `subtask-${i + 1}-${timestamp}`,
     Project: projectKey,
     'Issue Type': 'Sub-task',
     Summary: `[Demo] Sub-task ${i + 1} ${timestamp}`,
-    Parent: i < 5 ? story1Uid : story2Uid,
+    Parent: i < 5 ? task1Uid : task2Uid,
   }));
 
   const payload = [
@@ -173,17 +173,17 @@ function buildFallbackHierarchy(projectKey, timestamp) {
       'Epic Name': `[Demo] Epic ${timestamp}`,
     },
     {
-      uid: story1Uid,
+      uid: task1Uid,
       Project: projectKey,
-      'Issue Type': 'Story',
-      Summary: `[Demo] Story 1 ${timestamp}`,
+      'Issue Type': 'Task',
+      Summary: `[Demo] Task 1 ${timestamp}`,
       Parent: epicUid,
     },
     {
-      uid: story2Uid,
+      uid: task2Uid,
       Project: projectKey,
-      'Issue Type': 'Story',
-      Summary: `[Demo] Story 2 ${timestamp}`,
+      'Issue Type': 'Task',
+      Summary: `[Demo] Task 2 ${timestamp}`,
       Parent: epicUid,
     },
     ...subtasks,
@@ -191,7 +191,7 @@ function buildFallbackHierarchy(projectKey, timestamp) {
 
   const levelStats = [
     { name: 'Epic', count: 1, jpoLevelId: 'fallback', startIndex: 0, endIndex: 1 },
-    { name: 'Story', count: 2, jpoLevelId: 'fallback', startIndex: 1, endIndex: 3 },
+    { name: 'Task', count: 2, jpoLevelId: 'fallback', startIndex: 1, endIndex: 3 },
     { name: 'Sub-task', count: 10, jpoLevelId: 'fallback', startIndex: 3, endIndex: payload.length },
   ];
 
@@ -200,7 +200,7 @@ function buildFallbackHierarchy(projectKey, timestamp) {
     levelStats,
     summaryLines: [
       `Project: ${projectKey}`,
-      'Using fallback hierarchy: Epic → Story → Sub-task',
+      'Using fallback hierarchy: Epic → Task → Sub-task',
       `Total issues in payload: ${payload.length}`,
     ],
   };

@@ -487,10 +487,10 @@ describe('ParentFieldDiscovery', () => {
       const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
       const result = await discovery.getParentFieldInfo('TEST', 'Story');
 
-      expect(result).toEqual({ key: 'customfield_10014', name: 'Parent Link' });
+      expect(result).toEqual({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' });
       expect(cache.set).toHaveBeenCalledWith(
         'hierarchy:TEST:Story:parent-field-info',
-        JSON.stringify({ key: 'customfield_10014', name: 'Parent Link' }),
+        JSON.stringify({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' }),
         3600
       );
     });
@@ -501,7 +501,8 @@ describe('ParentFieldDiscovery', () => {
       const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
       const result = await discovery.getParentFieldInfo('TEST', 'Sub-task');
 
-      expect(result).toEqual({ key: 'parent', name: 'parent' });
+      // Sub-tasks use standard parent field, no plugin
+      expect(result).toEqual({ key: 'parent', name: 'parent', plugin: undefined });
       expect(schemaDiscovery.getFieldsForIssueType).not.toHaveBeenCalled();
       expect(cache.set).toHaveBeenCalledWith(
         'hierarchy:TEST:Sub-task:parent-field-info',
@@ -544,7 +545,7 @@ describe('ParentFieldDiscovery', () => {
       const discovery = new ParentFieldDiscovery(schemaDiscovery, cache, logger);
       const result = await discovery.getParentFieldInfo('TEST', 'Story');
 
-      expect(result).toEqual({ key: 'customfield_10014', name: 'Epic Link' });
+      expect(result).toEqual({ key: 'customfield_10014', name: 'Epic Link', plugin: 'com.pyxis.greenhopper.jira:gh-epic-link' });
     });
   });
 });

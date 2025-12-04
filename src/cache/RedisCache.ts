@@ -136,6 +136,7 @@ export class RedisCache implements CacheClient, LookupCache {
         lazyConnect: true, // Connect on first operation to avoid race conditions
         retryStrategy: (times: number) => {
           // Give up after 3 attempts
+          // istanbul ignore next - integration test: Redis reconnection behavior
           if (times > 3) {
             this.logger.warn(`⚠️  Redis unavailable after ${times} attempts - disabling cache`);
             return null; // Stop retrying

@@ -17,7 +17,7 @@ export async function runHierarchyDemo(config) {
   showHeader('Issue Hierarchy Demo (E3-S09)');
 
   info('This demo showcases parent-child relationships in JIRA:\n');
-  console.log('  • Epic → Story → Subtask hierarchy');
+  console.log('  • Epic → Task → Subtask hierarchy');
   console.log('  • Parent link with exact key or summary search');
   console.log('  • Parent field synonyms ("Parent", "Epic Link", "Epic")');
   console.log('  • Multi-level hierarchies (5+ levels deep)');
@@ -31,8 +31,8 @@ export async function runHierarchyDemo(config) {
       choices: [
         { name: '1. 🔎 Discover Parent Fields (read-only)', value: 'discover-parents' },
         new inquirer.Separator(),
-        { name: '2. 📋 Epic with Stories (exact keys)', value: 'epic-stories' },
-        { name: '3. ✅ Story with Subtasks (parent synonyms)', value: 'story-subtasks' },
+        { name: '2. 📋 Epic with Tasks (exact keys)', value: 'epic-tasks' },
+        { name: '3. ✅ Task with Subtasks (parent synonyms)', value: 'task-subtasks' },
         { name: '4. 🏗️  Multi-level Hierarchy (up to 6 levels deep)', value: 'multi-level' },
         { name: '5. 🔍 Parent Link by Summary Search', value: 'summary-search' },
         { name: '6. ⚙️  Custom Parent Synonyms (config)', value: 'custom-synonyms' },
@@ -81,11 +81,11 @@ export async function runHierarchyDemo(config) {
 
   try {
     switch (example) {
-      case 'epic-stories':
-        await demoEpicWithStories(jml, config);
+      case 'epic-tasks':
+        await demoEpicWithTasks(jml, config);
         break;
-      case 'story-subtasks':
-        await demoStoryWithSubtasks(jml, config);
+      case 'task-subtasks':
+        await demoTaskWithSubtasks(jml, config);
         break;
       case 'multi-level':
         await demoMultiLevelHierarchy(jml, config);
@@ -215,7 +215,7 @@ async function demoDiscoverParentFields(jml, config) {
 
     showCodeExample(`
 // Get parent field for a specific issue type
-const parentField = await jml.getParentField('${projectKey}', 'Story');
+const parentField = await jml.getParentField('${projectKey}', 'Task');
 
 if (parentField) {
   console.log(\`Field: \${parentField.name} (\${parentField.key})\`);
@@ -224,8 +224,8 @@ if (parentField) {
   // Use the discovered field name in issue creation:
   await jml.issues.create({
     Project: '${projectKey}',
-    'Issue Type': 'Story',
-    Summary: 'My Story',
+    'Issue Type': 'Task',
+    Summary: 'My Task',
     [parentField.name]: 'EPIC-123',  // Discovered field name
     // OR simply use:
     Parent: 'EPIC-123',               // "Parent" always works
@@ -252,12 +252,12 @@ for (const type of issueTypes) {
 }
 
 /**
- * Demo 1: Epic with Stories
+ * Demo 1: Epic with Tasks
  */
-async function demoEpicWithStories(jml, config) {
+async function demoEpicWithTasks(jml, config) {
   const projectKey = config.defaultProjectKey || 'DEMO';
 
-  console.log('\n📋 Creating Epic with linked Stories...\n');
+  console.log('\n📋 Creating Epic with linked Tasks...\n');
 
   const spinner = ora('Creating Epic...').start();
   const epic = await jml.issues.create({
@@ -268,25 +268,25 @@ async function demoEpicWithStories(jml, config) {
   });
   spinner.succeed(`Created Epic: ${epic.key}`);
 
-  spinner.start('Creating Story 1 (using "Parent" synonym)...');
-  const story1 = await jml.issues.create({
+  spinner.start('Creating Task 1 (using "Parent" synonym)...');
+  const task1 = await jml.issues.create({
     Project: projectKey,
-    'Issue Type': 'Story',
+    'Issue Type': 'Task',
     Summary: 'User Login Feature',
     Description: 'Implement user authentication',
     Parent: epic.key, // Using "Parent" synonym
   });
-  spinner.succeed(`Created Story: ${story1.key} (parent: ${epic.key})`);
+  spinner.succeed(`Created Task: ${task1.key} (parent: ${epic.key})`);
 
-  spinner.start('Creating Story 2 (using "Epic Link" synonym)...');
-  const story2 = await jml.issues.create({
+  spinner.start('Creating Task 2 (using "Epic Link" synonym)...');
+  const task2 = await jml.issues.create({
     Project: projectKey,
-    'Issue Type': 'Story',
+    'Issue Type': 'Task',
     Summary: 'User Profile Page',
     Description: 'User can view and edit profile',
     'Epic Link': epic.key, // Using "Epic Link" synonym
   });
-  spinner.succeed(`Created Story: ${story2.key} (parent: ${epic.key})`);
+  spinner.succeed(`Created Task: ${task2.key} (parent: ${epic.key})`);
 
   showCodeExample(`
 // Create Epic
@@ -296,17 +296,17 @@ const epic = await jml.issues.create({
   Summary: 'Q4 Feature Development',
 });
 
-// Link Stories to Epic (multiple synonym options)
-const story1 = await jml.issues.create({
+// Link Tasks to Epic (multiple synonym options)
+const task1 = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'User Login Feature',
   Parent: epic.key,        // ← "Parent" synonym
 });
 
-const story2 = await jml.issues.create({
+const task2 = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'User Profile Page',
   'Epic Link': epic.key,   // ← "Epic Link" synonym
 });
@@ -314,45 +314,45 @@ const story2 = await jml.issues.create({
 }
 
 /**
- * Demo 2: Story with Subtasks
+ * Demo 2: Task with Subtasks
  */
-async function demoStoryWithSubtasks(jml, config) {
+async function demoTaskWithSubtasks(jml, config) {
   const projectKey = config.defaultProjectKey || 'DEMO';
 
-  console.log('\n✅ Creating Story with Subtasks...\n');
+  console.log('\n✅ Creating Task with Subtasks...\n');
 
-  const spinner = ora('Creating Story...').start();
-  const story = await jml.issues.create({
+  const spinner = ora('Creating Task...').start();
+  const task = await jml.issues.create({
     Project: projectKey,
-    'Issue Type': 'Story',
+    'Issue Type': 'Task',
     Summary: `Implement Dashboard - ${new Date().toISOString().split('T')[0]}`,
     Description: 'User dashboard with widgets (demo)',
   });
-  spinner.succeed(`Created Story: ${story.key}`);
+  spinner.succeed(`Created Task: ${task.key}`);
 
   spinner.start('Creating Subtask 1 (using "Parent")...');
   const subtask1 = await jml.issues.create({
     Project: projectKey,
     'Issue Type': 'Sub-task',
     Summary: 'Design dashboard layout',
-    Parent: story.key,
+    Parent: task.key,
   });
-  spinner.succeed(`Created Subtask: ${subtask1.key} (parent: ${story.key})`);
+  spinner.succeed(`Created Subtask: ${subtask1.key} (parent: ${task.key})`);
 
   spinner.start('Creating Subtask 2 (using "Parent Link")...');
   const subtask2 = await jml.issues.create({
     Project: projectKey,
     'Issue Type': 'Sub-task',
     Summary: 'Implement widget API',
-    'Parent Link': story.key,
+    'Parent Link': task.key,
   });
-  spinner.succeed(`Created Subtask: ${subtask2.key} (parent: ${story.key})`);
+  spinner.succeed(`Created Subtask: ${subtask2.key} (parent: ${task.key})`);
 
   showCodeExample(`
-// Create Story
-const story = await jml.issues.create({
+// Create Task
+const task = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'Implement Dashboard',
 });
 
@@ -361,14 +361,14 @@ const subtask1 = await jml.issues.create({
   Project: '${projectKey}',
   'Issue Type': 'Sub-task',
   Summary: 'Design dashboard layout',
-  Parent: story.key,         // ← "Parent" synonym
+  Parent: task.key,         // ← "Parent" synonym
 });
 
 const subtask2 = await jml.issues.create({
   Project: '${projectKey}',
   'Issue Type': 'Sub-task',
   Summary: 'Implement widget API',
-  'Parent Link': story.key,  // ← "Parent Link" synonym
+  'Parent Link': task.key,  // ← "Parent Link" synonym
 });
   `);
 }
@@ -419,7 +419,7 @@ async function demoMultiLevelHierarchy(jml, config) {
   });
   
   info('\nThis demo will create a multi-level hierarchy using your configuration.\n');
-  info('Available levels: Sub-task → Story → Epic → Phase → Container → Anthology\n');
+  info('Available levels: Sub-task → Task → Epic → Phase → Container → Anthology\n');
   info('Note: The library handles all field resolution automatically.\n');
   info('You just use "Parent" and the library finds the right field!\n');
 
@@ -433,7 +433,7 @@ async function demoMultiLevelHierarchy(jml, config) {
   } catch (err) {
     spinner.fail('Could not get issue types');
     warning(`\nFailed to get issue types: ${err.message}`);
-    info('Falling back to standard Epic→Story→Subtask...\n');
+    info('Falling back to standard Epic→Task→Subtask...\n');
     await demoStandardHierarchy(jml, projectKey);
     return;
   }
@@ -493,7 +493,7 @@ async function demoMultiLevelHierarchy(jml, config) {
   
   if (levelsToUse.length < 2) {
     warning('\nNeed at least 2 levels to create a hierarchy.');
-    info('Falling back to standard Epic→Story→Subtask...\n');
+    info('Falling back to standard Epic→Task→Subtask...\n');
     await demoStandardHierarchy(jml, projectKey);
     return;
   }
@@ -557,11 +557,11 @@ const hierarchy = await jml.getHierarchy();
 if (hierarchy) {
   // JPO installed - hierarchy is an array of levels
   console.log('Hierarchy levels:', hierarchy.map(l => l.title));
-  // Example: ["Sub-task", "Story", "Epic", "Phase", "Container", "Anthology"]
+  // Example: ["Sub-task", "Task", "Epic", "Phase", "Container", "Anthology"]
   
   // Find the level you want by title or id
   const epicLevel = hierarchy.find(l => l.title === 'Epic');
-  const storyLevel = hierarchy.find(l => l.title === 'Story');
+  const taskLevel = hierarchy.find(l => l.title === 'Task');
   
   // Create issues at different levels
   const epic = await jml.issues.create({
@@ -570,9 +570,9 @@ if (hierarchy) {
     Summary: 'Product Release',
   });
   
-  const story = await jml.issues.create({
+  const task = await jml.issues.create({
     Project: '${projectKey}',
-    'Issue Type': storyLevel.title, // "Story"
+    'Issue Type': taskLevel.title, // "Task"
     Summary: 'Authentication Service',
     Parent: epic.key,  // ← Just use "Parent"!
   });
@@ -581,19 +581,19 @@ if (hierarchy) {
     Project: '${projectKey}',
     'Issue Type': 'Sub-task', // Or use hierarchy[0].title
     Summary: 'Google OAuth provider',
-    Parent: story.key,  // ← Same pattern
+    Parent: task.key,  // ← Same pattern
   });
 } else {
-  // Standard JIRA - use built-in Epic/Story/Subtask
+  // Standard JIRA - use built-in Epic/Task/Subtask
   const epic = await jml.issues.create({
     Project: '${projectKey}',
     'Issue Type': 'Epic',
     Summary: 'Product Release',
   });
   
-  const story = await jml.issues.create({
+  const task = await jml.issues.create({
     Project: '${projectKey}',
-    'Issue Type': 'Story',
+    'Issue Type': 'Task',
     Summary: 'Feature',
     Parent: epic.key,
   });
@@ -609,7 +609,7 @@ if (hierarchy) {
  * Fallback for standard JIRA (no JPO)
  */
 async function demoStandardHierarchy(jml, projectKey) {
-  info('Creating standard Epic → Story → Subtask hierarchy\n');
+  info('Creating standard Epic → Task → Subtask hierarchy\n');
 
   const spinner3 = ora('Creating Epic (top level)...').start();
   const epic = await jml.issues.create({
@@ -620,27 +620,27 @@ async function demoStandardHierarchy(jml, projectKey) {
   });
   spinner3.succeed(`Created Epic: ${epic.key}`);
 
-  spinner3.start('Creating Story under Epic...');
-  const story = await jml.issues.create({
+  spinner3.start('Creating Task under Epic...');
+  const task = await jml.issues.create({
     Project: projectKey,
-    'Issue Type': 'Story',
+    'Issue Type': 'Task',
     Summary: 'Authentication Service',
     Parent: epic.key,
   });
-  spinner3.succeed(`Created Story: ${story.key} (parent: ${epic.key})`);
+  spinner3.succeed(`Created Task: ${task.key} (parent: ${epic.key})`);
 
-  spinner3.start('Creating Subtask under Story...');
+  spinner3.start('Creating Subtask under Task...');
   const subtask = await jml.issues.create({
     Project: projectKey,
     'Issue Type': 'Sub-task',
     Summary: 'Google OAuth provider',
-    Parent: story.key,
+    Parent: task.key,
   });
-  spinner3.succeed(`Created Subtask: ${subtask.key} (parent: ${story.key})`);
+  spinner3.succeed(`Created Subtask: ${subtask.key} (parent: ${task.key})`);
 
   success('\n✅ 3-Level Hierarchy Created:\n');
   console.log(`   ${epic.key} (Epic)`);
-  console.log(`   └── ${story.key} (Story)`);
+  console.log(`   └── ${task.key} (Task)`);
   console.log(`       └── ${subtask.key} (Subtask)\n`);
 }
 
@@ -655,23 +655,24 @@ async function demoSummarySearch(jml, config) {
   console.log('\n🔍 Creating parent link using summary search...\n');
 
   const uniqueId = Date.now();
+  const epicSummary = `Unique Epic ${uniqueId}`;
   const spinner = ora('Creating Epic with unique summary...').start();
   const epic = await jml.issues.create({
     Project: projectKey,
     'Issue Type': 'Epic',
-    Summary: `Unique Epic ${uniqueId}`,
+    Summary: epicSummary,
     Description: 'Epic with unique summary for search demo',
   });
-  spinner.succeed(`Created Epic: ${epic.key} (${epic.fields.summary})`);
+  spinner.succeed(`Created Epic: ${epic.key} (${epicSummary})`);
 
-  spinner.start('Creating Story linked by summary search...');
-  const story = await jml.issues.create({
+  spinner.start('Creating Task linked by summary search...');
+  const task = await jml.issues.create({
     Project: projectKey,
-    'Issue Type': 'Story',
+    'Issue Type': 'Task',
     Summary: 'Feature for unique epic',
-    Parent: `Unique Epic ${uniqueId}`, // ← Search by summary!
+    Parent: epicSummary, // ← Search by summary!
   });
-  spinner.succeed(`Created Story: ${story.key} (found parent by summary)`);
+  spinner.succeed(`Created Task: ${task.key} (found parent by summary)`);
 
   showCodeExample(`
 // Create Epic with unique summary
@@ -682,9 +683,9 @@ const epic = await jml.issues.create({
 });
 
 // Link by summary (not key!)
-const story = await jml.issues.create({
+const task = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'Feature for unique epic',
   Parent: 'Unique Epic ${uniqueId}',  // ← Library searches by summary
 });
@@ -692,7 +693,7 @@ const story = await jml.issues.create({
 // ✅ Library automatically:
 // 1. Searches for Epic with matching summary
 // 2. Resolves to Epic key
-// 3. Creates Story with proper parent link
+// 3. Creates Task with proper parent link
   `);
 }
 
@@ -722,10 +723,10 @@ const jml = new JML({
 // Custom synonyms are ADDED to the discovered name + "parent" keyword.
 
 // Now you can use:
-const story = await jml.issues.create({
+const task = await jml.issues.create({
   Project: 'DEMO',
-  'Issue Type': 'Story',
-  Summary: 'My Story',
+  'Issue Type': 'Task',
+  Summary: 'My Task',
   
   // These always work:
   'Parent Link': 'EPIC-123',        // ← Discovered from JIRA schema
@@ -760,7 +761,7 @@ async function demoCascadingSelect(jml, config) {
 // Format 1: String with delimiter
 const issue1 = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'Test cascading select',
   'My Cascading Field': 'Parent Option -> Child Option',
 });
@@ -768,7 +769,7 @@ const issue1 = await jml.issues.create({
 // Format 2: Object with parent/child
 const issue2 = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'Test cascading select',
   'My Cascading Field': {
     parent: 'Parent Option',
@@ -779,7 +780,7 @@ const issue2 = await jml.issues.create({
 // Format 3: Array [parent, child]
 const issue3 = await jml.issues.create({
   Project: '${projectKey}',
-  'Issue Type': 'Story',
+  'Issue Type': 'Task',
   Summary: 'Test cascading select',
   'My Cascading Field': ['Parent Option', 'Child Option']
 });

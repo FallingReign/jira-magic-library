@@ -6,7 +6,7 @@
  * 
  * Note: 
  * - First two issues: Task and Bug (common types) with Reporter
- * - Third issue: Story (may not exist in all projects) without Reporter
+ * - Third issue: Task without Reporter
  * - Demonstrates: valid data, unknown fields, missing required, invalid issue type
  */
 
@@ -21,7 +21,7 @@ export function getExampleData(projectKey, reporter = null) {
     csv: `Project,Issue Type,Summary,Description,Priority,Reporter,Epic Name
 ${projectKey},Task,Setup development environment,"Install Node.js, VS Code, and dependencies",P3 - Medium,${reporter || ''},Infrastructure
 ${projectKey},Bug,Fix login timeout,"Users getting timeout after 30 seconds, needs investigation",P2 - High,${reporter || ''},Authentication
-${projectKey},Story,Add dark mode support,"Implement dark mode theme with user preference toggle",P4 - Low,,UI Improvements`,
+${projectKey},Task,Add dark mode support,"Implement dark mode theme with user preference toggle",P4 - Low,,UI Improvements`,
 
     json: `[
   {
@@ -44,7 +44,7 @@ ${projectKey},Story,Add dark mode support,"Implement dark mode theme with user p
   },
   {
     "Project": "${projectKey}",
-    "Issue Type": "Story",
+    "Issue Type": "Task",
     "Summary": "Add dark mode support",
     "Description": "Implement dark mode theme with user preference toggle",
     "Priority": "P4 - Low",
@@ -69,7 +69,7 @@ Reporter: ${reporter || ''}
 Epic Name: Authentication
 ---
 Project: ${projectKey}
-Issue Type: Story
+Issue Type: Task
 Summary: Add dark mode support
 Description: Implement dark mode theme with user preference toggle
 Priority: P4 - Low

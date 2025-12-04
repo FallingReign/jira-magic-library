@@ -22,6 +22,8 @@ interface FieldCandidate {
   fieldName: string;
   priority: number;
   sourceIssueType: string;
+  /** Plugin ID if matched by plugin (undefined if matched by name pattern) */
+  plugin?: string;
 }
 
 /**
@@ -32,6 +34,8 @@ export interface ParentFieldInfo {
   key: string;
   /** The human-readable field name (e.g., "Parent Link", "Epic Link", "parent") */
   name: string;
+  /** The plugin ID if matched by plugin (e.g., "com.pyxis.greenhopper.jira:gh-epic-link") */
+  plugin?: string;
 }
 
 /**
@@ -171,7 +175,11 @@ export class ParentFieldDiscovery {
     }
 
     const selected = this.selectCandidate(candidates);
-    const info: ParentFieldInfo = { key: selected.fieldKey, name: selected.fieldName };
+    const info: ParentFieldInfo = { 
+      key: selected.fieldKey, 
+      name: selected.fieldName,
+      plugin: selected.plugin,
+    };
     await this.cache.set(cacheKey, JSON.stringify(info), CACHE_TTL_SECONDS);
     return info;
   }
@@ -224,18 +232,19 @@ export class ParentFieldDiscovery {
           fieldName: field.name,
           priority: evaluation.priority,
           sourceIssueType: schema.issueType,
+          plugin: evaluation.plugin,
         });
       }
     }
   }
 
-  private evaluateField(field: FieldSchema): { priority: number } | null {
+  private evaluateField(field: FieldSchema): { priority: number; plugin?: string } | null {
     // Priority 1: Check for known parent field plugins (most reliable)
     const pluginId = field.schema?.custom;
     if (pluginId && PARENT_FIELD_PLUGINS.includes(pluginId)) {
       // Plugin matches get highest priority (lower number = higher priority)
       const pluginIndex = PARENT_FIELD_PLUGINS.indexOf(pluginId);
-      return { priority: pluginIndex };
+      return { priority: pluginIndex, plugin: pluginId };
     }
 
     // Priority 2: Fall back to name pattern matching

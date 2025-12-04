@@ -72,7 +72,7 @@ What you get today:
 | Component | Version / Notes |
 |-----------|-----------------|
 | **Node.js** | 18.x or later (ESM + native fetch). |
-| **JIRA** | Server/Data Center REST API v2. (Cloud support is on the roadmap but not implemented.) |
+| **JIRA** | Server/Data Center 8.4+ (REST API v2). Uses endpoints introduced in 8.4 for hierarchy discovery. Cloud support is on the roadmap but not implemented. |
 | **Redis** | Required. Used for schema caching, manifest storage, and rate limit buffers. Any Redis 6/7-compatible deployment works (`redis:7-alpine` works great for dev). |
 | **OS** | Developed/tested on macOS + Linux containers. Windows works via WSL or PowerShell (the demo scripts are cross-platform). |
 

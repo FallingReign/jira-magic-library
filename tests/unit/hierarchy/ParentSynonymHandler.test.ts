@@ -6,7 +6,6 @@
 import { FieldResolver } from '../../../src/converters/FieldResolver.js';
 import { SchemaDiscovery } from '../../../src/schema/SchemaDiscovery.js';
 import { ParentFieldDiscovery } from '../../../src/hierarchy/ParentFieldDiscovery.js';
-import { JPOHierarchyDiscovery } from '../../../src/hierarchy/JPOHierarchyDiscovery.js';
 import { JiraClient } from '../../../src/client/JiraClient.js';
 import { RedisCache } from '../../../src/cache/RedisCache.js';
 import { ConfigurationError } from '../../../src/errors/ConfigurationError.js';
@@ -15,7 +14,6 @@ import type { ProjectSchema } from '../../../src/types/schema.js';
 // Mock dependencies
 jest.mock('../../../src/schema/SchemaDiscovery');
 jest.mock('../../../src/hierarchy/ParentFieldDiscovery');
-jest.mock('../../../src/hierarchy/JPOHierarchyDiscovery');
 jest.mock('../../../src/client/JiraClient');
 jest.mock('../../../src/cache/RedisCache');
 jest.mock('../../../src/hierarchy/ParentLinkResolver', () => ({
@@ -30,7 +28,6 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
   let mockParentFieldDiscovery: jest.Mocked<ParentFieldDiscovery>;
   let mockClient: jest.Mocked<JiraClient>;
   let mockCache: jest.Mocked<RedisCache>;
-  let mockHierarchyDiscovery: jest.Mocked<JPOHierarchyDiscovery>;
   let mockSchema: ProjectSchema;
 
   beforeEach(() => {
@@ -39,21 +36,19 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     mockSchemaDiscovery = new SchemaDiscovery({} as any, {} as any, '') as jest.Mocked<SchemaDiscovery>;
     mockParentFieldDiscovery = {
       getParentFieldKey: jest.fn(),
-      getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' }),
+      getParentFieldInfo: jest.fn().mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' }),
     } as any;
     mockClient = {
       get: jest.fn(),
       post: jest.fn(),
     } as any;
     mockCache = {} as any;
-    mockHierarchyDiscovery = {} as any;
 
     resolver = new FieldResolver(
       mockSchemaDiscovery,
       mockParentFieldDiscovery,
       mockClient,
-      mockCache,
-      mockHierarchyDiscovery
+      mockCache
     );
 
     // Mock schema with parent field
@@ -106,11 +101,6 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
     synonyms.forEach((synonym) => {
       it(`should recognize "${synonym}" as parent synonym`, async () => {
-        // Mock issue type lookup
-        mockClient.get.mockResolvedValue({
-          values: [{ id: '10001', name: 'Story' }],
-        });
-
         const input = {
           Summary: 'Test story',
           [synonym]: 'PROJ-123',
@@ -118,15 +108,14 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
         const result = await resolver.resolveFields('PROJ', 'Story', input);
 
-        expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledWith('PROJ', 'Story');
-        expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/issue/createmeta/PROJ/issuetypes');
+        expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'Story');
         expect(resolveParentLink).toHaveBeenCalledWith(
           'PROJ-123',
-          '10001', // issueTypeId
+          'Story', // issueTypeName (not ID anymore)
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          'com.atlassian.jpo:jpo-custom-field-parent', // plugin from mocked getParentFieldInfo
           mockSchemaDiscovery
         );
         expect(result).toEqual({
@@ -137,10 +126,6 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     });
 
     it('should recognize typos via fuzzy matching', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
-
       const input = {
         Summary: 'Test story',
         'Praent Link': 'PROJ-123', // Typo in "Parent Link"
@@ -166,11 +151,8 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       for (const { synonym, value } of testCases) {
         jest.clearAllMocks();
-        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' });
+        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' });
         mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
-        mockClient.get.mockResolvedValue({
-          values: [{ id: '10001', name: 'Story' }],
-        });
         resolveParentLink.mockResolvedValue(value);
 
         const input = { [synonym]: value };
@@ -179,17 +161,14 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
         expect(result).toEqual({
           customfield_10014: value,
         });
-        expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledWith('PROJ', 'Story');
+        expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'Story');
       }
     });
 
     it('should work regardless of actual field name in JIRA', async () => {
       // Different field name but same ID
       mockSchema.fields.customfield_10014.name = 'Parent Link';
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' });
       resolveParentLink.mockResolvedValue('PROJ-123');
 
       const input = {
@@ -204,11 +183,8 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     });
 
     it('should use parent field discovery when resolving parent synonym', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
       // getParentFieldInfo is already mocked to return Parent Link
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' });
       resolveParentLink.mockResolvedValue('PROJ-123');
 
       const input = {
@@ -217,16 +193,14 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       await resolver.resolveFields('PROJ', 'Story', input);
 
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledWith('PROJ', 'Story');
-      expect(mockParentFieldDiscovery.getParentFieldKey).toHaveBeenCalledTimes(1);
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'Story');
+      // Called twice: once in isParentSynonym to get field name, once in resolveParentSynonym to get plugin
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledTimes(2);
     });
   });
 
   describe('AC3: Resolve Parent Value', () => {
     it('should resolve exact issue key', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
       resolveParentLink.mockResolvedValue('PROJ-1234');
 
       const input = {
@@ -237,20 +211,17 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'PROJ-1234',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
       expect(result.customfield_10014).toBe('PROJ-1234');
     });
 
     it('should resolve summary search', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
       resolveParentLink.mockResolvedValue('PROJ-789');
 
       const input = {
@@ -261,11 +232,11 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'newsroom - phase 1',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
       expect(result.customfield_10014).toBe('PROJ-789');
@@ -279,10 +250,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       for (const synonym of synonyms) {
         jest.clearAllMocks();
-        mockClient.get.mockResolvedValue({
-          values: [{ id: '10001', name: 'Story' }],
-        });
-        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link' });
+        mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Parent Link', plugin: 'com.atlassian.jpo:jpo-custom-field-parent' });
         resolveParentLink.mockResolvedValue('PROJ-1234');
 
         const input = { [synonym]: 'PROJ-1234' };
@@ -290,11 +258,11 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
         expect(resolveParentLink).toHaveBeenCalledWith(
           'PROJ-1234',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          'com.atlassian.jpo:jpo-custom-field-parent',
           mockSchemaDiscovery
         );
         expect(result.customfield_10014).toBe('PROJ-1234');
@@ -303,34 +271,26 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
   });
 
   describe('AC4: Validate Hierarchy at Any Level', () => {
-    it('should pass child issue type ID to resolveParentLink for validation', async () => {
-      // Mock issue type lookup
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
-
+    it('should pass child issue type name to resolveParentLink for validation', async () => {
       const input = {
         Parent: 'EPIC-123',
       };
 
       await resolver.resolveFields('PROJ', 'Story', input);
 
-      // resolveParentLink receives issueTypeId for hierarchy validation
+      // resolveParentLink receives issueTypeName for smart endpoint filtering
       expect(resolveParentLink).toHaveBeenCalledWith(
         'EPIC-123',
-        '10001', // Child issue type ID
+        'Story', // Child issue type name
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
     });
 
     it('should work for Subtask → Story hierarchy', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '16101', name: 'Sub-task' }],
-      });
       resolveParentLink.mockResolvedValue('STORY-789');
 
       const input = {
@@ -341,20 +301,17 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'STORY-789',
-        '16101',
+        'Sub-task',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
       expect(result.customfield_10014).toBe('STORY-789');
     });
 
     it('should work for Story → Epic hierarchy', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
       resolveParentLink.mockResolvedValue('EPIC-456');
 
       const input = {
@@ -365,20 +322,17 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'EPIC-456',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
       expect(result.customfield_10014).toBe('EPIC-456');
     });
 
     it('should work for Epic → Phase hierarchy', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '13301', name: 'Epic' }],
-      });
       resolveParentLink.mockResolvedValue('PHASE-789');
 
       const input = {
@@ -389,20 +343,17 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'PHASE-789',
-        '13301',
+        'Epic',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
       expect(result.customfield_10014).toBe('PHASE-789');
     });
 
     it('should work for Phase → Container hierarchy', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '13401', name: 'Phase' }],
-      });
       resolveParentLink.mockResolvedValue('CONTAINER-012');
 
       const input = {
@@ -413,11 +364,11 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'CONTAINER-012',
-        '13401',
+        'Phase',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
       expect(result.customfield_10014).toBe('CONTAINER-012');
@@ -490,11 +441,7 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
     it('should use discovered field name as synonym when available', async () => {
       // Mock returns "Epic Link" as the discovered field name
-      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Epic Link' });
-      mockParentFieldDiscovery.getParentFieldKey.mockResolvedValue('customfield_10014');
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
+      mockParentFieldDiscovery.getParentFieldInfo.mockResolvedValue({ key: 'customfield_10014', name: 'Epic Link', plugin: 'com.pyxis.greenhopper.jira:gh-epic-link' });
       resolveParentLink.mockResolvedValue('PROJ-123');
 
       // "Epic Link" should now work because it matches the discovered field name
@@ -662,10 +609,6 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
     });
 
     it('should pass dependencies to resolveParentLink', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
-
       const input = {
         Parent: 'PROJ-123',
       };
@@ -674,20 +617,16 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
 
       expect(resolveParentLink).toHaveBeenCalledWith(
         'PROJ-123',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        'com.atlassian.jpo:jpo-custom-field-parent',
         mockSchemaDiscovery
       );
     });
 
     it('should ignore blank or null parent values', async () => {
-      mockClient.get.mockResolvedValue({
-        values: [{ id: '10001', name: 'Story' }],
-      });
-
       const input = {
         Summary: 'Child issue',
         Parent: '   ', // blank string

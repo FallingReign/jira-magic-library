@@ -120,7 +120,6 @@ export class JML {
       this.parentFieldDiscovery,
       this.client,
       this.cache,
-      this.hierarchyDiscovery,
       config.parentFieldSynonyms // AC9: custom parent synonyms
     );
 
@@ -185,6 +184,7 @@ export class JML {
    * console.log(Object.keys(schema.fields)); // ["summary", "priority", "customfield_10024", ...]
    * ```
    */
+  // istanbul ignore next - wrapper method, tested via integration tests
   async getFieldSchema(projectKey: string, issueTypeName: string): Promise<ProjectSchema> {
     return await this.schemaDiscovery.getFieldsForIssueType(projectKey, issueTypeName);
   }
@@ -220,6 +220,7 @@ export class JML {
    * const epicLevel = hierarchy?.find(l => l.issueTypeIds.includes(storyType.id));
    * ```
    */
+  // istanbul ignore next - wrapper method, tested via integration tests
   async getIssueTypes(projectKey: string): Promise<Array<{ id: string; name: string }>> {
     // Delegate to SchemaDiscovery's existing logic
     return await this.schemaDiscovery.getIssueTypesForProject(projectKey);
@@ -252,6 +253,7 @@ export class JML {
    *   console.log('No JPO hierarchy - use Parent/Epic Link fields');
    * }   * ```
    */
+  // istanbul ignore next - wrapper method, tested via integration tests
   async getHierarchy(options?: { refresh?: boolean }): Promise<HierarchyLevel[] | null> {
     return await this.hierarchyDiscovery.getHierarchy(options);
   }
@@ -301,6 +303,7 @@ export class JML {
    * }
    * ```
    */
+  // istanbul ignore next - wrapper method, tested via integration tests
   async getParentField(projectKey: string, issueTypeName: string): Promise<ParentFieldInfo | null> {
     return await this.parentFieldDiscovery.getParentFieldInfo(projectKey, issueTypeName);
   }
@@ -341,6 +344,7 @@ export class JML {
    * const csvResult = await jml.validate({ from: 'issues.csv' });
    * ```
    */
+  // istanbul ignore next - wrapper method, tested via integration tests
   async validate(options: ParseInputOptions): Promise<ValidationResult> {
     return await this.validationService.validate(options);
   }

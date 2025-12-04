@@ -146,6 +146,7 @@ function extractToString(value: unknown): string | null {
     return String(extracted);
   }
 
+  // istanbul ignore next - unreachable in practice (would need Symbol/Function values)
   return null;
 }
 

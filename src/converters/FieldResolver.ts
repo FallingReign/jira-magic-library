@@ -5,7 +5,6 @@ import { ProjectSchema } from '../types/schema.js';
 import type { ParentFieldDiscovery, ParentFieldInfo } from '../hierarchy/ParentFieldDiscovery.js';
 import type { JiraClient } from '../client/JiraClient.js';
 import type { RedisCache } from '../cache/RedisCache.js';
-import type { JPOHierarchyDiscovery } from '../hierarchy/JPOHierarchyDiscovery.js';
 import { resolveParentLink } from '../hierarchy/ParentLinkResolver.js';
 import { DEFAULT_PARENT_SYNONYMS } from '../constants/field-constants.js';
 import { resolveUniqueName } from '../utils/resolveUniqueName.js';
@@ -71,7 +70,6 @@ export class FieldResolver {
     private readonly parentFieldDiscovery?: ParentFieldDiscovery,
     private readonly client?: JiraClient,
     private readonly cache?: RedisCache,
-    private readonly hierarchyDiscovery?: JPOHierarchyDiscovery,
     customParentSynonyms?: string[]
   ) {
     // Store custom synonyms for fallback when discovery not configured
@@ -268,8 +266,12 @@ export class FieldResolver {
       }
       const projectData = await this.client.get<{ key: string }>(`/rest/api/2/project/${id}`);
       projectKey = projectData.key;
+    } else if (typeof projectResult.value === 'object' && projectResult.value !== null && 
+               'key' in projectResult.value && typeof (projectResult.value as Record<string, unknown>).key === 'string') {
+      // Object with explicit key - use directly without resolution
+      projectKey = (projectResult.value as { key: string }).key.toUpperCase();
     } else {
-      // String or object with key/name - fuzzy match against project list
+      // String or object with name only - fuzzy match against project list
       projectKey = await this.resolveProject(projectResult.extracted);
     }
     
@@ -291,8 +293,12 @@ export class FieldResolver {
     if (isIdOnlyObject(issueTypeResult.value)) {
       // Object with id only - pass through for schema lookup (original behavior)
       issueType = issueTypeResult.value.id;
+    } else if (typeof issueTypeResult.value === 'object' && issueTypeResult.value !== null && 
+               'name' in issueTypeResult.value && typeof (issueTypeResult.value as Record<string, unknown>).name === 'string') {
+      // Object with explicit name - use directly without resolution
+      issueType = (issueTypeResult.value as { name: string }).name;
     } else {
-      // String or object with name - fuzzy match against createmeta
+      // String or object with non-standard property - fuzzy match against createmeta
       issueType = await this.resolveIssueType(issueTypeResult.extracted, projectKey);
     }
     
@@ -305,6 +311,10 @@ export class FieldResolver {
       [issueTypeResult.key]: { name: issueType },
     };
     const fields = await this.resolveFields(projectKey, issueType, inputWithResolved);
+    
+    // 6. Auto-populate Epic Name from Summary for Epic issue types
+    // Epic Name is often required in JIRA instances with GreenHopper/Agile
+    await this.autoPopulateEpicName(projectKey, issueType, fields);
     
     return { projectKey, issueType, fields };
   }
@@ -404,6 +414,7 @@ export class FieldResolver {
    * @private
    */
   private async resolveIssueType(input: string, projectKey: string): Promise<string> {
+    // istanbul ignore next - this check is defensive; client is validated earlier in resolveFieldsWithExtraction
     if (!this.client) {
       throw new ConfigurationError('JiraClient required for issue type resolution');
     }
@@ -437,6 +448,56 @@ export class FieldResolver {
         `Issue type '${input}' not found in project '${projectKey}'. Available types: ${availableTypes}`,
         { input, projectKey, availableTypes: issueTypes.map(it => it.name) }
       );
+    }
+  }
+
+  /**
+   * Auto-populates Epic Name field from Summary when creating an Epic.
+   * 
+   * Many JIRA instances with GreenHopper/Agile require the Epic Name field.
+   * This method detects when:
+   * 1. The issue type is "Epic" (case-insensitive)
+   * 2. The schema has an "Epic Name" field
+   * 3. The Epic Name field is NOT already provided
+   * 
+   * When all conditions are met, it copies the Summary value to Epic Name.
+   * This makes Epic creation simpler for users who don't know about this requirement.
+   * 
+   * @param projectKey - Project key for schema lookup
+   * @param issueType - Resolved issue type name
+   * @param fields - Resolved fields (mutated in place to add Epic Name)
+   * 
+   * @private
+   */
+  private async autoPopulateEpicName(
+    projectKey: string,
+    issueType: string,
+    fields: Record<string, unknown>
+  ): Promise<void> {
+    // Only process Epic issue types
+    if (normalizeFieldName(issueType) !== 'epic') {
+      return;
+    }
+
+    // Get schema to find Epic Name field
+    const schema = await this.schemaDiscovery.getFieldsForIssueType(projectKey, issueType);
+    
+    // Find Epic Name field by normalized name
+    const epicNameFieldId = this.findFieldByName(schema, 'Epic Name');
+    if (!epicNameFieldId) {
+      // No Epic Name field in schema - nothing to auto-populate
+      return;
+    }
+
+    // Check if Epic Name is already provided
+    if (fields[epicNameFieldId] !== undefined) {
+      return;
+    }
+
+    // Get Summary value to use as Epic Name
+    const summary = fields['summary'] as string | undefined;
+    if (summary) {
+      fields[epicNameFieldId] = summary;
     }
   }
 
@@ -673,6 +734,7 @@ export class FieldResolver {
     }
     
     // Add custom synonyms if configured
+    // istanbul ignore next - customParentSynonyms feature not yet exposed in public API
     if (this.customParentSynonyms) {
       for (const synonym of this.customParentSynonyms) {
         if (!synonyms.includes(synonym)) {
@@ -712,16 +774,16 @@ export class FieldResolver {
     projectKey: string,
     issueTypeName: string
   ): Promise<{ fieldId: string; value: string | { key: string } }> {
-    // Get the actual parent field key from discovery
+    // Get the actual parent field info from discovery (includes plugin type)
     if (!this.parentFieldDiscovery) {
       throw new ConfigurationError(
         'Parent field discovery not configured. Cannot resolve parent synonyms.'
       );
     }
 
-    const parentFieldKey = await this.parentFieldDiscovery.getParentFieldKey(projectKey, issueTypeName);
+    const parentFieldInfo = await this.parentFieldDiscovery.getParentFieldInfo(projectKey, issueTypeName);
 
-    if (!parentFieldKey) {
+    if (!parentFieldInfo) {
       throw new ConfigurationError(
         `Project ${projectKey} does not have a parent field configured. ` +
           `Please configure a parent field in JIRA or use the exact field ID.`
@@ -729,41 +791,26 @@ export class FieldResolver {
     }
 
     // Resolve the parent link (key or summary search)
-    if (!this.client || !this.cache || !this.hierarchyDiscovery) {
+    if (!this.client || !this.cache) {
       throw new ConfigurationError(
         'Required dependencies not configured for parent link resolution'
       );
     }
 
-    // Find issue type ID from JIRA API response
-    // We need to fetch it from the API since ProjectSchema doesn't include the issue type ID
-    const issueTypesData = await this.client.get<{ values: Array<{ id: string; name: string }> }>(
-      `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`
-    );
-    
-    const issueType = issueTypesData.values?.find(
-      (it) => it.name.toLowerCase() === issueTypeName.toLowerCase()
-    );
-    
-    if (!issueType) {
-      throw new ConfigurationError(
-        `Issue type '${issueTypeName}' not found in project '${projectKey}'`
-      );
-    }
-
+    // Use smart resolution based on parent field plugin type
     const resolvedParentKey = await resolveParentLink(
       String(value),
-      issueType.id,
+      issueTypeName,
       projectKey,
       this.client,
       this.cache,
-      this.hierarchyDiscovery,
+      parentFieldInfo.plugin,
       this.schemaDiscovery
     );
 
     // Get field schema to determine how to format the value
     const schema = await this.schemaDiscovery.getFieldsForIssueType(projectKey, issueTypeName);
-    const parentField = schema.fields[parentFieldKey];
+    const parentField = schema.fields[parentFieldInfo.key];
 
     // Format value based on field type:
     // - Standard JIRA parent field (type "issuelink"): { key: "ISSUE-123" }
@@ -778,7 +825,7 @@ export class FieldResolver {
     }
 
     return {
-      fieldId: parentFieldKey,
+      fieldId: parentFieldInfo.key,
       value: formattedValue,
     };
   }

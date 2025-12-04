@@ -1,23 +1,27 @@
 /**
  * Unit tests for ParentLinkResolver
  * Story: E3-S05 - Parent Link Resolver
+ * 
+ * Updated to test smart endpoint resolution based on plugin type.
+ * Hierarchy validation is now handled by the plugin-specific endpoints.
  */
 
 import { resolveParentLink } from '../../../src/hierarchy/ParentLinkResolver.js';
 import { JiraClient } from '../../../src/client/JiraClient.js';
 import { RedisCache } from '../../../src/cache/RedisCache.js';
-import { JPOHierarchyDiscovery } from '../../../src/hierarchy/JPOHierarchyDiscovery.js';
 import { SchemaDiscovery } from '../../../src/schema/SchemaDiscovery.js';
-import { NotFoundError, AmbiguityError, HierarchyError } from '../../../src/errors.js';
-import type { HierarchyStructure } from '../../../src/types/hierarchy.js';
+import { NotFoundError, AmbiguityError } from '../../../src/errors.js';
 import type { ProjectSchema } from '../../../src/types/schema.js';
+import { PARENT_FIELD_PLUGINS } from '../../../src/constants/field-constants.js';
+
+// Plugin constants for convenience
+const GREENHOPPER_PLUGIN = PARENT_FIELD_PLUGINS[0]; // 'com.pyxis.greenhopper.jira:gh-epic-link'
+const JPO_PLUGIN = PARENT_FIELD_PLUGINS[1]; // 'com.atlassian.jpo:jpo-custom-field-parent'
 
 describe('ParentLinkResolver', () => {
   let mockClient: jest.Mocked<JiraClient>;
   let mockCache: jest.Mocked<RedisCache>;
-  let mockHierarchyDiscovery: jest.Mocked<JPOHierarchyDiscovery>;
   let mockSchemaDiscovery: jest.Mocked<SchemaDiscovery>;
-  let mockHierarchy: HierarchyStructure;
   let mockProjectSchema: ProjectSchema;
 
   beforeEach(() => {
@@ -33,21 +37,10 @@ describe('ParentLinkResolver', () => {
       set: jest.fn(),
     } as unknown as jest.Mocked<RedisCache>;
 
-    // Mock JPOHierarchyDiscovery
-    mockHierarchyDiscovery = {
-      getHierarchy: jest.fn(),
-    } as unknown as jest.Mocked<JPOHierarchyDiscovery>;
-
     // Mock SchemaDiscovery
     mockSchemaDiscovery = {
       getFieldsForIssueType: jest.fn(),
     } as unknown as jest.Mocked<SchemaDiscovery>;
-
-    // Mock hierarchy structure (Level 0: Story, Level 1: Epic)
-    mockHierarchy = [
-      { id: 0, title: 'Story', issueTypeIds: ['10001'] },
-      { id: 1, title: 'Epic', issueTypeIds: ['13301'] },
-    ];
 
     // Mock project schema
     mockProjectSchema = {
@@ -64,7 +57,6 @@ describe('ParentLinkResolver', () => {
       },
     } as ProjectSchema;
 
-    mockHierarchyDiscovery.getHierarchy.mockResolvedValue(mockHierarchy);
     mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue(mockProjectSchema);
   });
 
@@ -73,46 +65,38 @@ describe('ParentLinkResolver', () => {
       // Arrange
       mockClient.get.mockResolvedValue({
         key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' },
-          summary: 'Test Epic',
-        },
       });
 
       // Act
       const result = await resolveParentLink(
         'proj-123',
-        '10001', // Story
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        JPO_PLUGIN,
         mockSchemaDiscovery
       );
 
       // Assert
       expect(result).toBe('PROJ-123');
-      expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/issue/proj-123');
+      expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/issue/proj-123?fields=key');
     });
 
     it('should accept key with lowercase project key', async () => {
       // Arrange
       mockClient.get.mockResolvedValue({
         key: 'PROJ-456',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' },
-          summary: 'Test Epic 2',
-        },
       });
 
       // Act
       const result = await resolveParentLink(
         'proj-456',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        JPO_PLUGIN,
         mockSchemaDiscovery
       );
 
@@ -124,20 +108,16 @@ describe('ParentLinkResolver', () => {
       // Arrange
       mockClient.get.mockResolvedValue({
         key: 'PROJ-789',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' },
-          summary: 'Test Epic 3',
-        },
       });
 
       // Act
       const result = await resolveParentLink(
         'PROJ-789',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        JPO_PLUGIN,
         mockSchemaDiscovery
       );
 
@@ -153,11 +133,11 @@ describe('ParentLinkResolver', () => {
       await expect(
         resolveParentLink(
           'PROJ-999',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          JPO_PLUGIN,
           mockSchemaDiscovery
         )
       ).rejects.toThrow(NotFoundError);
@@ -165,7 +145,7 @@ describe('ParentLinkResolver', () => {
   });
 
   describe('AC2: Accept Summary Text Search', () => {
-    it('should search by summary text using JQL', async () => {
+    it('should search by summary text using JQL fallback for unknown plugin', async () => {
       // Arrange
       mockClient.post.mockResolvedValue({
         total: 1,
@@ -180,14 +160,14 @@ describe('ParentLinkResolver', () => {
         ],
       });
 
-      // Act
+      // Act - using undefined plugin to trigger JQL fallback
       const result = await resolveParentLink(
         'newsroom - phase 1',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -220,11 +200,11 @@ describe('ParentLinkResolver', () => {
       // Act
       const result = await resolveParentLink(
         'NeWsRoOm - PhAsE 1',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -250,11 +230,11 @@ describe('ParentLinkResolver', () => {
       // Act
       await resolveParentLink(
         'test summary',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -264,8 +244,79 @@ describe('ParentLinkResolver', () => {
     });
   });
 
-  describe('AC3: Filter by Valid Parent Level', () => {
-    it('should filter search results to only parent level issue types', async () => {
+  describe('AC3: Smart Endpoint Selection', () => {
+    it('should use GreenHopper endpoint for gh-epic-link plugin', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({
+        epicLists: [
+          {
+            listDescriptor: 'current project',
+            epicNames: [
+              { key: 'PROJ-123', name: 'Test Epic', isDone: false },
+            ],
+          },
+        ],
+        total: 1,
+      });
+
+      // Act
+      const result = await resolveParentLink(
+        'test epic',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        GREENHOPPER_PLUGIN,
+        mockSchemaDiscovery
+      );
+
+      // Assert
+      expect(result).toBe('PROJ-123');
+      expect(mockClient.get).toHaveBeenCalledWith(
+        expect.stringContaining('/rest/greenhopper/1.0/epics?searchQuery=test%20epic&projectKey=PROJ')
+      );
+    });
+
+    it('should use JPO endpoint for jpo-custom-field-parent plugin', async () => {
+      // Arrange
+      mockClient.post.mockResolvedValue({
+        issues: [
+          {
+            issueKey: 123,
+            issueSummary: 'Parent Epic',
+            issueTypeId: 13301,
+            projectId: 10000,
+          },
+        ],
+        projects: [
+          { id: 10000, key: 'PROJ' },
+        ],
+      });
+
+      // Act
+      const result = await resolveParentLink(
+        'parent epic',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        JPO_PLUGIN,
+        mockSchemaDiscovery
+      );
+
+      // Assert
+      expect(result).toBe('PROJ-123');
+      expect(mockClient.post).toHaveBeenCalledWith(
+        '/rest/jpo/1.0/parent/suggest',
+        expect.objectContaining({
+          query: 'parent epic',
+          issueTypeName: 'Story',
+          maxResults: 10,
+        })
+      );
+    });
+
+    it('should fallback to JQL for undefined plugin', async () => {
       // Arrange
       mockClient.post.mockResolvedValue({
         total: 1,
@@ -273,7 +324,7 @@ describe('ParentLinkResolver', () => {
           {
             key: 'PROJ-123',
             fields: {
-              summary: 'Test Epic',
+              summary: 'Test Issue',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
@@ -281,54 +332,66 @@ describe('ParentLinkResolver', () => {
       });
 
       // Act
-      await resolveParentLink(
-        'test epic',
-        '10001', // Story (level 0)
+      const result = await resolveParentLink(
+        'test issue',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
       // Assert
-      const jql = (mockClient.post as jest.Mock).mock.calls[0][1].jql;
-      expect(jql).toContain('issuetype IN (13301)'); // Only Epic (level 1)
+      expect(result).toBe('PROJ-123');
+      expect(mockClient.post).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: expect.stringContaining('project = PROJ'),
+        })
+      );
     });
 
-    it('should throw HierarchyError when no valid parent types available in project', async () => {
-      // Arrange: Mock hierarchy where child has parent level, but project doesn't have those issue types
-      const limitedHierarchy: HierarchyStructure = [
-        { id: 0, title: 'Story', issueTypeIds: ['10001'] },
-        { id: 1, title: 'Epic', issueTypeIds: ['99999'] }, // Issue type not in project
-      ];
-      mockHierarchyDiscovery.getHierarchy.mockResolvedValue(limitedHierarchy);
-      mockCache.get.mockResolvedValue(null);
-      
-      // Mock JQL search to return empty (this validates filtering works)
+    it('should fallback to JQL for unknown plugin', async () => {
+      // Arrange
       mockClient.post.mockResolvedValue({
-        total: 0,
-        issues: [],
+        total: 1,
+        issues: [
+          {
+            key: 'PROJ-123',
+            fields: {
+              summary: 'Test Issue',
+              issuetype: { id: '13301', name: 'Epic' },
+            },
+          },
+        ],
       });
 
-      // Act & Assert: Should throw NotFoundError because JQL won't find any matches with invalid type IDs
-      await expect(
-        resolveParentLink(
-          'test',
-          '10001',
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow(NotFoundError);
+      // Act
+      const result = await resolveParentLink(
+        'test issue',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        'com.unknown:custom-plugin',
+        mockSchemaDiscovery
+      );
+
+      // Assert
+      expect(result).toBe('PROJ-123');
+      expect(mockClient.post).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: expect.stringContaining('project = PROJ'),
+        })
+      );
     });
   });
 
   describe('AC4: Handle Ambiguity (Multiple Matches)', () => {
-    it('should throw AmbiguityError when multiple issues match', async () => {
-      // Arrange
+    it('should throw AmbiguityError when multiple issues match with same weight', async () => {
+      // Arrange - using JQL fallback which returns multiple matches
       mockClient.post.mockResolvedValue({
         total: 3,
         issues: [
@@ -360,32 +423,32 @@ describe('ParentLinkResolver', () => {
       await expect(
         resolveParentLink(
           'newsroom',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
           mockSchemaDiscovery
         )
       ).rejects.toThrow(AmbiguityError);
     });
 
     it('should include all candidate keys and types in error', async () => {
-      // Arrange
+      // Arrange - both issues have same summary so they'll have same weight
       mockClient.post.mockResolvedValue({
         total: 2,
         issues: [
           {
             key: 'PROJ-111',
             fields: {
-              summary: 'Test',
+              summary: 'Test Summary',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
           {
             key: 'PROJ-222',
             fields: {
-              summary: 'Test Issue',
+              summary: 'Test Summary',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
@@ -393,19 +456,30 @@ describe('ParentLinkResolver', () => {
       });
 
       // Act & Assert
-      try {
-        await resolveParentLink(
+      await expect(
+        resolveParentLink(
           'test',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
+          mockSchemaDiscovery
+        )
+      ).rejects.toThrow(AmbiguityError);
+
+      // Also verify the message contains the keys
+      try {
+        await resolveParentLink(
+          'test',
+          'Story',
+          'PROJ',
+          mockClient,
+          mockCache,
+          undefined,
           mockSchemaDiscovery
         );
-        fail('Should have thrown AmbiguityError');
       } catch (error) {
-        expect(error).toBeInstanceOf(AmbiguityError);
         expect((error as AmbiguityError).message).toContain('PROJ-111');
         expect((error as AmbiguityError).message).toContain('PROJ-222');
       }
@@ -434,26 +508,59 @@ describe('ParentLinkResolver', () => {
       });
 
       // Act & Assert
-      try {
-        await resolveParentLink(
+      await expect(
+        resolveParentLink(
           'test',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
           mockSchemaDiscovery
-        );
-        fail('Should have thrown AmbiguityError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(AmbiguityError);
-        expect((error as AmbiguityError).message.toLowerCase()).toMatch(/exact key|specific/);
-      }
+        )
+      ).rejects.toThrow(/exact key|specific/i);
+    });
+
+    it('should return best match when weights differ', async () => {
+      // Arrange - second issue has exact match which gets higher weight
+      mockClient.post.mockResolvedValue({
+        total: 2,
+        issues: [
+          {
+            key: 'PROJ-111',
+            fields: {
+              summary: 'Test Something Else',
+              issuetype: { id: '13301', name: 'Epic' },
+            },
+          },
+          {
+            key: 'PROJ-222',
+            fields: {
+              summary: 'test', // Exact match
+              issuetype: { id: '13301', name: 'Epic' },
+            },
+          },
+        ],
+      });
+
+      // Act
+      const result = await resolveParentLink(
+        'test',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        undefined,
+        mockSchemaDiscovery
+      );
+
+      // Assert - should return exact match
+      expect(result).toBe('PROJ-222');
     });
   });
 
   describe('AC5: Handle Not Found', () => {
-    it('should throw NotFoundError when no issues match', async () => {
+    it('should throw NotFoundError when no issues match (JQL fallback)', async () => {
       // Arrange
       mockClient.post.mockResolvedValue({
         total: 0,
@@ -464,11 +571,53 @@ describe('ParentLinkResolver', () => {
       await expect(
         resolveParentLink(
           'nonexistent summary',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
+          mockSchemaDiscovery
+        )
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw NotFoundError when no epics match (GreenHopper)', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({
+        epicLists: [],
+        total: 0,
+      });
+
+      // Act & Assert
+      await expect(
+        resolveParentLink(
+          'nonexistent epic',
+          'Story',
+          'PROJ',
+          mockClient,
+          mockCache,
+          GREENHOPPER_PLUGIN,
+          mockSchemaDiscovery
+        )
+      ).rejects.toThrow(NotFoundError);
+    });
+
+    it('should throw NotFoundError when no parents match (JPO)', async () => {
+      // Arrange
+      mockClient.post.mockResolvedValue({
+        issues: [],
+        projects: [],
+      });
+
+      // Act & Assert
+      await expect(
+        resolveParentLink(
+          'nonexistent parent',
+          'Story',
+          'PROJ',
+          mockClient,
+          mockCache,
+          JPO_PLUGIN,
           mockSchemaDiscovery
         )
       ).rejects.toThrow(NotFoundError);
@@ -482,21 +631,17 @@ describe('ParentLinkResolver', () => {
       });
 
       // Act & Assert
-      try {
-        await resolveParentLink(
+      await expect(
+        resolveParentLink(
           'my search term',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
           mockSchemaDiscovery
-        );
-        fail('Should have thrown NotFoundError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(NotFoundError);
-        expect((error as NotFoundError).message).toContain('my search term');
-      }
+        )
+      ).rejects.toThrow(/my search term/);
     });
 
     it('should include project key in error context', async () => {
@@ -507,124 +652,64 @@ describe('ParentLinkResolver', () => {
       });
 
       // Act & Assert
-      try {
-        await resolveParentLink(
+      await expect(
+        resolveParentLink(
           'test',
-          '10001',
+          'Story',
           'TESTPROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
           mockSchemaDiscovery
-        );
-        fail('Should have thrown NotFoundError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(NotFoundError);
-        expect((error as NotFoundError).message).toContain('TESTPROJ');
-      }
+        )
+      ).rejects.toThrow(/TESTPROJ/);
     });
   });
+  describe('AC6: No Hierarchy Validation (Delegated to JIRA)', () => {
+    // Note: Hierarchy validation is now delegated to JIRA's plugin-specific endpoints.
+    // The resolver simply validates that the issue exists and lets JIRA enforce hierarchy rules.
 
-  describe('AC6: Validate Hierarchy Relationship', () => {
-    it('should validate parent is exactly 1 level above child', async () => {
-      // Arrange
+    it('should accept any valid issue key without hierarchy validation', async () => {
+      // Arrange - issue exists, doesn't matter what type it is
       mockClient.get.mockResolvedValue({
         key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' }, // Level 1
-          summary: 'Test Epic',
-        },
       });
 
-      // Act
+      // Act - Story type child, but resolver doesn't check hierarchy anymore
       const result = await resolveParentLink(
         'PROJ-123',
-        '10001', // Story (level 0)
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        JPO_PLUGIN,
         mockSchemaDiscovery
       );
 
-      // Assert
+      // Assert - just returns the validated key
       expect(result).toBe('PROJ-123');
     });
 
-    it('should throw HierarchyError if parent is same level as child', async () => {
+    it('should not call hierarchy discovery', async () => {
       // Arrange
       mockClient.get.mockResolvedValue({
         key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '10001', name: 'Story' }, // Level 0
-          summary: 'Test Story',
-        },
       });
 
-      // Act & Assert
-      await expect(
-        resolveParentLink(
-          'PROJ-123',
-          '10001', // Story (level 0) - same level
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow(HierarchyError);
-    });
+      // Act
+      await resolveParentLink(
+        'PROJ-123',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        JPO_PLUGIN,
+        mockSchemaDiscovery
+      );
 
-    it('should throw HierarchyError if parent is lower level than child', async () => {
-      // Arrange
-      mockClient.get.mockResolvedValue({
-        key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '10001', name: 'Story' }, // Level 0
-          summary: 'Test Story',
-        },
-      });
-
-      // Act & Assert
-      await expect(
-        resolveParentLink(
-          'PROJ-123',
-          '13301', // Epic (level 1) - child at higher level
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow(HierarchyError);
-    });
-
-    it('should include issue types in HierarchyError message', async () => {
-      // Arrange
-      mockClient.get.mockResolvedValue({
-        key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '10001', name: 'Story' },
-          summary: 'Test',
-        },
-      });
-
-      // Act & Assert
-      try {
-        await resolveParentLink(
-          'PROJ-123',
-          '10001', // Same level
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        );
-        fail('Should have thrown HierarchyError');
-      } catch (error) {
-        expect(error).toBeInstanceOf(HierarchyError);
-        expect((error as HierarchyError).message).toContain('Story');
-      }
+      // Assert - schema discovery is passed but not used for hierarchy validation
+      // The implementation keeps schemaDiscovery for API compatibility but doesn't use it
+      expect(mockClient.get).toHaveBeenCalledWith('/rest/api/2/issue/PROJ-123?fields=key');
     });
   });
 
@@ -648,11 +733,11 @@ describe('ParentLinkResolver', () => {
       // Act
       await resolveParentLink(
         'test epic',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -671,11 +756,11 @@ describe('ParentLinkResolver', () => {
       // Act
       const result = await resolveParentLink(
         'cached summary',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -703,11 +788,11 @@ describe('ParentLinkResolver', () => {
       // Act
       await resolveParentLink(
         'test',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -719,20 +804,16 @@ describe('ParentLinkResolver', () => {
       // Arrange
       mockClient.get.mockResolvedValue({
         key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' },
-          summary: 'Test',
-        },
       });
 
       // Act
       await resolveParentLink(
         'PROJ-123',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        JPO_PLUGIN,
         mockSchemaDiscovery
       );
 
@@ -759,11 +840,11 @@ describe('ParentLinkResolver', () => {
       // Act
       await resolveParentLink(
         '  TeSt SuMmArY  ',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
@@ -777,53 +858,6 @@ describe('ParentLinkResolver', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle null hierarchy gracefully', async () => {
-      // Arrange
-      mockHierarchyDiscovery.getHierarchy.mockResolvedValue(null);
-
-      // Act & Assert
-      await expect(
-        resolveParentLink(
-          'test',
-          '10001',
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow(HierarchyError);
-    });
-
-    it('should handle child type not in hierarchy', async () => {
-      // Arrange
-      mockClient.post.mockResolvedValue({
-        total: 1,
-        issues: [
-          {
-            key: 'PROJ-123',
-            fields: {
-              summary: 'Test',
-              issuetype: { id: '13301', name: 'Epic' },
-            },
-          },
-        ],
-      });
-
-      // Act & Assert
-      await expect(
-        resolveParentLink(
-          'test',
-          '99999', // Unknown type
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow(HierarchyError);
-    });
-
     it('should handle empty summary search term', async () => {
       // Arrange
       mockClient.post.mockResolvedValue({
@@ -835,11 +869,11 @@ describe('ParentLinkResolver', () => {
       await expect(
         resolveParentLink(
           '   ',
-          '10001',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          undefined,
           mockSchemaDiscovery
         )
       ).rejects.toThrow(NotFoundError);
@@ -863,120 +897,303 @@ describe('ParentLinkResolver', () => {
       // Act
       const result = await resolveParentLink(
         'test "quoted" & special',
-        '10001',
+        'Story',
         'PROJ',
         mockClient,
         mockCache,
-        mockHierarchyDiscovery,
+        undefined,
         mockSchemaDiscovery
       );
 
       // Assert
       expect(result).toBe('PROJ-123');
     });
-  });
 
-  describe('Edge Cases: Hierarchy Validation', () => {
-    it('should throw HierarchyError when hierarchy is empty array (line 101)', async () => {
-      // Mock hierarchy discovery to return empty array
-      mockHierarchyDiscovery.getHierarchy.mockResolvedValueOnce([]);
-
-      // Mock API to return parent issue
-      mockClient.get.mockResolvedValueOnce({
-        key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' },
-          summary: 'Parent Epic',
-        },
+    it('should handle cache errors gracefully and continue to API', async () => {
+      // Arrange
+      mockCache.get.mockRejectedValue(new Error('Cache unavailable'));
+      mockClient.post.mockResolvedValue({
+        total: 1,
+        issues: [
+          {
+            key: 'PROJ-123',
+            fields: {
+              summary: 'Test',
+              issuetype: { id: '13301', name: 'Epic' },
+            },
+          },
+        ],
       });
 
-      // Should throw when validating parent-child relationship with empty hierarchy
-      await expect(
-        resolveParentLink(
-          'PROJ-123',
-          '10001', // Story type ID
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow(HierarchyError);
-      
-      // Reset for second call
-      mockHierarchyDiscovery.getHierarchy.mockResolvedValueOnce([]);
-      mockClient.get.mockResolvedValueOnce({
-        key: 'PROJ-123',
-        fields: {
-          issuetype: { id: '13301', name: 'Epic' },
-          summary: 'Parent Epic',
-        },
-      });
-      
-      await expect(
-        resolveParentLink(
-          'PROJ-123',
-          '10001',
-          'PROJ',
-          mockClient,
-          mockCache,
-          mockHierarchyDiscovery,
-          mockSchemaDiscovery
-        )
-      ).rejects.toThrow('JPO hierarchy not available');
+      // Act
+      const result = await resolveParentLink(
+        'test',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        undefined,
+        mockSchemaDiscovery
+      );
+
+      // Assert - should still succeed
+      expect(result).toBe('PROJ-123');
     });
 
-    it('should throw HierarchyError when no valid parent types available (line 180)', async () => {
-      // Mock hierarchy with Story at level 0, but parent level has NO issue type IDs
-      mockHierarchyDiscovery.getHierarchy.mockResolvedValue([
-        {
-          id: 0,
-          title: 'Story',
-          issueTypeIds: ['10001'], // Story type
-        },
-        {
-          id: 1,
-          title: 'Epic',
-          issueTypeIds: [], // NO parent types available!
-        },
-      ]);
+    it('should handle cache set errors gracefully', async () => {
+      // Arrange
+      mockCache.get.mockResolvedValue(null);
+      mockCache.set.mockRejectedValue(new Error('Cache write error'));
+      mockClient.post.mockResolvedValue({
+        total: 1,
+        issues: [
+          {
+            key: 'PROJ-123',
+            fields: {
+              summary: 'Test',
+              issuetype: { id: '13301', name: 'Epic' },
+            },
+          },
+        ],
+      });
 
-      // Mock schema with empty fields (no parent field)
-      const emptySchema: ProjectSchema = {
-        projectKey: 'PROJ',
-        issueType: 'Story',
-        fields: {},
-      };
-      mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(emptySchema);
+      // Act
+      const result = await resolveParentLink(
+        'test',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        undefined,
+        mockSchemaDiscovery
+      );
 
-      // Use a SUMMARY TEXT (not a key) to trigger resolveByName() path
-      // This will hit the check for validParentTypeIds.length === 0 at line 180
+      // Assert - should still succeed even if cache write fails
+      expect(result).toBe('PROJ-123');
+    });
+  });
+
+  describe('Edge Cases: GreenHopper Endpoint', () => {
+    it('should throw AmbiguityError when GreenHopper returns multiple epics with same weight', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({
+        epicLists: [
+          {
+            listDescriptor: 'current project',
+            epicNames: [
+              { key: 'PROJ-111', name: 'Test Epic One', isDone: false },
+              { key: 'PROJ-222', name: 'Test Epic Two', isDone: false },
+            ],
+          },
+        ],
+        total: 2,
+      });
+
+      // Act & Assert
       await expect(
         resolveParentLink(
-          'My Parent Epic',  // Summary text, not key format
-          '10001', // Story type
+          'test',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          GREENHOPPER_PLUGIN,
           mockSchemaDiscovery
         )
-      ).rejects.toThrow(HierarchyError);
-      
-      // Reset for second call
-      mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValueOnce(emptySchema);
-      
+      ).rejects.toThrow(AmbiguityError);
+    });
+
+    it('should prefer exact name match in GreenHopper results', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({
+        epicLists: [
+          {
+            listDescriptor: 'current project',
+            epicNames: [
+              { key: 'PROJ-111', name: 'Test Epic Extended', isDone: false },
+              { key: 'PROJ-222', name: 'test', isDone: false }, // Exact match
+            ],
+          },
+        ],
+        total: 2,
+      });
+
+      // Act
+      const result = await resolveParentLink(
+        'test',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        GREENHOPPER_PLUGIN,
+        mockSchemaDiscovery
+      );
+
+      // Assert
+      expect(result).toBe('PROJ-222');
+    });
+
+    it('should handle undefined epicLists in GreenHopper response', async () => {
+      // Arrange - epicLists is undefined
+      mockClient.get.mockResolvedValue({
+        total: 0,
+      });
+
+      // Act & Assert
       await expect(
         resolveParentLink(
-          'My Parent Epic',
-          '10001',
+          'test',
+          'Story',
           'PROJ',
           mockClient,
           mockCache,
-          mockHierarchyDiscovery,
+          GREENHOPPER_PLUGIN,
           mockSchemaDiscovery
         )
-      ).rejects.toThrow('No valid parent issue types available');
+      ).rejects.toThrow(NotFoundError);
+    });
+  });
+
+  describe('Edge Cases: JPO Endpoint', () => {
+    it('should throw AmbiguityError when JPO returns multiple parents with same weight', async () => {
+      // Arrange
+      mockClient.post.mockResolvedValue({
+        issues: [
+          {
+            issueKey: 111,
+            issueSummary: 'Test Parent One',
+            issueTypeId: 13301,
+            projectId: 10000,
+          },
+          {
+            issueKey: 222,
+            issueSummary: 'Test Parent Two',
+            issueTypeId: 13301,
+            projectId: 10000,
+          },
+        ],
+        projects: [
+          { id: 10000, key: 'PROJ' },
+        ],
+      });
+
+      // Act & Assert
+      await expect(
+        resolveParentLink(
+          'test',
+          'Story',
+          'PROJ',
+          mockClient,
+          mockCache,
+          JPO_PLUGIN,
+          mockSchemaDiscovery
+        )
+      ).rejects.toThrow(AmbiguityError);
+    });
+
+    it('should prefer current project in cross-project JPO results', async () => {
+      // Arrange - two results from different projects
+      mockClient.post.mockResolvedValue({
+        issues: [
+          {
+            issueKey: 111,
+            issueSummary: 'Test Parent',
+            issueTypeId: 13301,
+            projectId: 20000, // Different project
+          },
+          {
+            issueKey: 222,
+            issueSummary: 'Test Parent',
+            issueTypeId: 13301,
+            projectId: 10000, // Current project
+          },
+        ],
+        projects: [
+          { id: 10000, key: 'PROJ' },
+          { id: 20000, key: 'OTHER' },
+        ],
+      });
+
+      // Act
+      const result = await resolveParentLink(
+        'test parent',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        JPO_PLUGIN,
+        mockSchemaDiscovery
+      );
+
+      // Assert - should prefer PROJ-222 (current project)
+      expect(result).toBe('PROJ-222');
+    });
+
+    it('should include childIssueTypeName in JPO request', async () => {
+      // Arrange
+      mockClient.post.mockResolvedValue({
+        issues: [
+          {
+            issueKey: 123,
+            issueSummary: 'Parent',
+            issueTypeId: 13301,
+            projectId: 10000,
+          },
+        ],
+        projects: [
+          { id: 10000, key: 'PROJ' },
+        ],
+      });
+
+      // Act
+      await resolveParentLink(
+        'parent',
+        'Epic', // Different child type
+        'PROJ',
+        mockClient,
+        mockCache,
+        JPO_PLUGIN,
+        mockSchemaDiscovery
+      );
+
+      // Assert
+      expect(mockClient.post).toHaveBeenCalledWith(
+        '/rest/jpo/1.0/parent/suggest',
+        expect.objectContaining({
+          issueTypeName: 'Epic',
+        })
+      );
+    });
+
+    it('should handle missing project in projects array', async () => {
+      // Arrange - projectId not in projects array, should use ??? fallback
+      mockClient.post.mockResolvedValue({
+        issues: [
+          {
+            issueKey: 123,
+            issueSummary: 'Orphan Parent',
+            issueTypeId: 13301,
+            projectId: 99999, // Not in projects array
+          },
+        ],
+        projects: [
+          { id: 10000, key: 'PROJ' },
+        ],
+      });
+
+      // Act
+      const result = await resolveParentLink(
+        'orphan',
+        'Story',
+        'PROJ',
+        mockClient,
+        mockCache,
+        JPO_PLUGIN,
+        mockSchemaDiscovery
+      );
+
+      // Assert - should use ??? as project key fallback
+      expect(result).toBe('???-123');
     });
   });
 });
