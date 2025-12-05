@@ -36,7 +36,7 @@
 - [x] Accept input as string with delimiters: `"Category A -> Subcategory 1"`, `"Category A, Subcategory 1"`, `"Category A/Subcategory 1"`
 - [x] Support delimiter variations with/without spaces: `"A->B"`, `"A -> B"`, `"A,B"`, `"A, B"`, `"A/B"`, `"A / B"`
 - [x] Accept string (parent only): `"Category A"` if no delimiter found
-- [x] Accept string (child only): `"mp_zul_newsroom"` - auto-detect parent if child is unambiguous across all parents
+- [x] Accept string (child only): `"mp_apartment"` - auto-detect parent if child is unambiguous across all parents
 - [x] Parse delimiters in priority order: `->` first, then `,`, then `/`
 - [x] Handle accidental multiple spaces around delimiters and in names
 
@@ -143,8 +143,8 @@ This story introduces a **universal schema validation pattern** that will be ext
 **Before running tests, ensure:**
 - [x] Redis running on localhost:6379 (`npm run redis:start`)
 - [x] .env file configured with JIRA credentials
-- [x] JIRA_PROJECT_KEY set to project with cascading select custom field (ZUL)
-- [x] Test data: Cascading field with known parent/child options (Level field: MP -> mp_zul_trainyard_01)
+- [x] JIRA_PROJECT_KEY set to project with cascading select custom field (PROJ)
+- [x] Test data: Cascading field with known parent/child options (Level field: MP -> mp_backyard_01)
 
 **Start Prerequisites:**
 ```bash
@@ -192,8 +192,8 @@ npm run test:integration -- --grep "cascading"
 
 ### Integration Tests (2/3 passing)
 - **E3-S01 cascading tests** (all-converters.test.ts lines 232-351):
-  - ✅ Parent + child: Create issue with "MP -> mp_zul_trainyard_01" (ZUL-22827)
-  - ✅ Parent only: Create issue with "MP" (ZUL-22828)
+  - ✅ Parent + child: Create issue with "MP -> mp_backyard_01" (PROJ-22827)
+  - ✅ Parent only: Create issue with "MP" (PROJ-22828)
   - ⏸️ Child-only auto-detect: Skipped (incomplete test case)
 
 - **E2-S03 passthrough tests** (create-issue.test.ts lines 412-557):
@@ -307,7 +307,7 @@ function parseInput(value: string | object): { parent?: string; child?: string }
   }
   
   // Handle string format - try delimiters in priority order
-  // NOTE: Hyphen removed to avoid conflicts with names like "MP-ZUL-Newsroom"
+  // NOTE: Hyphen removed to avoid conflicts with names like "MP-PROJ-Apartment"
   const delimiters = ['->', ',', '/'];
   
   for (const delimiter of delimiters) {
@@ -372,8 +372,8 @@ const result = await convertOptionWithChildType(input, fieldSchema, context);
 // Result: { id: "10001", child: { id: "10050" } }
 
 // Example 6: Child-only input with auto-parent detection (NEW)
-const input = "mp_zul_newsroom";
-// "mp_zul_newsroom" exists under only one parent "MP"
+const input = "mp_apartment";
+// "mp_apartment" exists under only one parent "MP"
 // Auto-detects parent and resolves both
 const result = await convertOptionWithChildType(input, fieldSchema, context);
 // Result: { id: "10000", child: { id: "10075" } }

@@ -4,7 +4,7 @@
  * 
  * Accepts two input formats:
  * 1. Exact issue key: "PROJ-1234" → validate exists, return
- * 2. Summary text: "newsroom - phase 1" → Smart endpoint search based on parent field plugin
+ * 2. Summary text: "apartment - phase 1" → Smart endpoint search based on parent field plugin
  * 
  * Smart Resolution Strategy:
  * - GreenHopper (gh-epic-link): Uses /rest/greenhopper/1.0/epics endpoint
@@ -34,7 +34,7 @@ const CACHE_TTL_SECONDS = 300;
  * - JPO (Parent Link): `/rest/jpo/1.0/parent/suggest`
  * - Unknown/Standard: JQL search fallback
  * 
- * @param input - Either exact issue key ("PROJ-123") or summary text ("newsroom - phase 1")
+ * @param input - Either exact issue key ("PROJ-123") or summary text ("apartment - phase 1")
  * @param childIssueTypeName - Issue type name of the child (used for JPO suggest)
  * @param projectKey - Project key to search within (used for weighting results)
  * @param client - JIRA API client
@@ -51,7 +51,7 @@ const CACHE_TTL_SECONDS = 300;
  * const key = await resolveParentLink('PROJ-123', 'Story', 'PROJ', client, cache, 'gh-epic-link');
  * 
  * // Summary search with GreenHopper plugin
- * const key = await resolveParentLink('newsroom - phase 1', 'Story', 'PROJ', client, cache, 'gh-epic-link');
+ * const key = await resolveParentLink('apartment - phase 1', 'Story', 'PROJ', client, cache, 'gh-epic-link');
  * 
  * // Summary search with JPO plugin
  * const key = await resolveParentLink('my super epic', 'Epic', 'PROJ', client, cache, 'jpo-custom-field-parent');

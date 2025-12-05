@@ -225,13 +225,13 @@ describe('ParentSynonymHandler - FieldResolver Integration', () => {
       resolveParentLink.mockResolvedValue('PROJ-789');
 
       const input = {
-        'Parent Link': 'newsroom - phase 1', // Use discovered field name
+        'Parent Link': 'apartment - phase 1', // Use discovered field name
       };
 
       const result = await resolver.resolveFields('PROJ', 'Story', input);
 
       expect(resolveParentLink).toHaveBeenCalledWith(
-        'newsroom - phase 1',
+        'apartment - phase 1',
         'Story',
         'PROJ',
         mockClient,

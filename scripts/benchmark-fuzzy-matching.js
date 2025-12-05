@@ -21,9 +21,9 @@ const samplePriorities = [
 ];
 
 const sampleVersions = [
-  { id: '10000', name: 'ZUL_MS7_2025' },
-  { id: '10001', name: 'ZUL_MS8_2025' },
-  { id: '10002', name: 'ZUL_MS9_2025' },
+  { id: '10000', name: 'PROJ_MS7_2025' },
+  { id: '10001', name: 'PROJ_MS8_2025' },
+  { id: '10002', name: 'PROJ_MS9_2025' },
   { id: '10003', name: 'Product_v2.0' },
   { id: '10004', name: 'Product_v2.1' },
   { id: '10005', name: 'Product_v3.0' }
@@ -205,7 +205,7 @@ console.log('  - Exact matches use fast path (0.67-0.22x = FASTER than old appro
 console.log('  - Fuzzy matches pay fuse.js initialization cost (5-31x slower)');
 console.log('  - BUT: Absolute time is still fast (0.07-0.14ms = imperceptible)');
 console.log('  - Fuzzy matches only happen when user makes typo (rare case)');
-console.log('  - UX benefit (matching "MS7 2025" → "ZUL_MS7_2025") > perf cost');
+console.log('  - UX benefit (matching "MS7 2025" → "PROJ_MS7_2025") > perf cost');
 
 console.log('\n✅ Verdict: ACCEPTABLE TRADEOFF');
 console.log('  - Common case (exact match): FASTER (fast path optimized)');

@@ -19,7 +19,7 @@ export function createValidIssue(testName?: string): Record<string, string> {
     Description: 'Created by automated integration test',
   };
 
-  // Add Reporter (required in ZUL project - use unique username from .env.test)
+  // Add Reporter (required in project - use unique username from .env.test)
   const reporter = process.env.JIRA_REPORTER || process.env.JIRA_TEST_USER_NAME;
   if (reporter) {
     issue.Reporter = reporter;
@@ -64,7 +64,7 @@ export function createMinimalIssue(): Record<string, string> {
     Summary: createTestSummary('minimal'),
   };
 
-  // Add Reporter (required in ZUL project - use unique username from .env.test)
+  // Add Reporter (required in project - use unique username from .env.test)
   const reporter = process.env.JIRA_REPORTER || process.env.JIRA_TEST_USER_NAME;
   if (reporter) {
     issue.Reporter = reporter;
@@ -84,7 +84,7 @@ export function createIssueWithMultipleFields(): Record<string, string> {
     Description: 'This issue has multiple fields for testing field resolution',
   };
 
-  // Add Reporter (required in ZUL project - use unique username from .env.test)
+  // Add Reporter (required in project - use unique username from .env.test)
   const reporter = process.env.JIRA_REPORTER || process.env.JIRA_TEST_USER_NAME;
   if (reporter) {
     issue.Reporter = reporter;

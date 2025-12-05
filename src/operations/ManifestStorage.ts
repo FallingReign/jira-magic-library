@@ -28,7 +28,7 @@ import type { BulkManifest, ManifestUpdateData } from '../types/bulk.js';
  *   total: 100,
  *   succeeded: [0, 1, 2],
  *   failed: [3, 4],
- *   created: { '0': 'ZUL-123', '1': 'ZUL-124' },
+ *   created: { '0': 'PROJ-123', '1': 'PROJ-124' },
  *   errors: {
  *     '3': { status: 400, errors: { issuetype: 'required' } }
  *   }
@@ -94,7 +94,7 @@ export class ManifestStorage {
    *   total: 10,
    *   succeeded: [0, 1, 2],
    *   failed: [3],
-   *   created: { '0': 'ZUL-123' },
+   *   created: { '0': 'PROJ-123' },
    *   errors: { '3': { status: 400, errors: { field: 'error' } } }
    * });
    * ```
@@ -159,7 +159,7 @@ export class ManifestStorage {
    * await storage.updateManifest('bulk-12345678-...', {
    *   succeeded: [3],  // Previously failed, now succeeded
    *   failed: [4],     // Still failed
-   *   created: { '3': 'ZUL-124' },
+   *   created: { '3': 'PROJ-124' },
    *   errors: { '4': { status: 400, errors: { field: 'error' } } }
    * });
    * ```

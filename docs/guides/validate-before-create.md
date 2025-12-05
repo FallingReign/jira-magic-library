@@ -18,8 +18,8 @@ const jml = new JML({
 ```ts
 const result = await jml.validate({
   data: [
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Prepare sprint board' },
-    { Project: 'ZUL', 'Issue Type': 'Bug', Summary: '' }, // missing summary
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Prepare sprint board' },
+    { Project: 'PROJ', 'Issue Type': 'Bug', Summary: '' }, // missing summary
   ],
 });
 

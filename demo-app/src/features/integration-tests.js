@@ -31,7 +31,7 @@ export async function runIntegrationTests(config) {
       type: 'input',
       name: 'projectKey',
       message: 'Project key for test issues:',
-      default: config.defaultProjectKey || 'ZUL',
+      default: config.defaultProjectKey || 'PROJ',
       validate: (input) => {
         if (!input || !/^[A-Z][A-Z0-9]*$/.test(input.trim())) {
           return 'Project key must be uppercase letters/numbers';

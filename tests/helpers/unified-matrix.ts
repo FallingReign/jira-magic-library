@@ -48,10 +48,10 @@ const TEST_VALUES = {
   date: '2025-12-31',
   datetime: '2025-12-31T23:59:59.000Z',
   array: ['All'], // Generic array value - "All" is a common option in many arrays
-  priority: 'P3 - Medium',  // ZUL instance specific priority format
+  priority: 'P3 - Medium',  // instance specific priority format
   user: TEST_USER_EMAIL, // Use primary email to avoid ambiguity
   option: 'Not Started', // Production Phase value for Task issues
-  'option-with-child': 'MP -> mp_zul_newsroom', // Valid cascading select for Level field
+  'option-with-child': 'MP -> mp_apartment', // Valid cascading select for Level field
   component: 'Frontend', // Common component name  
   version: '1.0.0', // Generic version
   timetracking: { 
@@ -59,7 +59,7 @@ const TEST_VALUES = {
     remainingEstimate: '1h'
   }, // Object format expected by JIRA API
   issuetype: 'Task', // Will be converted to issuetype object
-  project: process.env.JIRA_PROJECT_KEY || 'ZUL', // Current project
+  project: process.env.JIRA_PROJECT_KEY || 'PROJ', // Current project
 } as const;
 
 /**
@@ -155,11 +155,11 @@ function shouldSkipField(fieldId: string, fieldName: string): boolean {
 const PASSTHROUGH_VALUES = {
   priority: { id: '3' }, // Medium priority ID
   user: { accountId: 'auser@company.com' },
-  option: { value: 'Not Started' }, // ZUL Production Phase actual value
+  option: { value: 'Not Started' },
   component: { id: '10000' },
   version: { id: '10000' },
   issuetype: { id: '10001' },
-  project: { key: process.env.JIRA_PROJECT_KEY || 'ZUL' },
+  project: { key: process.env.JIRA_PROJECT_KEY || 'PROJ' },
 } as const;
 
 export interface FieldMapping {

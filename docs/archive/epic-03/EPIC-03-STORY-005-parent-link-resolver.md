@@ -30,8 +30,8 @@
 
 
 ### ✅ AC2: Accept Summary Text Search
-- [x] Accept parent as summary text: `"newsroom - phase 1"` **Evidence**: [resolveBySummary](src/hierarchy/ParentLinkResolver.ts:134-244), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:184-193)
-- [x] Search issues by summary using JQL: `summary ~ "newsroom - phase 1"` **Evidence**: [JQL construction](src/hierarchy/ParentLinkResolver.ts:188), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:196-203)
+- [x] Accept parent as summary text: `"apartment - phase 1"` **Evidence**: [resolveBySummary](src/hierarchy/ParentLinkResolver.ts:134-244), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:184-193)
+- [x] Search issues by summary using JQL: `summary ~ "apartment - phase 1"` **Evidence**: [JQL construction](src/hierarchy/ParentLinkResolver.ts:188), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:196-203)
 - [x] Case-insensitive search **Evidence**: [normalize for cache](src/hierarchy/ParentLinkResolver.ts:143), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:205-233)
 - [x] Exact phrase matching (wrap in quotes for JQL) **Evidence**: [JQL quotes](src/hierarchy/ParentLinkResolver.ts:188), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:251-264)
 
@@ -48,14 +48,14 @@
 - [x] If multiple issues match summary search, throw AmbiguityError **Evidence**: [ambiguity check](src/hierarchy/ParentLinkResolver.ts:215), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:330-371)
 - [x] Include candidate list in error: issue keys, summaries, issue types **Evidence**: [candidate format](src/hierarchy/ParentLinkResolver.ts:216-218), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:373-412)
 - [x] Suggest user provides more specific summary or uses exact key **Evidence**: [error message](src/hierarchy/ParentLinkResolver.ts:221), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:415-452)
-- [x] Error format: `AmbiguityError("Multiple parents match 'newsroom': PROJ-123 (Epic), PROJ-456 (Phase)")` **Evidence**: [error construction](src/hierarchy/ParentLinkResolver.ts:220-231), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:409-411)
+- [x] Error format: `AmbiguityError("Multiple parents match 'apartment': PROJ-123 (Epic), PROJ-456 (Phase)")` **Evidence**: [error construction](src/hierarchy/ParentLinkResolver.ts:220-231), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:409-411)
 
 
 ### ✅ AC5: Handle Not Found
 - [x] If no issues match summary search, throw NotFoundError **Evidence**: [not found check](src/hierarchy/ParentLinkResolver.ts:207), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:456-475)
 - [x] Include search term in error message **Evidence**: [error message](src/hierarchy/ParentLinkResolver.ts:209), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:485-500)
 - [x] Suggest checking summary text or using exact key **Evidence**: [error context](src/hierarchy/ParentLinkResolver.ts:208-210), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:477-500)
-- [x] Error format: `NotFoundError("No parent found matching 'newsroom - phase 1'")` **Evidence**: [error construction](src/hierarchy/ParentLinkResolver.ts:208-211), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:498)
+- [x] Error format: `NotFoundError("No parent found matching 'apartment - phase 1'")` **Evidence**: [error construction](src/hierarchy/ParentLinkResolver.ts:208-211), [test](tests/unit/hierarchy/ParentLinkResolver.test.ts:498)
 
 
 ### ✅ AC6: Validate Parent is Higher Level
@@ -121,7 +121,7 @@ curl -u admin:token "${JIRA_BASE_URL}/rest/api/2/search?jql=project=PROJ AND sum
 const jql = `project = ${projectKey} AND summary ~ "${summaryText}" AND issuetype IN (${parentIssueTypeIds.join(',')})`;
 
 // Example
-const jql = `project = PROJ AND summary ~ "newsroom" AND issuetype IN (10000, 11002, 11700)`;
+const jql = `project = PROJ AND summary ~ "apartment" AND issuetype IN (10000, 11002, 11700)`;
 ```
 
 **Module structure:**
@@ -247,15 +247,15 @@ const parentKey = await resolveParentLink("PROJ-1234", "10001", "PROJ", context)
 console.log(parentKey); // "PROJ-1234"
 
 // Example 2: Summary search (unique match)
-const parentKey = await resolveParentLink("newsroom - phase 1", "10001", "PROJ", context);
+const parentKey = await resolveParentLink("apartment - phase 1", "10001", "PROJ", context);
 console.log(parentKey); // "PROJ-789" (found via summary search)
 
 // Example 3: Ambiguous summary
 try {
-  await resolveParentLink("newsroom", "10001", "PROJ", context);
+  await resolveParentLink("apartment", "10001", "PROJ", context);
 } catch (error) {
   console.error(error);
-  // AmbiguityError: Multiple parents match 'newsroom': PROJ-123 (Epic), PROJ-456 (Phase)
+  // AmbiguityError: Multiple parents match 'apartment': PROJ-123 (Epic), PROJ-456 (Phase)
 }
 
 // Example 4: Not found
@@ -306,7 +306,7 @@ try {
 - Story **E3-S09: Integration Tests** will add comprehensive parent linking demos including:
   - AC10: Update Demo App with Hierarchy Examples
   - Parent field with exact keys (`"PROJ-123"`)
-  - Parent field with summary search (`"newsroom - phase 1"`)
+  - Parent field with summary search (`"apartment - phase 1"`)
   - Multi-level hierarchies (subtask → story → epic → phase)
   - All parent synonyms ("Parent", "Epic Link", "Epic", etc.)
 - Adding partial demo to E3-S05 would be premature - E3-S09 will provide complete user-facing examples

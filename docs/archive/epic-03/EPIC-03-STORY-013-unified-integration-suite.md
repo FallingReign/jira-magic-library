@@ -121,9 +121,9 @@ export const SAMPLE_VALUES = {
   priority: () => 'Medium',
   user: () => process.env.JIRA_TEST_USER || undefined,
   option: () => 'Code - Automation',
-  'option-with-child': () => 'MP -> mp_zul_newsroom',
+  'option-with-child': () => 'MP -> mp_apartment',
   component: () => ['Code - Automation'],
-  version: () => ['ZUL_MS1_2024'],
+  version: () => ['PROJ_MS1_2024'],
   array: () => ['integration', 'unified-suite'],
   timetracking: () => ({ originalEstimate: '3h 30m', remainingEstimate: '1h 45m' }),
 };

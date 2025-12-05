@@ -764,7 +764,7 @@ export class OptionWithChildConverter extends BaseConverter<CascadingSelectValue
 describe('UniversalValidator - Schema Generation', () => {
   it('should generate cascading schema from option-with-child type', async () => {
     const projectSchema: ProjectSchema = {
-      project: 'ZUL',
+      project: 'PROJ',
       issueType: 'Task',
       fields: {
         'customfield_12345': {

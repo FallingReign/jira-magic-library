@@ -107,7 +107,7 @@ The original bug where different hierarchy levels couldn't use different parent 
 - [x] Verify parent links exist: SuperEpic→Container, Epic→SuperEpic, Task→Epic
 
 **Evidence**: [integration test](tests/integration/hierarchy-multi-level.test.ts), commit 32d0c11
-- Test creates 4-level hierarchy: Container (ZUL-24417) → SuperEpic (ZUL-24418) → Epic (ZUL-24419) → Task (ZUL-24420)
+- Test creates 4-level hierarchy: Container (PROJ-24417) → SuperEpic (PROJ-24418) → Epic (PROJ-24419) → Task (PROJ-24420)
 - Parent fields used:
   - SuperEpic: `customfield_11432` → Container
   - Epic: `customfield_11432` → SuperEpic (**shared field with SuperEpic - VALID**)
@@ -117,7 +117,7 @@ The original bug where different hierarchy levels couldn't use different parent 
 
 ### ✅ AC6: Demo Application Works
 - [x] Run hierarchy demo: `npm run demo` → select hierarchy → multi-level hierarchy
-- [x] Select project ZUL (has Container, SuperEpic, Epic, Task)
+- [x] Select project PROJ (has Container, SuperEpic, Epic, Task)
 - [x] Demo discovers hierarchy levels correctly (6 levels: Sub-task → Story → Epic → Phase → Container → Anthology)
 - [x] Demo filters issue types by level (uses `getIssueTypes()` + `level.issueTypeIds`)
 - [x] User selects: Container (level 4) → SuperEpic (level 3) → Epic (level 2)
@@ -126,9 +126,9 @@ The original bug where different hierarchy levels couldn't use different parent 
 
 **Evidence**: [hierarchy demo code](demo-app/src/features/hierarchy-demo.js), commit 48750e0
 - Demo run output:
-  - ✅ Container created: ZUL-24425 (no parent field)
-  - ✅ SuperEpic created: ZUL-24426 (parent: ZUL-24425, parent field resolved correctly)
-  - ✅ Epic created: ZUL-24427 (parent: ZUL-24426, parent field resolved correctly)
+  - ✅ Container created: PROJ-24425 (no parent field)
+  - ✅ SuperEpic created: PROJ-24426 (parent: PROJ-24425, parent field resolved correctly)
+  - ✅ Epic created: PROJ-24427 (parent: PROJ-24426, parent field resolved correctly)
 - Key validation: No "Field cannot be set" errors (proves hierarchy-aware parent resolution works)
 - Note: Epic Name field hardcoded in demo only (production users get proper validation error)
 
@@ -145,7 +145,7 @@ The original bug where different hierarchy levels couldn't use different parent 
 **Evidence**: 
 - [ParentFieldDiscovery Sub-task detection](src/hierarchy/ParentFieldDiscovery.ts:83-87) - `isSubtaskIssueType()` and early return of `"parent"`
 - [FieldResolver value formatting](src/converters/FieldResolver.ts:412-427) - Object vs string formatting based on field type
-- [Demo Success](npm run demo output) - ZUL-24458 (Container) → ZUL-24459 (SuperEpic) → ZUL-24460 (Epic) → ZUL-24461 (Task) → ZUL-24462 (Sub-task) ✅
+- [Demo Success](npm run demo output) - PROJ-24458 (Container) → PROJ-24459 (SuperEpic) → PROJ-24460 (Epic) → PROJ-24461 (Task) → PROJ-24462 (Sub-task) ✅
 - Key insight: This fix enables Epic → Sub-task workflows on instances without JPO, fulfilling "magic library" requirement
 
 ---
@@ -190,7 +190,7 @@ grep -r "hierarchy.*:parent-field" src/ tests/ --include="*.ts"
 3. Mock schema discovery appropriately
 
 **Phase 3: Write Integration Test**
-1. Use real JIRA instance (ZUL project)
+1. Use real JIRA instance (PROJ project)
 2. Create full hierarchy chain
 3. Verify parent fields set correctly
 
@@ -228,7 +228,7 @@ grep -r "hierarchy.*:parent-field" src/ tests/ --include="*.ts"
 **Before running tests, ensure:**
 - [x] Redis running on localhost:6379
 - [x] .env file configured with JIRA credentials
-- [x] JIRA_PROJECT_KEY set to ZUL (has Container, SuperEpic, Epic, Task hierarchy)
+- [x] JIRA_PROJECT_KEY set to PROJ (has Container, SuperEpic, Epic, Task hierarchy)
 - [x] Project has multiple issue types with different parent fields
 
 **Start Prerequisites:**
@@ -339,7 +339,7 @@ describe('Integration: Multi-Level Hierarchy Creation', () => {
     
     // Act - Create Container (level 4, no parent)
     const container = await jml.issues.create({
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Container',
       Summary: 'Test Container'
     });
@@ -347,7 +347,7 @@ describe('Integration: Multi-Level Hierarchy Creation', () => {
     // Act - Create SuperEpic (level 3) with parent Container
     // Should resolve customfield_10102 (SuperEpic's parent field)
     const superEpic = await jml.issues.create({
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'SuperEpic',
       Summary: 'Test SuperEpic',
       Parent: container.key // Library resolves correct parent field for SuperEpic
@@ -356,16 +356,16 @@ describe('Integration: Multi-Level Hierarchy Creation', () => {
     // Act - Create Epic (level 2) with parent SuperEpic
     // Should resolve customfield_10100 (Epic's parent field, different from SuperEpic!)
     const epic = await jml.issues.create({
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Epic',
       Summary: 'Test Epic',
       Parent: superEpic.key // Library resolves correct parent field for Epic
     });
     
     // Assert - All created successfully
-    expect(container.key).toMatch(/ZUL-\d+/);
-    expect(superEpic.key).toMatch(/ZUL-\d+/);
-    expect(epic.key).toMatch(/ZUL-\d+/);
+    expect(container.key).toMatch(/PROJ-\d+/);
+    expect(superEpic.key).toMatch(/PROJ-\d+/);
+    expect(epic.key).toMatch(/PROJ-\d+/);
     
     // Verify parent links in JIRA
     const superEpicData = await jml.client.get(`/rest/api/2/issue/${superEpic.key}`);
@@ -405,7 +405,7 @@ None - this is a critical bug fix that must be fully tested and validated.
 2. **Cache Invalidation**: Old cache entries (without issue type) won't interfere because new key format includes issue type
 3. **Error Messages**: Update error messages to include issue type name for better debugging
 4. **Null Handling**: Return null (not throw) when issue type doesn't have parent field - some issue types legitimately have no parent
-5. **Integration Test**: Use your actual JIRA project (ZUL) which has Container→SuperEpic→Epic hierarchy
+5. **Integration Test**: Use your actual JIRA project (PROJ) which has Container→SuperEpic→Epic hierarchy
 6. **Field Discovery Order**: Don't assume "Parent Link" is always the right field - respect schema discovery
 7. **Performance**: Cache is critical - hitting schema API for every issue creation would be too slow
 8. **Backward Compatibility**: This is a breaking change to internal API, but it's private so that's okay
@@ -461,13 +461,13 @@ describe('ParentFieldDiscovery - Issue Type Specific Resolution', () => {
 ```typescript
 describe('FieldResolver - Parent Synonym Integration', () => {
   it('should pass issue type name to ParentFieldDiscovery', async () => {
-    // Mock: creating SuperEpic issue with Parent='ZUL-123'
-    // Assert: parentFieldDiscovery.getParentFieldKey('ZUL', 'SuperEpic')
+    // Mock: creating SuperEpic issue with Parent='PROJ-123'
+    // Assert: parentFieldDiscovery.getParentFieldKey('PROJ', 'SuperEpic')
   });
   
   it('should include issue type in error when parent field not found', async () => {
     // Mock: getParentFieldKey returns null
-    // Assert: error message includes both 'ZUL' and 'SuperEpic'
+    // Assert: error message includes both 'PROJ' and 'SuperEpic'
   });
 });
 ```
@@ -479,20 +479,20 @@ describe('Integration: Multi-Level Hierarchy with Different Parent Fields', () =
     const jml = new JML(config);
     
     // Create Container (no parent)
-    const container = await jml.issues.create({ Project: 'ZUL', 'Issue Type': 'Container', Summary: 'Test Container' });
+    const container = await jml.issues.create({ Project: 'PROJ', 'Issue Type': 'Container', Summary: 'Test Container' });
     
     // Create SuperEpic with Container parent
     // Library should resolve customfield_10102 for SuperEpic (not Container's field)
-    const superEpic = await jml.issues.create({ Project: 'ZUL', 'Issue Type': 'SuperEpic', Summary: 'Test SuperEpic', Parent: container.key });
+    const superEpic = await jml.issues.create({ Project: 'PROJ', 'Issue Type': 'SuperEpic', Summary: 'Test SuperEpic', Parent: container.key });
     
     // Create Epic with SuperEpic parent
     // Library should resolve customfield_10100 for Epic (different from SuperEpic!)
-    const epic = await jml.issues.create({ Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Test Epic', Parent: superEpic.key });
+    const epic = await jml.issues.create({ Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Test Epic', Parent: superEpic.key });
     
     // Verify all created
-    expect(container.key).toMatch(/ZUL-\d+/);
-    expect(superEpic.key).toMatch(/ZUL-\d+/);
-    expect(epic.key).toMatch(/ZUL-\d+/);
+    expect(container.key).toMatch(/PROJ-\d+/);
+    expect(superEpic.key).toMatch(/PROJ-\d+/);
+    expect(epic.key).toMatch(/PROJ-\d+/);
     
     // Verify parent links set correctly in JIRA
     const superEpicData = await jml.client.get(`/rest/api/2/issue/${superEpic.key}`);

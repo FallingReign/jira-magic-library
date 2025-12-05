@@ -145,7 +145,7 @@
 **Before running tests, ensure:**
 - [x] Redis running on localhost:6379
 - [x] .env file configured with JIRA credentials
-- [x] JIRA_PROJECT_KEY set to project with hierarchy configured (ZUL)
+- [x] JIRA_PROJECT_KEY set to project with hierarchy configured (PROJ)
 - [x] JIRA instance has JPO plugin (for hierarchy tests)
 - [x] Test project has parent field configured (Epic Link or similar)
 - [x] Cascading select custom field configured in project
@@ -193,7 +193,7 @@ npm run test:integration -- --grep "hierarchy"
   - ✅ Covered: Exact key resolution, summary search
   - ❌ Gap: Multi-level hierarchy (AC6) - need Container→Phase→Epic→Story→Subtask test
 - **AC7**: Cascading Select - `tests/integration/all-converters.test.ts`
-  - ✅ Covered: String format (`'MP -> mp_zul_newsroom'`)
+  - ✅ Covered: String format (`'MP -> mp_apartment'`)
   - ❌ Gap: Object format, array format
 - **AC9**: Hierarchy Errors - `tests/integration/parent-link-resolver.test.ts`
   - ✅ Covered: NotFoundError for non-existent keys

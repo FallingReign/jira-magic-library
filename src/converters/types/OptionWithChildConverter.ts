@@ -5,13 +5,13 @@
  * Converts cascading select values for fields with type: "option-with-child"
  * 
  * Accepts:
- * - Object: { parent: "MP", child: "mp_zul_trainyard_01" }
+ * - Object: { parent: "MP", child: "mp_backyard_01" }
  * - Object (parent only): { parent: "MP" }
- * - Object (child only): { child: "mp_zul_newsroom" } (auto-detects parent)
- * - String with arrow: "MP -> mp_zul_trainyard_01"
- * - String with comma: "MP, mp_zul_trainyard_01"
- * - String with slash: "MP / mp_zul_trainyard_01"
- * - String (no delimiter): "mp_zul_newsroom" (treated as child, auto-detects parent)
+ * - Object (child only): { child: "mp_apartment" } (auto-detects parent)
+ * - String with arrow: "MP -> mp_backyard_01"
+ * - String with comma: "MP, mp_backyard_01"
+ * - String with slash: "MP / mp_backyard_01"
+ * - String (no delimiter): "mp_apartment" (treated as child, auto-detects parent)
  * - null/undefined for optional fields
  * 
  * Returns: 
@@ -28,15 +28,15 @@
  * @example
  * ```typescript
  * // Object format
- * convertOptionWithChildType({ parent: "MP", child: "mp_zul_trainyard_01" }, fieldSchema, context)
+ * convertOptionWithChildType({ parent: "MP", child: "mp_backyard_01" }, fieldSchema, context)
  * // → { id: "10000", child: { id: "10076" } }
  * 
  * // String with arrow
- * convertOptionWithChildType("MP -> mp_zul_trainyard_01", fieldSchema, context)
+ * convertOptionWithChildType("MP -> mp_backyard_01", fieldSchema, context)
  * // → { id: "10000", child: { id: "10076" } }
  * 
  * // Child-only (auto-detect parent)
- * convertOptionWithChildType("mp_zul_newsroom", fieldSchema, context)
+ * convertOptionWithChildType("mp_apartment", fieldSchema, context)
  * // → { id: "10000", child: { id: "10075" } }
  * 
  * // Parent only
@@ -98,7 +98,7 @@ function parseInput(value: string | object): ParsedInput {
   if (typeof value === 'string') {
     const trimmed = value.trim();
 
-    // Delimiters in priority order (note: no single hyphen to avoid conflicts with names like "MP-ZUL")
+    // Delimiters in priority order (note: no single hyphen to avoid conflicts with names like "AP-PROJ")
     const delimiters = ['->', ',', '/'];
 
     for (const delimiter of delimiters) {

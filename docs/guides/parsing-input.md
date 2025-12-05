@@ -17,8 +17,8 @@ console.log(parsed.data.length);
 ```ts
 const parsed = await parseInput({
   data: [
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'First' },
-    { Project: 'ZUL', 'Issue Type': 'Bug', Summary: 'Second' },
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'First' },
+    { Project: 'PROJ', 'Issue Type': 'Bug', Summary: 'Second' },
   ],
   format: 'json',
 });

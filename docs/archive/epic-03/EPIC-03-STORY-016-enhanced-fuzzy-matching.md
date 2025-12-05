@@ -15,12 +15,12 @@
 
 **As a** library user,  
 **I want** fuzzy matching to handle underscores, dashes, and special characters,  
-**So that** inputs like "MS7 2025" match "ZUL_MS7_2025" and "automation" matches "Code - Automation".
+**So that** inputs like "MS7 2025" match "PROJ_MS7_2025" and "automation" matches "Code - Automation".
 
 ## Context
 
 **Problem**: Current fuzzy matching in [`resolveUniqueName`](../../src/utils/resolveUniqueName.ts) uses simple `.includes()` substring matching. This fails when:
-- Input has spaces but value has underscores: `"MS7 2025"` vs `"ZUL_MS7_2025"`
+- Input has spaces but value has underscores: `"MS7 2025"` vs `"PROJ_MS7_2025"`
 - Input has typos: `"automaton"` vs `"Code - Automation"`
 - Input is partial but special chars differ: `"critical"` vs `"P1 - Critical"`
 
@@ -69,7 +69,7 @@ const matches = allowedValues.filter(v =>
 ---
 
 ### ✅ AC3: Fuzzy matching handles underscores/dashes
-- [x] Test case: `"MS7 2025"` matches `"ZUL_MS7_2025"` (underscores)
+- [x] Test case: `"MS7 2025"` matches `"PROJ_MS7_2025"` (underscores)
 - [x] Test case: `"code automation"` matches `"Code - Automation"` (dashes)
 - [x] Test case: `"p1 critical"` matches `"P1 - Critical"` (exact substring)
 
@@ -79,7 +79,7 @@ const matches = allowedValues.filter(v =>
 
 ### ✅ AC4: Fuzzy matching handles typos
 - [x] Test case: `"automaton"` matches `"Code - Automation"` (typo tolerance)
-- [x] Test case: `"newsrom"` matches `"mp_zul_newsroom"` (missing letter)
+- [x] Test case: `"newsrom"` matches `"mp_apartment"` (missing letter)
 - [x] Test case: `"critcal"` matches `"P1 - Critical"` (transposition)
 
 **Evidence**: [`tests/unit/utils/resolveUniqueName.test.ts`](../../tests/unit/utils/resolveUniqueName.test.ts) lines 367-411, all 3 typo tests passing ✅
@@ -100,7 +100,7 @@ const matches = allowedValues.filter(v =>
 ### ✅ AC6: All existing integration tests pass
 - [x] Run full integration test suite: `npm run test:integration`
 - [x] All 5 scenarios in unified-suite.test.ts pass ✅
-- [x] "MS7 2025" now matches "ZUL_MS7_2025" in task-all-fields-fuzzy-match ✅
+- [x] "MS7 2025" now matches "PROJ_MS7_2025" in task-all-fields-fuzzy-match ✅
 - [x] No regressions in other converters (priority, component, user, etc.)
 
 **Evidence**: [`tests/integration/unified-suite.test.ts`](../../tests/integration/unified-suite.test.ts) output shows "PASS", all 5 scenarios passing, fuzzy match working
@@ -277,7 +277,7 @@ Test with real JIRA data:
 - E2-S05 (Ambiguity Detection & Error Handling) - Uses resolveUniqueName for lookups
 - E2-S07 (Priority Type Converter) - Uses fuzzy matching
 - E2-S10 (Component Item Converter) - Uses fuzzy matching
-- E2-S11 (Version Item Converter) - Uses fuzzy matching (main issue: "MS7 2025" → "ZUL_MS7_2025")
+- E2-S11 (Version Item Converter) - Uses fuzzy matching (main issue: "MS7 2025" → "PROJ_MS7_2025")
 
 ---
 
@@ -288,25 +288,25 @@ Test with real JIRA data:
 ```typescript
 describe('resolveUniqueName with fuse.js', () => {
   const versions = [
-    { id: '1', name: 'ZUL_MS1_2024' },
-    { id: '2', name: 'ZUL_MS7_2025' },
-    { id: '3', name: 'ZUL_MS18_2027' },
+    { id: '1', name: 'PROJ_MS1_2024' },
+    { id: '2', name: 'PROJ_MS7_2025' },
+    { id: '3', name: 'PROJ_MS18_2027' },
   ];
   
-  it('should match "MS7 2025" to "ZUL_MS7_2025" (underscore normalization)', () => {
+  it('should match "MS7 2025" to "PROJ_MS7_2025" (underscore normalization)', () => {
     const result = resolveUniqueName('MS7 2025', versions, {
       field: 'fixVersions',
       fieldName: 'Fix Version/s'
     });
-    expect(result.name).toBe('ZUL_MS7_2025');
+    expect(result.name).toBe('PROJ_MS7_2025');
   });
   
-  it('should match "ms7" to "ZUL_MS7_2025" (partial match)', () => {
+  it('should match "ms7" to "PROJ_MS7_2025" (partial match)', () => {
     const result = resolveUniqueName('ms7', versions, {
       field: 'fixVersions',
       fieldName: 'Fix Version/s'
     });
-    expect(result.name).toBe('ZUL_MS7_2025');
+    expect(result.name).toBe('PROJ_MS7_2025');
   });
   
   it('should throw AmbiguityError when multiple close matches', () => {
@@ -331,7 +331,7 @@ Verify existing fuzzy-match scenario now works:
 {
   name: 'task-all-fields-fuzzy-match',
   payload: {
-    'Fix Version/s': 'MS7 2025', // Should now match ZUL_MS7_2025
+    'Fix Version/s': 'MS7 2025', // Should now match PROJ_MS7_2025
     // ... other fuzzy fields
   }
 }
@@ -385,7 +385,7 @@ Verify existing fuzzy-match scenario now works:
 
 - [x] All 9 acceptance criteria met with evidence
 - [x] fuse.js integrated and configured (version 7.1.0)
-- [x] "MS7 2025" matches "ZUL_MS7_2025" in integration tests ✅
+- [x] "MS7 2025" matches "PROJ_MS7_2025" in integration tests ✅
 - [x] All existing tests pass (no regressions): 539 converter tests, 32 resolveUniqueName tests
 - [x] Performance < 2x slower than current logic (exact matches FASTER, fuzzy < 1ms)
 - [x] Unit test coverage ≥ 95% for resolveUniqueName (9 new tests added)
@@ -416,7 +416,7 @@ Verify existing fuzzy-match scenario now works:
 
 ## Notes
 
-- This story was created from E3-S15 testing where "MS7 2025" failed to match "ZUL_MS7_2025"
+- This story was created from E3-S15 testing where "MS7 2025" failed to match "PROJ_MS7_2025"
 - Current `.includes()` logic is too simplistic for real-world JIRA field names
 - fuse.js is industry standard, used by VS Code, npm, and many search tools
 - Alternative libraries considered: `fuzzysort`, `fuzzy`, `string-similarity` (fuse.js chosen for configurability)

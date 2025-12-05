@@ -20,7 +20,7 @@ export async function runBulkImportYamlQuickDemo(config) {
 }
 
 async function runBulkImportQuickDemo(config, format) {
-  const projectKey = config.defaultProjectKey || config.projectKey || 'ZUL';
+  const projectKey = config.defaultProjectKey || config.projectKey || 'PROJ';
   const examples = getExampleData(projectKey, config.username);
   const exampleData = examples[format];
 

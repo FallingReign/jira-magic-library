@@ -7,7 +7,7 @@
  * Throws AmbiguityError if multiple matches found.
  * 
  * Fuzzy Matching Features (E3-S16):
- * - Handles special characters: "MS7 2025" matches "ZUL_MS7_2025"
+ * - Handles special characters: "MS7 2025" matches "PROJ_MS7_2025"
  * - Handles typos: "automaton" matches "Code - Automation"
  * - Exact matches always preferred (fast path)
  * - Threshold 0.3 (balanced: precision vs recall)
@@ -27,7 +27,7 @@
  * 
  * // Fuzzy match (underscore normalization)
  * resolveUniqueName('MS7 2025', versions, { field: 'fixVersions', fieldName: 'Fix Version/s' });
- * // → { id: '2', name: 'ZUL_MS7_2025' }
+ * // → { id: '2', name: 'PROJ_MS7_2025' }
  * 
  * // Fuzzy match (typo tolerance)
  * resolveUniqueName('automaton', components, { field: 'components', fieldName: 'Component/s' });

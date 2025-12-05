@@ -9,7 +9,7 @@
 **Started**: 2025-10-09  
 **Completed**: 2025-10-14
 
-**Note**: Converter implementation complete with unit tests (100% coverage) and integration tests (3/3 passing with ZUL Task Due Date field).
+**Note**: Converter implementation complete with unit tests (100% coverage) and integration tests (3/3 passing with PROJ Task Due Date field).
 
 ---
 
@@ -180,7 +180,7 @@ new Date('2025-09-30')    → "2025-09-30"    (Date object)
 - [x] Registered in `ConverterRegistry` constructor
 - [x] All 8 acceptance criteria met and verified
 - [x] Unit tests passing with ≥95% coverage (achieved 100%)
-- [x] Integration tests passing (3/3 tests with ZUL Task Due Date field)
+- [x] Integration tests passing (3/3 tests with PROJ Task Due Date field)
 - [x] TSDoc comments added with examples
 - [x] No linter errors (pre-existing errors not from this story)
 - [x] Code reviewed (self-review complete)

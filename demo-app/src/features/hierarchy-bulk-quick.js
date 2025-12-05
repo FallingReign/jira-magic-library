@@ -20,7 +20,7 @@ export async function runHierarchyYamlQuickDemo(config) {
 }
 
 async function runHierarchyQuickDemo(config, format) {
-  const projectKey = config.defaultProjectKey || config.projectKey || 'ZUL';
+  const projectKey = config.defaultProjectKey || config.projectKey || 'PROJ';
   const examples = getHierarchyExampleData(projectKey);
   const exampleData = examples[format];
 

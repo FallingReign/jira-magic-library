@@ -9,7 +9,7 @@
 **Started**: 2025-10-09  
 **Completed**: 2025-10-14
 
-**Note**: Converter implementation complete with unit tests (100% coverage) and integration tests (3/3 passing with ZUL Bug "Found CL" field).
+**Note**: Converter implementation complete with unit tests (100% coverage) and integration tests (3/3 passing with PROJ Bug "Found CL" field).
 
 ---
 
@@ -99,12 +99,12 @@ The converter must:
 - [x] Create issue with number field using integer: `{ 'Found CL': 12345 }`
 - [x] Create issue with number field using string: `{ 'Found CL': '67890' }`
 - [x] Create issue with number field using float: `{ 'Found CL': 3.5 }`
-- [x] Verify JIRA accepts converted values (issues created: ZUL-22179, ZUL-22180, ZUL-22181)
+- [x] Verify JIRA accepts converted values (issues created: PROJ-22179, PROJ-22180, PROJ-22181)
 - [x] Integration test passes: `npm run test:integration`
 
 **Evidence**: [integration tests](../../tests/integration/create-issue.test.ts#L251-346), all tests passing (19/19)
 
-**Note**: Tests use ZUL project Bug issue type with "Found CL" numeric field. The field name is resolved dynamically through FieldResolver (NOT hardcoded) - the library properly converts "Found CL" → customfield_XXXXX via schema discovery. This validates end-to-end flow: field name resolution → type-based converter selection → value conversion → JIRA API call.
+**Note**: Tests use PROJ project Bug issue type with "Found CL" numeric field. The field name is resolved dynamically through FieldResolver (NOT hardcoded) - the library properly converts "Found CL" → customfield_XXXXX via schema discovery. This validates end-to-end flow: field name resolution → type-based converter selection → value conversion → JIRA API call.
 
 ---
 
@@ -167,7 +167,7 @@ Infinity  → ValidationError (not a valid number)
 - [x] Registered in `ConverterRegistry` constructor
 - [x] All 7 acceptance criteria met and verified
 - [x] Unit tests passing with ≥95% coverage (100% achieved)
-- [x] Integration tests passing (3/3 tests with ZUL Bug "Found CL" field)
+- [x] Integration tests passing (3/3 tests with PROJ Bug "Found CL" field)
 - [x] TSDoc comments added
 - [x] No linter errors
 - [x] Code reviewed and refactored (extracted to separate file)

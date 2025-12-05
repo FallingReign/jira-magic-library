@@ -26,10 +26,10 @@
 - [x] Cover all 15 converter types: string, text, number, date, datetime, array, priority, user, option, option-with-child, component, version, timetracking, issuetype, project
 - [x] Each scenario has metadata: `name`, `description`, `category`, `testDescription` (what the `it()` block should say)
 - [x] Each scenario has `payload` with multiple fields exercising different converters
-- [x] Use instance-specific values (ZUL project components, versions, cascading selects)
+- [x] Use instance-specific values (PROJ project components, versions, cascading selects)
 - [x] Include edge cases: null values, optional fields, passthrough formats
 
-**Evidence**: [Fixture file](../../tests/fixtures/user-scenarios.ts) - 196 lines with UserScenario interface and 5 comprehensive scenarios. Covers 10/15 converters directly (component, datetime, number, option, version tested indirectly via arrays/priority). Uses ZUL-specific values (MP parent, Code - Automation component, P3 - Medium priority).
+**Evidence**: [Fixture file](../../tests/fixtures/user-scenarios.ts) - 196 lines with UserScenario interface and 5 comprehensive scenarios. Covers 10/15 converters directly (component, datetime, number, option, version tested indirectly via arrays/priority). Uses PROJ-specific values (MP parent, Code - Automation component, P3 - Medium priority).
 
 ### ✅ AC2: Issue Optimization Strategy
 - [x] Create ≤5 JIRA issues total (down from ~65 issues currently)
@@ -38,7 +38,7 @@
 - [x] Group scenarios logically: all Bug scenarios, all Task scenarios, all Story scenarios
 - [x] Document which scenarios create issues vs which reuse fields
 
-**Evidence**: [Test output](../../tests/integration/unified-suite.test.ts) shows "Issues Created: 5/5 maximum" (ZUL-24490 through ZUL-24494). Each scenario creates 1 issue with 6-11 fields testing multiple converters per issue.
+**Evidence**: [Test output](../../tests/integration/unified-suite.test.ts) shows "Issues Created: 5/5 maximum" (PROJ-24490 through PROJ-24494). Each scenario creates 1 issue with 6-11 fields testing multiple converters per issue.
 
 ### ✅ AC3: Data-Driven Test Loop
 - [x] Refactor (or replace) `unified-suite.test.ts` to iterate through scenarios
@@ -71,7 +71,7 @@
 
 ### ✅ AC6: Documentation & Maintainability
 - [x] Add JSDoc to `user-scenarios.ts` explaining structure and how to add scenarios
-- [x] Document instance-specific values (ZUL components, versions, cascading selects)
+- [x] Document instance-specific values (PROJ components, versions, cascading selects)
 - [x] Provide scenario template in comments
 - [x] Update `tests/integration/README.md` with data-driven approach (N/A - file doesn't exist, documented in JSDoc)
 - [x] Document issue creation strategy (why ≤5 issues is sufficient) (Documented in fixture JSDoc)
@@ -95,7 +95,7 @@
 **Before running tests, ensure:**
 - Redis running on localhost:6379 (`npm run redis:start`)
 - .env.test configured with JIRA credentials
-- JIRA_PROJECT_KEY set to ZUL (or your test project)
+- JIRA_PROJECT_KEY set to PROJ (or your test project)
 - Test user has permissions to create all issue types
 
 **Start Prerequisites:**
@@ -135,7 +135,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     description: 'Tests string, option, array[component] converters',
     category: 'basic',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Found crash in multiplayer lobby',
       Priority: 'High',
@@ -150,10 +150,10 @@ export const USER_SCENARIOS: UserScenario[] = [
     description: 'Tests option-with-child converter with delimiter format',
     category: 'cascading',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Task',
       Summary: 'Setup environment for testing',
-      Level: 'MP -> mp_zul_newsroom',  // Cascading select
+      Level: 'MP -> mp_apartment',  // Cascading select
     },
     expectedConverters: ['option-with-child'],
   },
@@ -225,18 +225,18 @@ describe('Integration: Data-Driven User Scenarios', () => {
  * 4. Write clear testDescription for the `it()` block
  * 5. Document which converters this exercises
  * 
- * **Instance-Specific Values (ZUL Project):**
+ * **Instance-Specific Values (PROJ Project):**
  * - Components: 'Code - Automation', 'Debug', 'Code - Build'
- * - Versions: 'ZUL_MS1_2024', 'ZUL_MS2_2025'
- * - Cascading: 'MP -> mp_zul_newsroom', 'Art -> art_characters'
+ * - Versions: 'PROJ_MS1_2024', 'PROJ_MS2_2025'
+ * - Cascading: 'MP -> mp_apartment', 'Art -> art_characters'
  * - User: 'auser@company.com'
  * - Priority: 'High', 'Medium', 'Low', 'P1 - Critical', 'P3 - Medium'
  * 
  * **Field Format Notes:**
  * - Cascading selects support 3 formats:
- *   1. String with delimiter: 'MP -> mp_zul_newsroom'
+ *   1. String with delimiter: 'MP -> mp_apartment'
  *   2. Object: { parent: 'Art', child: 'art_characters' }
- *   3. Array: ['MP', 'mp_zul_newsroom']
+ *   3. Array: ['MP', 'mp_apartment']
  * - Time tracking uses human-readable strings: '3h 30m', '2h'
  * - Dates use ISO format: '2025-12-31'
  * - DateTimes use full ISO: '2025-12-31T23:59:59.000Z'
@@ -274,17 +274,17 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive',
     testDescription: 'should create Bug with priority, components, dates, assignee, cascading select, time tracking, and labels',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Critical crash in multiplayer lobby - all fields test',
       Description: 'Comprehensive bug report with all relevant fields populated.\n\nSteps:\n1. Join lobby\n2. Crash occurs',
       Priority: 'High',
       'Component/s': ['Code - Automation', 'Debug'],
-      'Fix Version/s': ['ZUL_MS1_2024'],
+      'Fix Version/s': ['PROJ_MS1_2024'],
       Labels: ['crash', 'multiplayer', 'p1'],
       Assignee: 'auser@company.com',
       'Due Date': '2025-12-31',
-      Level: 'MP -> mp_zul_newsroom',
+      Level: 'MP -> mp_apartment',
       'Time Tracking': {
         originalEstimate: '3h 30m',
         remainingEstimate: '2h'
@@ -302,9 +302,9 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive',
     testDescription: 'should create Task with datetime, numbers, and alternative cascading format',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Task',
-      Summary: 'Setup newsroom environment with scheduled start time',
+      Summary: 'Setup apartment environment with scheduled start time',
       Description: 'Task with datetime field testing',
       'Start Date & Time': '2025-12-31T23:59:59.000Z',
       'Submitted CL': 12345,
@@ -323,12 +323,12 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive',
     testDescription: 'should create Story with components, versions, labels, and reporter',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Story',
       Summary: 'Implement weapon system with multiple components',
       Description: 'Story testing array converters',
       'Component/s': ['Code - Build', 'Code - Build - CI', 'Code - Build - Packaging'],
-      'Fix Version/s': ['ZUL_MS1_2024', 'ZUL_MS2_2025'],
+      'Fix Version/s': ['PROJ_MS1_2024', 'PROJ_MS2_2025'],
       Labels: ['feature', 'weapons', 'gameplay'],
       Reporter: 'auser@company.com',
     },
@@ -344,11 +344,11 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive',
     testDescription: 'should create Task with cascading select using array format [parent, child]',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Task',
       Summary: 'Configure build system',
       Description: 'Testing array format for cascading select',
-      Level: ['MP', 'mp_zul_newsroom'],
+      Level: ['MP', 'mp_apartment'],
       Priority: 'Medium',
       Labels: ['build', 'configuration'],
     },
@@ -370,7 +370,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'edge-cases',
     testDescription: 'should create minimal Task with only project, issuetype, and summary',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Task',
       Summary: 'Minimal issue - required fields only',
     },
@@ -383,7 +383,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'edge-cases',
     testDescription: 'should handle null values for optional fields gracefully',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Testing null optional fields',
       Description: null,
@@ -405,7 +405,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'passthrough',
     testDescription: 'should pass through JIRA API format unchanged for priority, components, versions',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Passthrough format test',
       Priority: { id: '3' },
@@ -421,7 +421,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'passthrough',
     testDescription: 'should pass through cascading select with { id, child: { id } } format',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Task',
       Summary: 'Cascading passthrough test',
       Level: { id: '10001', child: { id: '10101' } },
@@ -439,7 +439,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'minimal',
     testDescription: 'should create Bug with description but no other optional fields',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Bug with description only',
       Description: 'This bug has a description but no priority, components, etc.',
@@ -452,7 +452,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'edge-cases',
     testDescription: 'should handle null values for optional fields gracefully',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Testing null optional fields',
       Description: null,  // Explicitly null
@@ -474,7 +474,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'passthrough',
     testDescription: 'should pass through JIRA API format unchanged for priority, components, versions',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Passthrough format test',
       Priority: { id: '3' },  // JIRA API format
@@ -490,7 +490,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'passthrough',
     testDescription: 'should pass through cascading select with { id, child: { id } } format',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Task',
       Summary: 'Cascading passthrough test',
       Level: { id: '10001', child: { id: '10101' } },  // JIRA API format
@@ -508,7 +508,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'minimal',
     testDescription: 'should create Bug with description but no other optional fields',
     payload: {
-      Project: 'ZUL',
+      Project: 'PROJ',
       'Issue Type': 'Bug',
       Summary: 'Bug with description only',
       Description: 'This bug has a description but no priority, components, etc.',
@@ -688,7 +688,7 @@ describe('Integration: Data-Driven User Scenarios', () => {
 2. **Initialize JML, not components** - `new JML(config)` handles all wiring automatically (simpler than unified-suite.test.ts)
 3. **Start with 5-6 comprehensive scenarios first** - Get infrastructure working before creating all 15-20
 4. **Pack fields into scenarios** - One Bug with 8-10 fields is better than 8 Bugs with 1 field each
-5. **Use real ZUL values** - Copy components, versions, cascading selects from existing tests
+5. **Use real PROJ values** - Copy components, versions, cascading selects from existing tests
 6. **Test `validateConverterCoverage()` early** - Run after each batch to ensure no gaps
 7. **testDescription is key** - This becomes the `it()` description, make it clear and specific
 6. **Categories matter less** - Focus on comprehensive field coverage per scenario, not category organization

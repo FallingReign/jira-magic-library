@@ -156,9 +156,9 @@ import { generateRollbackJQL } from './RollbackHelper';
 const manifest = {
   id: 'bulk-123',
   created: {
-    '0': 'ZUL-24659',
-    '1': 'ZUL-24660',
-    '2': 'ZUL-24661'
+    '0': 'PROJ-24659',
+    '1': 'PROJ-24660',
+    '2': 'PROJ-24661'
   },
   // ... other manifest fields
 };
@@ -167,8 +167,8 @@ const rollback = generateRollbackJQL(manifest, 'https://jira.company.com');
 
 console.log(rollback);
 // {
-//   jql: 'key IN (ZUL-24659,ZUL-24660,ZUL-24661)',
-//   url: 'https://jira.company.com/issues/?jql=key%20IN%20(ZUL-24659%2CZUL-24660%2CZUL-24661)',
+//   jql: 'key IN (PROJ-24659,PROJ-24660,PROJ-24661)',
+//   url: 'https://jira.company.com/issues/?jql=key%20IN%20(PROJ-24659%2CPROJ-24660%2CPROJ-24661)',
 //   count: 3
 // }
 ```

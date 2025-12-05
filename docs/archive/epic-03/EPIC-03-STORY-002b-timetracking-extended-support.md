@@ -368,7 +368,7 @@ for (const [parentFieldId, properties] of virtualFieldGroups) {
 ### Example 1: Top-Level Fields (New - Preferred)
 ```typescript
 await jml.issues.create({
-  "Project": "ZUL",
+  "Project": "PROJ",
   "Issue Type": "Task",
   "Summary": "Implement login feature",
   "Original Estimate": "3d",      // ← Natural field name
@@ -379,7 +379,7 @@ await jml.issues.create({
 ### Example 2: Object Format (Existing - Still Supported)
 ```typescript
 await jml.issues.create({
-  "Project": "ZUL",
+  "Project": "PROJ",
   "Issue Type": "Task",
   "Summary": "Implement login feature",
   "Time Tracking": {                // ← Object format
@@ -392,7 +392,7 @@ await jml.issues.create({
 ### Example 3: Mixed Format (Top-Level Overrides)
 ```typescript
 await jml.issues.create({
-  "Project": "ZUL",
+  "Project": "PROJ",
   "Issue Type": "Task",
   "Summary": "Implement login feature",
   "Time Tracking": {

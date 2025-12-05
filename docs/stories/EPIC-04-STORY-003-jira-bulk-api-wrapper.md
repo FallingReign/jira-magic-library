@@ -130,7 +130,7 @@ cat .env | grep JIRA_PAT
   "issues": [
     {
       "id": "4894364",
-      "key": "ZUL-24659",
+      "key": "PROJ-24659",
       "self": "https://.../rest/api/2/issue/4894364"
     }
   ],

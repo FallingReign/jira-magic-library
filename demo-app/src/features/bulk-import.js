@@ -53,7 +53,7 @@ export async function runBulkImportDemo(config) {
       type: 'input',
       name: 'projectKey',
       message: 'Enter the JIRA project key to create issues in:',
-      default: config.defaultProjectKey || config.projectKey || 'ZUL',
+      default: config.defaultProjectKey || config.projectKey || 'PROJ',
       validate: (input) => {
         if (!input || input.trim().length === 0) {
           return 'Project key is required';
@@ -617,7 +617,7 @@ async function runHierarchyBulkDemo(config) {
       type: 'input',
       name: 'projectKey',
       message: 'Enter the JIRA project key:',
-      default: config.defaultProjectKey || config.projectKey || 'ZUL',
+      default: config.defaultProjectKey || config.projectKey || 'PROJ',
       validate: (input) => {
         if (!input || input.trim().length === 0) {
           return 'Project key is required';

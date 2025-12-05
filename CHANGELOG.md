@@ -6,7 +6,6 @@ All notable changes to this project are documented here. Only tagged releases ar
 
 ### Fixed
 - FieldResolver now resolves project/issueType using fuzzy matching against JIRA data
-- Lowercase project keys (e.g., `"zul"`) are automatically resolved to correct case (`"ZUL"`)
 - Projects can be specified by name (e.g., `"Engineering"`) in addition to key
 - Issue types are fuzzy matched with typo tolerance (e.g., `"storey"` → `"Story"`)
 - Added caching for project list (15 min TTL) to reduce API calls

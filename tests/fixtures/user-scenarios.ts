@@ -54,7 +54,7 @@ export const USER_SCENARIOS: UserScenario[] = [
       'Fix Version/s': ['ZUL_MS1_2024'],
       'Due Date': '2025-12-31',
       Assignee: process.env.JIRA_TEST_USER_NAME || 'Slack Tools',
-      Level: 'MP -> mp_zul_newsroom', // Cascading select
+      Level: 'MP -> mp_apartment', // Cascading select
       'Time Tracking': {
         'Original Estimate': '3h',
         'Remaining Estimate': '1h',
@@ -87,7 +87,7 @@ export const USER_SCENARIOS: UserScenario[] = [
       'Fix Version/s': 'MS7 2025', // Should fuzzy match to ZUL_MS7_2025
       'Due Date': '2025-12-31',
       Assignee: 'Slack Tools',
-      Level: { parent: 'mp', child: 'newsroom' },
+      Level: { parent: 'mp', child: 'apartment' },
       'Original Estimate': '2 hours',
       'Remaining Estimate': '30 min',
       Labels: ['integration-test', 'fuzzy-match', 'e3-s15'],

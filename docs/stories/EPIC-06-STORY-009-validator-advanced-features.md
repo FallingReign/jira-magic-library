@@ -144,7 +144,7 @@ E3-S10 built the core UniversalValidator with JSON Schema (Ajv) and hybrid type 
   - Test logging in both modes
 - [ ] **Toggle Tests**:
   - Test global enabled=false (validation skipped)
-  - Test per-project toggle (enabled for ZUL, disabled for DEV)
+  - Test per-project toggle (enabled for PROJ, disabled for DEV)
   - Test per-issueType toggle (enabled for Bug, disabled for Epic)
 - [ ] All tests pass with 95% coverage maintained
 
@@ -154,7 +154,7 @@ E3-S10 built the core UniversalValidator with JSON Schema (Ajv) and hybrid type 
 ### ✅ AC7: Integration Tests with Real Schemas
 - [ ] Test drift detection with real JIRA schema (change allowedValues)
 - [ ] Test refresh-once with simulated drift scenario
-- [ ] Test enum validation with real cascading select field (ZUL Level)
+- [ ] Test enum validation with real cascading select field (PROJ Level)
 - [ ] Test log-only mode with intentionally invalid payload
 - [ ] Test per-project toggle with multiple projects
 - [ ] All tests pass with 95% coverage maintained
@@ -168,7 +168,7 @@ E3-S10 built the core UniversalValidator with JSON Schema (Ajv) and hybrid type 
   - Refresh-once example (simulate drift, show refresh)
   - Enum validation comparison (with/without enums)
   - Log-only mode (show warnings, not errors)
-  - Per-project toggle (enable for ZUL, disable for TEST)
+  - Per-project toggle (enable for PROJ, disable for TEST)
 - [ ] Include clear console output showing each feature
 - [ ] All demos run successfully
 
@@ -255,7 +255,7 @@ const validator = new UniversalValidator({
   validationConfig: {
     enabled: true,
     projects: {
-      'ZUL': { enabled: true },        // Enforce for ZUL
+      'PROJ': { enabled: true },        // Enforce for PROJ
       'DEV': { enabled: false },       // Skip for DEV (testing)
       'PROD': {
         enabled: true,
@@ -447,7 +447,7 @@ export class UniversalValidator {
 
 **Toggle Tests** (AC5):
 - `validationConfig.enabled=false`: Validation skipped globally
-- `Per-project toggle`: Enabled for ZUL, disabled for DEV
+- `Per-project toggle`: Enabled for PROJ, disabled for DEV
 - `Per-issueType toggle`: Enabled for Bug, disabled for Epic
 - `isValidationEnabled()`: Returns correct boolean based on config
 - `Shortcut on disabled`: Returns `{ ok: true, validationSkipped: true }` immediately
@@ -457,7 +457,7 @@ export class UniversalValidator {
 ### Integration Tests (`tests/integration/validation/`)
 
 **Real Schema Drift Test**:
-- Fetch schema from JIRA (ZUL project)
+- Fetch schema from JIRA (PROJ project)
 - Simulate drift by modifying allowedValues
 - Verify drift detection reports change
 - Verify auto-refresh rebuilds validator
@@ -474,9 +474,9 @@ export class UniversalValidator {
 - Verify warning logged to console
 
 **Per-Project Toggle Test**:
-- Configure validation for multiple projects (ZUL: enabled, TEST: disabled)
+- Configure validation for multiple projects (PROJ: enabled, TEST: disabled)
 - Validate payloads for both projects
-- Verify ZUL validation runs, TEST validation skipped
+- Verify PROJ validation runs, TEST validation skipped
 
 **Coverage Target**: 95% (real JIRA scenarios)
 
@@ -486,7 +486,7 @@ export class UniversalValidator {
 - [ ] Redis running on localhost:6379 (`docker run -d -p 6379:6379 redis`)
 - [ ] .env file configured with JIRA credentials
 - [ ] JIRA_PROJECT_KEY set (for integration tests)
-- [ ] ZUL project accessible with cascading Level field
+- [ ] PROJ project accessible with cascading Level field
 
 **Start Prerequisites**:
 ```bash

@@ -153,7 +153,7 @@ describe('ParentLinkResolver', () => {
           {
             key: 'PROJ-123',
             fields: {
-              summary: 'Newsroom - Phase 1',
+              summary: 'Apartment - Phase 1',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
@@ -162,7 +162,7 @@ describe('ParentLinkResolver', () => {
 
       // Act - using undefined plugin to trigger JQL fallback
       const result = await resolveParentLink(
-        'newsroom - phase 1',
+        'apartment - phase 1',
         'Story',
         'PROJ',
         mockClient,
@@ -190,7 +190,7 @@ describe('ParentLinkResolver', () => {
           {
             key: 'PROJ-456',
             fields: {
-              summary: 'NEWSROOM - PHASE 1',
+              summary: 'APARTMENT - PHASE 1',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
@@ -199,7 +199,7 @@ describe('ParentLinkResolver', () => {
 
       // Act
       const result = await resolveParentLink(
-        'NeWsRoOm - PhAsE 1',
+        'ApArTmEnT - PhAsE 1',
         'Story',
         'PROJ',
         mockClient,
@@ -398,21 +398,21 @@ describe('ParentLinkResolver', () => {
           {
             key: 'PROJ-123',
             fields: {
-              summary: 'Newsroom Project',
+              summary: 'Apartment Project',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
           {
             key: 'PROJ-456',
             fields: {
-              summary: 'Newsroom Phase 1',
+              summary: 'Apartment Phase 1',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
           {
             key: 'PROJ-789',
             fields: {
-              summary: 'Newsroom Phase 2',
+              summary: 'Apartment Phase 2',
               issuetype: { id: '13301', name: 'Epic' },
             },
           },
@@ -422,7 +422,7 @@ describe('ParentLinkResolver', () => {
       // Act & Assert
       await expect(
         resolveParentLink(
-          'newsroom',
+          'apartment',
           'Story',
           'PROJ',
           mockClient,

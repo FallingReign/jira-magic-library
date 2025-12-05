@@ -643,7 +643,7 @@ jml.on("error", (error) => { /* send to error tracker */ });
 ### Test Data Strategy
 - **Unit tests**: Synthetic data (mock JIRA responses)
 - **Integration tests**: Real JIRA dev/staging instance (configured via .env.test)
-- **Test projects**: Dedicated project (e.g., "ZUL") with basic issue types configured
+- **Test projects**: Dedicated project (e.g., "PROJ") with basic issue types configured
 - **Cleanup**: Delete test issues after each run (automated cleanup in afterEach)
 
 ### Performance Testing

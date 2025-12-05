@@ -25,7 +25,7 @@ export async function runSchemaValidationDemo(config) {
       type: 'input',
       name: 'projectKey',
       message: 'Enter the JIRA project key:',
-      default: config.defaultProjectKey || config.projectKey || 'ZUL',
+      default: config.defaultProjectKey || config.projectKey || 'PROJ',
     },
   ]);
 

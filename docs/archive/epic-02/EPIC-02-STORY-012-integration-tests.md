@@ -133,15 +133,15 @@ After implementing comprehensive tests (all-converters + error-cases + performan
 **Evidence**: [tests/integration/performance.test.ts](../../tests/integration/performance.test.ts) lines 96-237 (4 performance benchmarks)
 
 ### ✅ AC6: Real JIRA Instance Requirements
-- [x] Test against JIRA Server/DC (v8.x or later) - All tests run against real JIRA instance (ZUL project for Server, JUP for datetime)
+- [x] Test against JIRA Server/DC (v8.x or later) - All tests run against real JIRA instance (PROJ project for Server, JUP for datetime)
 - [x] Document required test data setup:
-  - [x] Project with components configured - ZUL project has "Back-end", "Front-end", "API" components
-  - [x] Project with versions configured - ZUL project has "1.0", "2.0", "3.0" versions
+  - [x] Project with components configured - PROJ project has "Back-end", "Front-end", "API" components
+  - [x] Project with versions configured - PROJ project has "1.0", "2.0", "3.0" versions
   - [x] At least one user (for assignee test) - Uses `JIRA_TEST_USER` environment variable (optional)
   - [x] Custom number field (optional but recommended) - Story Points tested in all-converters.test.ts
   - [x] Custom single-select field (optional but recommended) - Found CL tested in all-converters.test.ts
 
-**Evidence**: [tests/integration/fixtures.ts](../../tests/integration/fixtures.ts) (test configuration), test runs against real JIRA ZUL + JUP projects
+**Evidence**: [tests/integration/fixtures.ts](../../tests/integration/fixtures.ts) (test configuration), test runs against real JIRA PROJ + JUP projects
 
 ### ✅ AC7: Integration Test Organization
 - [x] Place in `tests/integration/` - All tests in tests/integration/ directory

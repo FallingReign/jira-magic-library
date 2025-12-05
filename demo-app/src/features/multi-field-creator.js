@@ -308,14 +308,14 @@ async function promptForField(field, config) {
     
     case 'level':
       info('  Cascading select supports multiple formats:');
-      info('  • "MP -> mp_zul_trainyard_01" (parent arrow child)');
-      info('  • "MP, mp_zul_trainyard_01" (parent comma child)');
-      info('  • "MP / mp_zul_trainyard_01" (parent slash child)');
+      info('  • "MP -> mp_backyard_01" (parent arrow child)');
+      info('  • "MP, mp_backyard_01" (parent comma child)');
+      info('  • "MP / mp_backyard_01" (parent slash child)');
       info('  • "MP" (parent only)');
-      info('  • "mp_zul_newsroom" (child only, auto-detects parent)\n');
+      info('  • "mp_apartment" (child only, auto-detects parent)\n');
       return await input(
         'Enter level value:',
-        'MP -> mp_zul_trainyard_01'
+        'MP -> mp_backyard_01'
       );
     
     default:

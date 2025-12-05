@@ -25,7 +25,7 @@
 - [x] Use existing dev/staging JIRA instance for integration tests
   - **Evidence**: `.env.test`, test config in `tests/integration/setup.ts` ([ffd4f58](https://github.com/FallingReign/jira-magic-library/commit/ffd4f58))
 - [x] Document test project requirements:
-  - Project key accessible by test PAT (e.g., `ZUL`, `TEST`)
+  - Project key accessible by test PAT (e.g., `PROJ`, `TEST`)
   - Issue types: Task, Bug, or Story
   - Basic fields configured (Summary, Description)
   - Safe for creating/deleting test issues
@@ -40,7 +40,7 @@
   
   JIRA_BASE_URL=https://dev.company.com/dev1/jira
   JIRA_PAT=<dev-pat-token>
-  JIRA_PROJECT_KEY=ZUL
+  JIRA_PROJECT_KEY=PROJ
   JIRA_API_VERSION=v2
   REDIS_HOST=localhost
   REDIS_PORT=6379
@@ -94,7 +94,7 @@
 - [x] Create `tests/integration/fixtures.ts`:
   - **Evidence**: `tests/integration/fixtures.ts` ([ffd4f58](https://github.com/FallingReign/jira-magic-library/commit/ffd4f58))
   ```typescript
-  // Use project key from .env.test (e.g., ZUL)
+  // Use project key from .env.test (e.g., PROJ)
   export const validIssue = {
     Project: process.env.JIRA_PROJECT_KEY!,
     'Issue Type': 'Task',

@@ -64,7 +64,7 @@ const wrapper = new JiraBulkApiWrapper(client);
       type: 'input',
       name: 'projectKey',
       message: 'Enter JIRA project key:',
-      default: 'ZUL',
+      default: 'PROJ',
       validate: (input) => {
         if (!input || input.trim() === '') {
           return 'Project key is required';

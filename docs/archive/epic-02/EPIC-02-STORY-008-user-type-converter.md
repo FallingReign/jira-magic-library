@@ -72,9 +72,9 @@
 - [x] Coverage ≥95% **Evidence**: 98.14% statements, 87.17% branches, 100% functions, 98.03% lines (commit 912e85e)
 
 ### ✅ AC10: Integration Test with Real JIRA
-- [x] Create issue with assignee using username: `{ assignee: "auser@company.com" }` **Evidence**: [user-converter.test.ts:90-114](../../../tests/integration/user-converter.test.ts#L90-L114), ZUL-22321 created ✅
-- [x] Create issue with assignee using display name: `{ assignee: "Justin Time" }` **Evidence**: [user-converter.test.ts:116-142](../../../tests/integration/user-converter.test.ts#L116-L142), ZUL-22322 created ✅
-- [x] Create issue with assignee using user object: `{ assignee: { name: "auser@company.com" } }` **Evidence**: [user-converter.test.ts:144-180](../../../tests/integration/user-converter.test.ts#L144-L180), ZUL-22323 created ✅
+- [x] Create issue with assignee using username: `{ assignee: "auser@company.com" }` **Evidence**: [user-converter.test.ts:90-114](../../../tests/integration/user-converter.test.ts#L90-L114), PROJ-22321 created ✅
+- [x] Create issue with assignee using display name: `{ assignee: "Justin Time" }` **Evidence**: [user-converter.test.ts:116-142](../../../tests/integration/user-converter.test.ts#L116-L142), PROJ-22322 created ✅
+- [x] Create issue with assignee using user object: `{ assignee: { name: "auser@company.com" } }` **Evidence**: [user-converter.test.ts:144-180](../../../tests/integration/user-converter.test.ts#L144-L180), PROJ-22323 created ✅
 - [x] Verify all three formats create issues successfully with correct assignee **Evidence**: [user-converter.test.ts:182-218](../../../tests/integration/user-converter.test.ts#L182-L218), 2 issues created, all with assignees ✅
 - [x] Integration test passes: `npm run test:integration -- --testPathPattern=user-converter` **Evidence**: 5/5 tests passing ✅
 

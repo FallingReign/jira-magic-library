@@ -40,7 +40,7 @@
 ### ✅ AC3: Resolve Parent Value
 - [x] Use parent link resolver (E3-S05) to resolve value **Evidence**: [resolveParentLink call](src/converters/FieldResolver.ts:392-400), [test](tests/unit/hierarchy/ParentSynonymHandler.test.ts:208-231)
 - [x] Accept exact key: `"Parent: PROJ-1234"` **Evidence**: [exact key test](tests/unit/hierarchy/ParentSynonymHandler.test.ts:209-231)
-- [x] Accept summary search: `"Epic Link: newsroom - phase 1"` **Evidence**: [summary search test](tests/unit/hierarchy/ParentSynonymHandler.test.ts:233-255), [integration test](tests/integration/parent-synonyms.test.ts:59-88)
+- [x] Accept summary search: `"Epic Link: apartment - phase 1"` **Evidence**: [summary search test](tests/unit/hierarchy/ParentSynonymHandler.test.ts:233-255), [integration test](tests/integration/parent-synonyms.test.ts:59-88)
 - [x] Works with any synonym: `"Epic: PROJ-1234"` same as `"Parent: PROJ-1234"` **Evidence**: [all synonyms test](tests/unit/hierarchy/ParentSynonymHandler.test.ts:257-283)
 
 
@@ -265,7 +265,7 @@ const issue = await createIssue({
   project: "PROJ",
   issueType: "Story",
   summary: "New story",
-  "Epic Link": "newsroom - phase 1"  // ← Summary search
+  "Epic Link": "apartment - phase 1"  // ← Summary search
 });
 // Resolves to: customfield_10014: "EPIC-789" (found via search)
 

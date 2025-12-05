@@ -24,7 +24,7 @@
 ### ✅ AC1: Type-Based Registration
 - [x] Converter registered as `registry.register('component', convertComponentType)` **Evidence**: [ConverterRegistry.ts line 60](../../src/converters/ConverterRegistry.ts#L60)
 - [x] Used by array converter when `schema.items === 'component'` **Evidence**: [ArrayConverter.ts line 134](../../src/converters/types/ArrayConverter.ts#L134)
-- [x] Works for any project's component list **Evidence**: Integration tests with ZUL project
+- [x] Works for any project's component list **Evidence**: Integration tests with PROJ project
 
 ### ✅ AC2: Component Name to ID Conversion
 - [x] String `"Backend"` converts to `{ id: "10001" }` (from components list) **Evidence**: [ComponentConverter.test.ts lines 46-60](../../tests/unit/converters/types/ComponentConverter.test.ts#L46-L60)
@@ -58,7 +58,7 @@
 ### ✅ AC7: Integration Test with Real JIRA
 - [x] Create issue with components array: `{ components: ["Code - Automation", "Debug"] }` **Evidence**: [component-converter.test.ts lines 81-122](../../tests/integration/component-converter.test.ts#L81-L122) - 5 integration tests passing
 - [x] Verify array converter delegates to component converter (components resolved by name) **Evidence**: [component-converter.test.ts lines 207-261](../../tests/integration/component-converter.test.ts#L207-L261) - Test verifies delegation pattern
-- [x] Verify JIRA accepts component IDs and creates issue with correct components **Evidence**: Issues ZUL-22394 through ZUL-22398 created successfully with components
+- [x] Verify JIRA accepts component IDs and creates issue with correct components **Evidence**: Issues PROJ-22394 through PROJ-22398 created successfully with components
 - [x] Integration test passes: `npm run test:integration` **Evidence**: All 5/5 component converter integration tests passing (test output in commit 9778d54)
 
 ---
@@ -219,7 +219,7 @@ components: "Frontend"
 
 **Common Components**: Backend, Frontend, API, Mobile, Infrastructure, Documentation
 
-**Integration Test Note**: Component field availability varies by JIRA project configuration. The converter logic is fully tested via unit tests (100% coverage). Integration tests verify the converter integrates with the system without errors. In ZUL project, Bug issues successfully created but components field may be configured differently or require additional permissions.
+**Integration Test Note**: Component field availability varies by JIRA project configuration. The converter logic is fully tested via unit tests (100% coverage). Integration tests verify the converter integrates with the system without errors. In PROJ project, Bug issues successfully created but components field may be configured differently or require additional permissions.
 
 **Reference**: [JIRA Field Types - Component](../JIRA-FIELD-TYPES.md#lookup-types)
 
@@ -293,9 +293,9 @@ npm start
    - ✅ Overall project coverage: 97.59%
 
 3. **Integration Tests** (`tests/integration/component-converter.test.ts`):
-   - ✅ 5/5 tests passing against real ZUL JIRA instance
+   - ✅ 5/5 tests passing against real PROJ JIRA instance
    - ✅ Tests: array by name, CSV strings, case-insensitive, object passthrough, array delegation
-   - ✅ Issues created: ZUL-22394 through ZUL-22398
+   - ✅ Issues created: PROJ-22394 through PROJ-22398
 
 4. **Registry Integration**:
    - ✅ Registered in `ConverterRegistry` as `'component'` type

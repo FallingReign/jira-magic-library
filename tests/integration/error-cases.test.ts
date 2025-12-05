@@ -215,12 +215,11 @@ describe('Integration: Error Cases', () => {
 
       console.log('   🧪 Testing non-numeric field values...');
 
-      // Use Task issue type (available in ZUL) with a numeric field
       // Note: Story Points may not be available in all projects
       // Testing number converter validation on any numeric field
       
       console.log('      ℹ️  Number converter validation tested in unit tests');
-      console.log('      ℹ️  (Story Points field not available in ZUL project)');
+      console.log('      ℹ️  (Story Points field not available in project)');
       console.log('      ✅ Number converter error handling confirmed in unit tests\n');
       
       expect(true).toBe(true); // Placeholder

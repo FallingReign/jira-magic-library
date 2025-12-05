@@ -95,7 +95,7 @@
 - [x] Display final summary with accumulated results
 - [x] Support multiple retry attempts until all succeed or user cancels
 - [x] Generate JQL search link to view all created issues
-- [x] Display clickable link: `{baseUrl}/issues/?jql=key in (ZUL-123, ZUL-124, ZUL-125)`
+- [x] Display clickable link: `{baseUrl}/issues/?jql=key in (PROJ-123, PROJ-124, PROJ-125)`
 
 **Evidence**: Commit b2d3d42 - Added 207-line `retryFailedIssues()` function in [retryFailedIssues.js](../../../demo-app/src/features/retryFailedIssues.js) with:
 - Failure detection ([lines 312-329](../../../demo-app/src/features/retryFailedIssues.js#L312-L329))
@@ -143,7 +143,7 @@ Final Results:
 📂 Manifest ID: bulk-abc123 (same manifest)
 
 🔍 View all created issues:
-   https://your-jira.atlassian.net/issues/?jql=key in (ZUL-123, ZUL-124, ZUL-125)
+   https://your-jira.atlassian.net/issues/?jql=key in (PROJ-123, PROJ-124, PROJ-125)
 ```
 
 ---

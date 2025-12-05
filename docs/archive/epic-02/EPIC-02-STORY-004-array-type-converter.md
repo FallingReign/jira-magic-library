@@ -116,8 +116,8 @@ This **single converter** handles:
 **Evidence**: [test file](../../tests/unit/converters/types/ArrayConverter.test.ts), 28/28 tests passing, 100% coverage
 
 ### ✅ AC8: Integration Test with Real JIRA
-- [x] Create issue with Labels field using array: `{ labels: ["bug", "frontend"] }` **Evidence**: ZUL-22231
-- [x] Create issue with Labels using CSV string: `{ labels: "bug, frontend" }` **Evidence**: ZUL-22232
+- [x] Create issue with Labels field using array: `{ labels: ["bug", "frontend"] }` **Evidence**: PROJ-22231
+- [x] Create issue with Labels using CSV string: `{ labels: "bug, frontend" }` **Evidence**: PROJ-22232
 - [x] Create issue with Components (tests array delegation to component converter) **Evidence**: Deferred to E2-S10 (Component converter not yet implemented)
 - [x] Verify JIRA accepts all array formats **Evidence**: All 4 integration tests passing
 - [x] Integration test passes: `npm run test:integration` **Evidence**: 4/4 tests passing
@@ -328,10 +328,10 @@ Output: ["bug", "frontend", "ui"]
 **Demo Required**: ❌ No
 
 **Reason**: Integration tests already demonstrate all key features:
-- Test 1: Labels as array input ([ZUL-22231](https://zulip.atlassian.net/browse/ZUL-22231))
-- Test 2: Labels as CSV string ([ZUL-22232](https://zulip.atlassian.net/browse/ZUL-22232))
-- Test 3: CSV with whitespace trimming ([ZUL-22233](https://zulip.atlassian.net/browse/ZUL-22233))
-- Test 4: Empty array handling ([ZUL-22234](https://zulip.atlassian.net/browse/ZUL-22234))
+- Test 1: Labels as array input ([PROJ-22231](https://zulip.atlassian.net/browse/PROJ-22231))
+- Test 2: Labels as CSV string ([PROJ-22232](https://zulip.atlassian.net/browse/PROJ-22232))
+- Test 3: CSV with whitespace trimming ([PROJ-22233](https://zulip.atlassian.net/browse/PROJ-22233))
+- Test 4: Empty array handling ([PROJ-22234](https://zulip.atlassian.net/browse/PROJ-22234))
 
 **Alternative Evidence**:
 - Integration tests: [create-issue.test.ts#L557-654](../../tests/integration/create-issue.test.ts)

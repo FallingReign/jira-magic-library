@@ -141,7 +141,7 @@ E3-S10 built the UniversalValidator with JSON Schema (Ajv) and hybrid type detec
   // Example: Show how validation works
   try {
     const issue = await jml.createIssue({
-      project: "ZUL",
+      project: "PROJ",
       issueType: "Bug",
       fields: {
         summary: "Test bug",
@@ -267,7 +267,7 @@ export class ExampleConverter extends BaseConverter {
 **No new unit tests needed** - existing tests already cover passthrough format (they just didn't validate against schema before).
 
 **Integration Tests**: New tests to verify passthrough with *real schemas*:
-- Fetch schema from JIRA (ZUL project)
+- Fetch schema from JIRA (PROJ project)
 - Pass JIRA API format to converter
 - Verify validator called and value returned unchanged
 - Verify no conversion performed (performance check)
@@ -422,8 +422,8 @@ async validatePayload(
 **Before running integration tests, ensure:**
 - [ ] Redis running on localhost:6379 (`docker run -d -p 6379:6379 redis`)
 - [ ] .env file configured with JIRA credentials
-- [ ] JIRA_PROJECT_KEY set to ZUL (for integration tests)
-- [ ] ZUL project accessible with test data
+- [ ] JIRA_PROJECT_KEY set to PROJ (for integration tests)
+- [ ] PROJ project accessible with test data
 
 **Start Prerequisites**:
 ```bash

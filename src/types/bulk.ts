@@ -107,7 +107,7 @@ export interface BulkApiResult {
   created: Array<{
     /** Original row index (0-based) */
     index: number;
-    /** Created issue key (e.g., "ZUL-123") */
+    /** Created issue key (e.g., "PROJ-123") */
     key: string;
     /** Issue ID */
     id: string;

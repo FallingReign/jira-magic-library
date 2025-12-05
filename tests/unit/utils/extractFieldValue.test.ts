@@ -185,8 +185,8 @@ describe('extractFieldValue', () => {
       expect(extractFieldValue(obj)).toBe(obj);
     });
 
-    it('should extract from cascading select wrapper: { value: "MP -> mp_zul_trainyard_01" }', () => {
-      expect(extractFieldValue({ value: 'MP -> mp_zul_trainyard_01' })).toBe('MP -> mp_zul_trainyard_01');
+    it('should extract from cascading select wrapper: { value: "MP -> mp_backyard_01" }', () => {
+      expect(extractFieldValue({ value: 'MP -> mp_backyard_01' })).toBe('MP -> mp_backyard_01');
     });
 
     it('should pass through cascading select JML format: { parent: "MP", child: "map1" }', () => {

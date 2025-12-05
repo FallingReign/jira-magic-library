@@ -422,9 +422,9 @@ describe('resolveUniqueName', () => {
       expect(result.id).toBe('1');
     });
 
-    it('should match "newsrom" to "mp_zul_newsroom" (missing letter)', () => {
+    it('should match "newsrom" to "mp_apartment" (missing letter)', () => {
       const options = [
-        { id: '1', name: 'mp_zul_newsroom' },
+        { id: '1', name: 'mp_apartment' },
         { id: '2', name: 'mp_zul_warzone' },
       ];
 
@@ -433,7 +433,7 @@ describe('resolveUniqueName', () => {
         fieldName: 'Level',
       });
 
-      expect(result.name).toBe('mp_zul_newsroom');
+      expect(result.name).toBe('mp_apartment');
       expect(result.id).toBe('1');
     });
 

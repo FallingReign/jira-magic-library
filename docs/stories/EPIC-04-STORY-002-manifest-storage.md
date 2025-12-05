@@ -243,7 +243,7 @@ const manifest: BulkManifest = {
   total: 100,
   succeeded: [0, 1, 2, ...],
   failed: [3, 4, ...],
-  created: { '0': 'ZUL-123', '1': 'ZUL-124', ... },
+  created: { '0': 'PROJ-123', '1': 'PROJ-124', ... },
   errors: { 
     '3': { 
       status: 400,

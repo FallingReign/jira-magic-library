@@ -160,7 +160,7 @@ Stories outside the active epics but still tracked for delivery.
 - ✅ Discover hierarchy structure from JPO endpoint (`/rest/jpo-api/1.0/hierarchy`)
 - ✅ Auto-discover parent field (Epic Link, Parent Link, etc.) per project
 - ✅ Resolve parent by exact key: `"Parent: EPIC-123"`
-- ✅ Resolve parent by summary search: `"Epic Link: newsroom - phase 1"`
+- ✅ Resolve parent by summary search: `"Epic Link: apartment - phase 1"`
 - ✅ Support parent synonyms ("Parent", "Epic Link", "Epic", "Parent Issue", "Parent Link")
 - ✅ Validate parent is exactly 1 level above child in hierarchy
 - ✅ Filter parent search by project's available issue types

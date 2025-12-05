@@ -68,9 +68,9 @@
 **Evidence**: 31/31 unit tests passing, 100% coverage for VersionConverter (97.68% overall)
 
 ### ✅ AC7: Integration Test with Real JIRA
-- [x] Create issue with fixVersions array: `{ fixVersions: ["v1.0", "v2.0"] }` **Evidence**: [tests/integration/version-converter.test.ts:93-124](../../tests/integration/version-converter.test.ts#L93-L124) - Test creates ZUL issues with multiple versions
+- [x] Create issue with fixVersions array: `{ fixVersions: ["v1.0", "v2.0"] }` **Evidence**: [tests/integration/version-converter.test.ts:93-124](../../tests/integration/version-converter.test.ts#L93-L124) - Test creates PROJ issues with multiple versions
 - [x] Verify array converter delegates to version converter (versions resolved by name) **Evidence**: Test 1-5 all use version names, successfully converted to IDs
-- [x] Verify JIRA accepts version IDs and creates issue with correct fix versions **Evidence**: 6 issues created (ZUL-22533 to ZUL-22538), versions verified via API
+- [x] Verify JIRA accepts version IDs and creates issue with correct fix versions **Evidence**: 6 issues created (PROJ-22533 to PROJ-22538), versions verified via API
 - [x] Integration test passes: `npm run test:integration` **Evidence**: 7/7 tests passing (5 creation tests + 2 error handling tests)
 
 ---

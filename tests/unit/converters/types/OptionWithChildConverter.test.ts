@@ -4,7 +4,7 @@ import type { FieldSchema, ConversionContext } from '../../../../src/types/conve
 import { createMockContext, createMockCache } from '../../../helpers/test-utils.js';
 
 describe('OptionWithChildConverter', () => {
-  // Mock field schema based on real JIRA cascading select (Level field in ZUL)
+  // Mock field schema based on real JIRA cascading select
   const fieldSchema: FieldSchema = {
     id: 'customfield_10050',
     name: 'Level',
@@ -21,9 +21,9 @@ describe('OptionWithChildConverter', () => {
         name: 'MP',
         value: 'MP',
         children: [
-          { id: '10075', value: 'mp_zul_newsroom' },
-          { id: '10076', value: 'mp_zul_trainyard_01' },
-          { id: '10077', value: 'mp_zul_trainyard_02' },
+          { id: '10075', value: 'mp_apartment' },
+          { id: '10076', value: 'mp_backyard_01' },
+          { id: '10077', value: 'mp_backyard_02' },
         ],
       },
       {
@@ -61,9 +61,9 @@ describe('OptionWithChildConverter', () => {
 
   describe('AC1: Parse Parent-Child Input Format', () => {
     describe('Object format', () => {
-      it('should accept object with parent and child: { parent: "MP", child: "mp_zul_trainyard_01" }', async () => {
+      it('should accept object with parent and child: { parent: "MP", child: "mp_backyard_01" }', async () => {
         const result = await convertOptionWithChildType(
-          { parent: 'MP', child: 'mp_zul_trainyard_01' },
+          { parent: 'MP', child: 'mp_backyard_01' },
           fieldSchema,
           context
         );
@@ -84,9 +84,9 @@ describe('OptionWithChildConverter', () => {
         expect(result).toEqual({ id: '10001' });
       });
 
-      it('should accept object with child only: { child: "mp_zul_newsroom" }', async () => {
+      it('should accept object with child only: { child: "mp_apartment" }', async () => {
         const result = await convertOptionWithChildType(
-          { child: 'mp_zul_newsroom' },
+          { child: 'mp_apartment' },
           fieldSchema,
           context
         );
@@ -99,9 +99,9 @@ describe('OptionWithChildConverter', () => {
     });
 
     describe('String format with arrow delimiter (->)', () => {
-      it('should parse "MP -> mp_zul_trainyard_01"', async () => {
+      it('should parse "MP -> mp_backyard_01"', async () => {
         const result = await convertOptionWithChildType(
-          'MP -> mp_zul_trainyard_01',
+          'MP -> mp_backyard_01',
           fieldSchema,
           context
         );
@@ -112,9 +112,9 @@ describe('OptionWithChildConverter', () => {
         });
       });
 
-      it('should handle no spaces: "MP->mp_zul_trainyard_01"', async () => {
+      it('should handle no spaces: "MP->mp_backyard_01"', async () => {
         const result = await convertOptionWithChildType(
-          'MP->mp_zul_trainyard_01',
+          'MP->mp_backyard_01',
           fieldSchema,
           context
         );
@@ -125,9 +125,9 @@ describe('OptionWithChildConverter', () => {
         });
       });
 
-      it('should handle multiple spaces: "MP  ->  mp_zul_trainyard_01"', async () => {
+      it('should handle multiple spaces: "MP  ->  mp_backyard_01"', async () => {
         const result = await convertOptionWithChildType(
-          'MP  ->  mp_zul_trainyard_01',
+          'MP  ->  mp_backyard_01',
           fieldSchema,
           context
         );
@@ -199,7 +199,7 @@ describe('OptionWithChildConverter', () => {
       it('should prioritize -> over , when both present', async () => {
         // Edge case: "MP -> zm_castle, extra" should treat "->" as delimiter
         const result = await convertOptionWithChildType(
-          'MP -> mp_zul_trainyard_01',
+          'MP -> mp_backyard_01',
           fieldSchema,
           context
         );
@@ -224,9 +224,9 @@ describe('OptionWithChildConverter', () => {
         expect(result).toEqual({ id: '10000' });
       });
 
-      it('should treat "mp_zul_newsroom" as child-only and auto-detect parent MP', async () => {
+      it('should treat "mp_apartment" as child-only and auto-detect parent MP', async () => {
         const result = await convertOptionWithChildType(
-          'mp_zul_newsroom',
+          'mp_apartment',
           fieldSchema,
           context
         );
@@ -319,9 +319,9 @@ describe('OptionWithChildConverter', () => {
   });
 
   describe('AC3: Resolve Child Option Name to ID (Within Parent)', () => {
-    it('should resolve child "mp_zul_trainyard_01" within parent "MP"', async () => {
+    it('should resolve child "mp_backyard_01" within parent "MP"', async () => {
       const result = await convertOptionWithChildType(
-        { parent: 'MP', child: 'mp_zul_trainyard_01' },
+        { parent: 'MP', child: 'mp_backyard_01' },
         fieldSchema,
         context
       );
@@ -332,9 +332,9 @@ describe('OptionWithChildConverter', () => {
       });
     });
 
-    it('should be case-insensitive: "MP_ZUL_TRAINYARD_01" matches', async () => {
+    it('should be case-insensitive: "MP_BACKYARD_01" matches', async () => {
       const result = await convertOptionWithChildType(
-        { parent: 'MP', child: 'MP_ZUL_TRAINYARD_01' },
+        { parent: 'MP', child: 'MP_BACKYARD_01' },
         fieldSchema,
         context
       );
@@ -364,9 +364,9 @@ describe('OptionWithChildConverter', () => {
     });
 
     describe('Auto-detect parent from child-only input', () => {
-      it('should auto-detect parent when child is unambiguous: "mp_zul_newsroom" → MP', async () => {
+      it('should auto-detect parent when child is unambiguous: "mp_apartment" → MP', async () => {
         const result = await convertOptionWithChildType(
-          { child: 'mp_zul_newsroom' },
+          { child: 'mp_apartment' },
           fieldSchema,
           context
         );
@@ -429,8 +429,8 @@ describe('OptionWithChildConverter', () => {
               name: 'MP',
               value: 'MP',
               children: [
-                { id: '10075', value: 'map_trainyard_01' },
-                { id: '10076', value: 'map_trainyard_02' },
+                { id: '10075', value: 'map_backyard_01' },
+                { id: '10076', value: 'map_backyard_02' },
               ],
             },
           ],
@@ -455,8 +455,8 @@ describe('OptionWithChildConverter', () => {
               name: 'MP',
               value: 'MP',
               children: [
-                { id: '10075', value: 'level_trainyard_01' },
-                { id: '10076', value: 'level_trainyard_02' },
+                { id: '10075', value: 'level_backyard_01' },
+                { id: '10076', value: 'level_backyard_02' },
               ],
             },
           ],
@@ -489,7 +489,7 @@ describe('OptionWithChildConverter', () => {
 
     it('should return parent-child format: { id: "10000", child: { id: "10076" } }', async () => {
       const result = await convertOptionWithChildType(
-        { parent: 'MP', child: 'mp_zul_trainyard_01' },
+        { parent: 'MP', child: 'mp_backyard_01' },
         fieldSchema,
         context
       );
@@ -510,7 +510,7 @@ describe('OptionWithChildConverter', () => {
             value: 'MP',
             children: [
               { id: '-1', value: 'None' },
-              { id: '10076', value: 'mp_zul_trainyard_01' },
+              { id: '10076', value: 'mp_backyard_01' },
             ],
           },
         ],
@@ -590,9 +590,9 @@ describe('OptionWithChildConverter', () => {
 
     it('should handle case-insensitive matching for all delimiters', async () => {
       const tests = [
-        'mp -> MP_ZUL_TRAINYARD_01',
-        'MP, mp_zul_trainyard_01',
-        'Mp / MP_ZUL_TRAINYARD_01',
+        'mp -> MP_BACKYARD_01',
+        'MP, mp_backyard_01',
+        'Mp / MP_BACKYARD_01',
       ];
 
       for (const test of tests) {
@@ -621,7 +621,7 @@ describe('OptionWithChildConverter', () => {
         { 
           id: '10000', 
           value: 'MP',
-          child: { id: '10076', value: 'mp_zul_trainyard_01' }
+          child: { id: '10076', value: 'mp_backyard_01' }
         },
         fieldSchema,
         context
@@ -630,7 +630,7 @@ describe('OptionWithChildConverter', () => {
       expect(result).toEqual({ 
         id: '10000', 
         value: 'MP',
-        child: { id: '10076', value: 'mp_zul_trainyard_01' }
+        child: { id: '10076', value: 'mp_backyard_01' }
       });
     });
 
