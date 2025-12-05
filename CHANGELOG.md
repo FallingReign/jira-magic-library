@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.3.0] - 2025-12-05
+
+### Added
+- **Fuzzy user matching** - Typos like "Jon Smith" now resolve to "John Smith" automatically
+- New `fuzzyMatch.user.enabled` config option (default: `true`)
+- New `fuzzyMatch.user.threshold` config option (0.0-1.0, default: `0.3`)
+- Fuzzy matching works with displayName, email, and username fields
+- Integrated with existing ambiguity policies (`first`, `error`, `score`)
+
+### Changed
+- User matching now falls back to fuzzy matching when exact match fails
+- Performance: fuzzy matching over 10k users completes in <500ms
+
 ## [1.2.1] - 2025-12-03
 
 ### Fixed

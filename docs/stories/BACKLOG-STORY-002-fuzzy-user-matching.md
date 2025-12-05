@@ -222,7 +222,8 @@ if (matchedUsers.length === 0) {
   - Evidence: `README.md` lines 221-250 "Fuzzy User Matching" section with config examples
 - [x] Demo-app updated to show fuzzy matching in action
   - Evidence: `demo-app/src/features/user-ambiguity-demo.js` "User Lookup & Fuzzy Matching Explorer"
-- [ ] Committed with message: `S2: Implement fuzzy user matching with fuse.js`
+- [x] Committed with message: `S2: Implement fuzzy user matching with fuse.js`
+  - Evidence: Commit eda9d8a
 
 ---
 
