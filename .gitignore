@@ -11,6 +11,9 @@ dist/
 .env.test
 .env.production
 
+# PII Configuration (contains project-specific whitelist/blacklist)
+.pii-config.json
+
 # Logs
 *.log
 npm-debug.log*

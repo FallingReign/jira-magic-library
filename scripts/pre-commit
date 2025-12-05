@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Pre-commit hook for workflow validation
+# Pre-commit hook for workflow validation and PII detection
 # Runs validation before commit to catch issues early
 #
 # Install: npm run install:hooks
@@ -13,6 +13,27 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# ============================================
+# PHASE 1: PII DETECTION (BLOCKING)
+# ============================================
+echo "${BLUE}🔍 Running PII detection...${NC}\n"
+
+node scripts/pii-check.js
+PII_EXIT_CODE=$?
+
+if [ $PII_EXIT_CODE -ne 0 ]; then
+  echo ""
+  echo "${RED}❌ COMMIT BLOCKED: PII detected in staged files${NC}"
+  echo "${RED}   Remove the PII or add false positives to .pii-config.json whitelist${NC}"
+  echo ""
+  exit 1
+fi
+
+echo "${GREEN}✅ No PII detected${NC}\n"
+
+# ============================================
+# PHASE 2: WORKFLOW VALIDATION (NON-BLOCKING)
+# ============================================
 echo "${BLUE}🔍 Running workflow validation...${NC}\n"
 
 # Check if story/backlog files changed

@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$comment": "Default PII detection patterns. DO NOT add project-specific terms here - use .pii-config.json instead.",
+  
+  "email": {
+    "description": "Email addresses",
+    "pattern": "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}",
+    "flags": "gi"
+  },
+  
+  "phone_us_formatted": {
+    "description": "US phone numbers with formatting (xxx) xxx-xxxx or xxx-xxx-xxxx",
+    "pattern": "\\(?[0-9]{3}\\)?[-.\\s][0-9]{3}[-.\\s][0-9]{4}",
+    "flags": "g"
+  },
+  
+  "phone_international": {
+    "description": "International phone numbers with + country code",
+    "pattern": "\\+[1-9][0-9]{0,2}[-.\\s][0-9]{1,4}[-.\\s][0-9]{1,4}[-.\\s][0-9]{1,9}",
+    "flags": "g"
+  },
+  
+  "ssn": {
+    "description": "US Social Security Numbers (xxx-xx-xxxx)",
+    "pattern": "\\b[0-9]{3}-[0-9]{2}-[0-9]{4}\\b",
+    "flags": "g"
+  },
+  
+  "credit_card_visa_mc": {
+    "description": "Credit card numbers (Visa/Mastercard 16 digits with spaces)",
+    "pattern": "\\b4[0-9]{3}[\\s-]?[0-9]{4}[\\s-]?[0-9]{4}[\\s-]?[0-9]{4}\\b",
+    "flags": "g"
+  },
+  
+  "credit_card_amex": {
+    "description": "Credit card numbers (Amex 15 digits)",
+    "pattern": "\\b3[47][0-9]{2}[\\s-]?[0-9]{6}[\\s-]?[0-9]{5}\\b",
+    "flags": "g"
+  },
+  
+  "aws_access_key": {
+    "description": "AWS Access Key IDs",
+    "pattern": "\\b(?:AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\\b",
+    "flags": "g"
+  },
+  
+  "aws_secret_key": {
+    "description": "AWS Secret Access Keys (40 char base64)",
+    "pattern": "(?:aws_secret|secret_key|AWS_SECRET)['\"]?\\s*[:=]\\s*['\"]?[A-Za-z0-9/+=]{40}",
+    "flags": "gi"
+  },
+  
+  "generic_api_key": {
+    "description": "Generic API keys in config",
+    "pattern": "(?:api_key|apikey|api_secret|secret_key)['\"]?\\s*[:=]\\s*['\"]?[a-zA-Z0-9_-]{20,}",
+    "flags": "gi"
+  },
+  
+  "private_key_header": {
+    "description": "Private key headers",
+    "pattern": "-----BEGIN[A-Z ]*PRIVATE KEY-----",
+    "flags": "g"
+  },
+  
+  "jwt_token": {
+    "description": "JWT tokens (3 base64 segments)",
+    "pattern": "\\beyJ[a-zA-Z0-9_-]{10,}\\.[a-zA-Z0-9_-]{10,}\\.[a-zA-Z0-9_-]{10,}\\b",
+    "flags": "g"
+  },
+  
+  "slack_token": {
+    "description": "Slack tokens",
+    "pattern": "xox[baprs]-[0-9a-zA-Z]{10,48}",
+    "flags": "g"
+  },
+  
+  "github_pat": {
+    "description": "GitHub personal access tokens",
+    "pattern": "ghp_[a-zA-Z0-9]{36}",
+    "flags": "g"
+  },
+  
+  "github_oauth": {
+    "description": "GitHub OAuth tokens",
+    "pattern": "gho_[a-zA-Z0-9]{36}",
+    "flags": "g"
+  },
+  
+  "stripe_secret": {
+    "description": "Stripe secret API keys",
+    "pattern": "sk_(?:test|live)_[a-zA-Z0-9]{24,}",
+    "flags": "g"
+  },
+  
+  "stripe_publishable": {
+    "description": "Stripe publishable API keys",
+    "pattern": "pk_(?:test|live)_[a-zA-Z0-9]{24,}",
+    "flags": "g"
+  },
+  
+  "password_in_url": {
+    "description": "Passwords embedded in URLs",
+    "pattern": "(?:https?|ftp)://[^:]+:[^@]+@[^/]+",
+    "flags": "gi"
+  },
+  
+  "connection_string": {
+    "description": "Database connection strings with credentials",
+    "pattern": "(?:mongodb|mysql|postgres|redis)://[^:]+:[^@]+@",
+    "flags": "gi"
+  },
+  
+  "street_address": {
+    "description": "Street addresses (US format)",
+    "pattern": "\\b[0-9]{1,5}\\s+[A-Za-z]+\\s+(?:Street|St|Avenue|Ave|Boulevard|Blvd|Road|Rd|Drive|Dr|Lane|Ln|Court|Ct|Way|Place|Pl)\\b",
+    "flags": "gi"
+  }
+}

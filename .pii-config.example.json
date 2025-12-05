@@ -1,0 +1,29 @@
+{
+  "$comment": "PII configuration file. Copy to .pii-config.json and customize for your project.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  
+  "whitelist": [
+    "example.com",
+    "example@example.com",
+    "user@example.com",
+    "test@test.com",
+    "noreply@",
+    "localhost",
+    "127.0.0.1",
+    "0.0.0.0",
+    "redis://user:pass@"
+  ],
+  
+  "blacklist": [
+    "YOUR_PROJECT_KEY",
+    "YOUR_COMPANY_NAME",
+    "REAL_SECRET_VALUE"
+  ],
+  
+  "ignoreFiles": [
+    "node_modules/",
+    "coverage/",
+    "dist/",
+    ".git/"
+  ]
+}
