@@ -31,7 +31,7 @@ export interface PreprocessResult {
  * @returns New record without uid field
  */
 function stripUidField(record: Record<string, unknown>): Record<string, unknown> {
-  const { uid, ...rest } = record;
+  const { uid: _uid, ...rest } = record;
   return rest;
 }
 
@@ -131,16 +131,17 @@ function detectCycles(records: Array<Record<string, unknown>>): void {
  * // result.uidMap = { 'epic-1': 0, 'task-1': 1 }
  * ```
  */
-export async function preprocessHierarchyRecords(
+export function preprocessHierarchyRecords(
   records: Array<Record<string, unknown>>
 ): Promise<PreprocessResult> {
-  // Handle empty input
-  if (records.length === 0) {
-    return {
-      hasHierarchy: false,
-      levels: [],
-    };
-  }
+  try {
+    // Handle empty input
+    if (records.length === 0) {
+      return Promise.resolve({
+        hasHierarchy: false,
+        levels: [],
+      });
+    }
 
   // Step 1: Detect UIDs (throws ValidationError on duplicates)
   const uidResult: UidDetectionResult = detectUids(records);
@@ -148,7 +149,7 @@ export async function preprocessHierarchyRecords(
   // Step 2: If no UIDs, return all records as single level (backward compatible)
   if (!uidResult.hasUids) {
     const strippedRecords = records.map(stripUidField);
-    return {
+    return Promise.resolve({
       hasHierarchy: false,
       levels: [{
         depth: 0,
@@ -157,7 +158,7 @@ export async function preprocessHierarchyRecords(
           record,
         })),
       }],
-    };
+    });
   }
 
   // Step 3: Detect cycles before building hierarchy (fail fast)
@@ -171,9 +172,14 @@ export async function preprocessHierarchyRecords(
   // The uid field is used by createBulkHierarchy to track UID→Key mappings
   // It's stripped when building the actual JIRA payload in createSingle
 
-  return {
-    hasHierarchy: true,
-    levels: levels,  // Keep uid in records for UID tracking
-    uidMap: uidResult.uidMap,
-  };
+    return Promise.resolve({
+      hasHierarchy: true,
+      levels: levels,  // Keep uid in records for UID tracking
+      uidMap: uidResult.uidMap,
+    });
+  } catch (error) {
+    // istanbul ignore next - all caught errors are Error instances from our code
+    const errorToReject = error instanceof Error ? error : new Error(String(error));
+    return Promise.reject(errorToReject);
+  }
 }

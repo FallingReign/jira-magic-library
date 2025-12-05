@@ -5,7 +5,7 @@
  * Provides factory functions for mock objects used in converter tests.
  */
 
-import type { ConversionContext, LookupCacheResult } from '../../src/types/converter.js';
+import type { ConversionContext } from '../../src/types/converter.js';
 import type { JiraClient } from '../../src/client/JiraClient.js';
 
 /**

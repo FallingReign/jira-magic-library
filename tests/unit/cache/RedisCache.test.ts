@@ -976,5 +976,71 @@ describe('RedisCache', () => {
       await Promise.all([firstPromise, secondPromise]);
     });
   });
+
+  describe('SWR envelope and stale handling', () => {
+    it('should return stale value when envelope is expired', async () => {
+      // Store an SWR envelope that is expired
+      const expiredEnvelope = JSON.stringify({
+        value: 'stale-data',
+        expiresAt: Date.now() - 1000 // Expired 1 second ago
+      });
+      await mockRedis.set('jml:stale-key', expiredEnvelope);
+
+      const result = await cache.get('stale-key');
+
+      expect(result.value).toBe('stale-data');
+      expect(result.isStale).toBe(true);
+    });
+
+    it('should return null for stale value when rejectStale is true', async () => {
+      // Store an SWR envelope that is expired
+      const expiredEnvelope = JSON.stringify({
+        value: 'stale-data',
+        expiresAt: Date.now() - 1000 // Expired 1 second ago
+      });
+      await mockRedis.set('jml:reject-stale-key', expiredEnvelope);
+
+      const result = await cache.get('reject-stale-key', { rejectStale: true });
+
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
+    });
+
+    it('should return fresh value when envelope is not expired', async () => {
+      // Store an SWR envelope that is not expired
+      const freshEnvelope = JSON.stringify({
+        value: 'fresh-data',
+        expiresAt: Date.now() + 60000 // Expires in 1 minute
+      });
+      await mockRedis.set('jml:fresh-key', freshEnvelope);
+
+      const result = await cache.get('fresh-key');
+
+      expect(result.value).toBe('fresh-data');
+      expect(result.isStale).toBe(false);
+    });
+
+    it('should handle malformed JSON as legacy raw value', async () => {
+      // Store invalid JSON that isn't an envelope
+      await mockRedis.set('jml:raw-key', 'not-json-data');
+
+      const result = await cache.get('raw-key');
+
+      expect(result.value).toBe('not-json-data');
+      expect(result.isStale).toBe(false); // Legacy format is always fresh
+    });
+
+    it('should handle JSON that is not an SWR envelope', async () => {
+      // Store valid JSON but not an SWR envelope
+      await mockRedis.set('jml:non-envelope-key', '{"foo":"bar"}');
+
+      const result = await cache.get('non-envelope-key');
+
+      // Since it doesn't have value+expiresAt, treated as legacy raw value
+      expect(result.value).toBe('{"foo":"bar"}');
+      expect(result.isStale).toBe(false);
+    });
+  });
 });
+
 

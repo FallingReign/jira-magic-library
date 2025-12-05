@@ -80,8 +80,8 @@ export function buildHierarchyLevels(
 
   // Normalize UID/Parent references up front so we can reason about relationships.
   const uidMap = new Map<string, number>();
-  const normalizedUids: Array<string | null> = new Array(input.length).fill(null);
-  const normalizedParents: Array<string | null> = new Array(input.length).fill(null);
+  const normalizedUids: (string | null)[] = Array.from({ length: input.length }, () => null);
+  const normalizedParents: (string | null)[] = Array.from({ length: input.length }, () => null);
 
   input.forEach((record, index) => {
     const uid = record.uid;

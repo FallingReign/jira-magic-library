@@ -226,7 +226,7 @@ describe('createBulkHierarchy', () => {
         },
       ];
 
-      let capturedRecords: Record<string, unknown>[][] = [];
+      const capturedRecords: Record<string, unknown>[][] = [];
       let callCount = 0;
       const mockCreateBulk = (records: Record<string, unknown>[]) => {
         capturedRecords.push([...records]);
@@ -263,7 +263,7 @@ describe('createBulkHierarchy', () => {
         },
       ];
 
-      let capturedRecords: Record<string, unknown>[][] = [];
+      const capturedRecords: Record<string, unknown>[][] = [];
       let callCount = 0;
       const mockCreateBulk = (records: Record<string, unknown>[]) => {
         capturedRecords.push([...records]);
@@ -307,7 +307,7 @@ describe('createBulkHierarchy', () => {
         },
       ];
 
-      let capturedRecords: Record<string, unknown>[][] = [];
+      const capturedRecords: Record<string, unknown>[][] = [];
       let callCount = 0;
       const mockCreateBulk = (records: Record<string, unknown>[]) => {
         capturedRecords.push([...records]);
@@ -315,7 +315,7 @@ describe('createBulkHierarchy', () => {
         return records.map((_, i) => ({ key: `PROJ-${100 + currentCall * 10 + i}` }));
       };
 
-      const result = simulateHierarchyCreation(levels, mockCreateBulk);
+      const _result = simulateHierarchyCreation(levels, mockCreateBulk);
 
       // Verify: 2 API calls (1 per level), not 5 calls
       expect(capturedRecords.length).toBe(2);

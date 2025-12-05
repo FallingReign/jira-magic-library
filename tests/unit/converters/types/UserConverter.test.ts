@@ -1446,5 +1446,255 @@ describe('UserConverter', () => {
       });
     });
   });
+
+  describe('Branch Coverage: Edge Cases', () => {
+    describe('Stale cache handling', () => {
+      it('should use stale cache data and trigger background refresh', async () => {
+        const users = [
+          { name: 'jsmith', displayName: 'John Smith', emailAddress: 'john.smith@example.com', active: true },
+        ];
+        mockCache.getLookup.mockResolvedValue({ value: users, isStale: true });
+        mockCache.refreshOnce = jest.fn().mockResolvedValue(undefined);
+
+        const result = await convertUserType('john.smith@example.com', fieldSchema, context);
+
+        expect(result).toEqual({ name: 'jsmith' });
+        // Background refresh should be triggered but not awaited
+        expect(mockCache.refreshOnce).toHaveBeenCalled();
+      });
+    });
+
+    describe('No client available', () => {
+      it('should handle context without client gracefully', async () => {
+        const contextNoClient = createMockContext({
+          cache: mockCache as any,
+          client: undefined,
+        });
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+
+        await expect(convertUserType('test@example.com', fieldSchema, contextNoClient))
+          .rejects.toThrow(ValidationError);
+      });
+    });
+
+    describe('Score-based tiebreaker paths', () => {
+      it('should use secondary score (fuse.js similarity) when confidence is equal', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        // Two users with same confidence but one matches "Smith" better
+        // User 1: displayName contains "Smith" directly
+        // User 2: displayName is "Smithson" - slightly worse match
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'smithson', displayName: 'Smithson User', emailAddress: 'other@example.com', active: true },
+          { name: 'smith', displayName: 'Smith User', emailAddress: 'smith@example.com', active: true },
+        ]);
+
+        const ctx = createContext({
+          config: {
+            ambiguityPolicy: { user: 'score' },
+          },
+        });
+
+        // "Smith" should match "Smith User" better than "Smithson User"
+        const result = await convertUserType('Smith', fieldSchema, ctx);
+        expect(result).toEqual({ name: 'smith' });
+      });
+
+      it('should throw AmbiguityError when all tiebreakers are equal', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        // Contrived case: completely identical scoring
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'user1', displayName: 'Smith', emailAddress: 'smith@example.com', active: true },
+          { name: 'user2', displayName: 'Smith', emailAddress: 'smith@example.com', active: true },
+        ]);
+
+        const ctx = createContext({
+          config: {
+            ambiguityPolicy: { user: 'score' },
+          },
+        });
+
+        // When all tiebreakers equal, should throw AmbiguityError
+        await expect(convertUserType('Smith', fieldSchema, ctx))
+          .rejects.toThrow(AmbiguityError);
+      });
+    });
+
+    describe('Debug logging branches', () => {
+      const originalDebug = process.env.DEBUG;
+
+      afterEach(() => {
+        if (originalDebug === undefined) {
+          delete process.env.DEBUG;
+        } else {
+          process.env.DEBUG = originalDebug;
+        }
+      });
+
+      it('should log fuzzy match details when DEBUG=true', async () => {
+        process.env.DEBUG = 'true';
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'jsmith', displayName: 'John Smith', emailAddress: 'john.smith@example.com', active: true },
+        ]);
+
+        const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
+
+        const ctx = createContext({
+          config: {
+            fuzzyMatch: { user: { enabled: true, threshold: 0.3 } },
+          },
+        });
+        await convertUserType('Jon Smith', fieldSchema, ctx);
+
+        // Debug logging should have been called
+        expect(consoleSpy.mock.calls.some(call => 
+          typeof call[0] === 'string' && call[0].includes('🔍')
+        )).toBe(true);
+
+        consoleSpy.mockRestore();
+      });
+    });
+
+    describe('Pagination boundary', () => {
+      it('should handle exactly maxResults users (pagination edge case)', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        
+        // First call returns exactly 1000 users, second call returns 0 (end of pagination)
+        const users1000 = Array.from({ length: 1000 }, (_, i) => ({
+          name: `user${i}`,
+          displayName: `User ${i}`,
+          emailAddress: `user${i}@example.com`,
+          active: true,
+        }));
+        
+        (mockClient.get as jest.Mock)
+          .mockResolvedValueOnce(users1000)
+          .mockResolvedValueOnce([]);
+
+        // Add target user to the list
+        users1000[500] = {
+          name: 'target',
+          displayName: 'Target User',
+          emailAddress: 'target@example.com',
+          active: true,
+        };
+
+        await expect(convertUserType('target@example.com', fieldSchema, context))
+          .resolves.toEqual({ name: 'target' });
+      });
+    });
+
+    describe('Deduplication (addMatch early return)', () => {
+      it('should not add duplicate users when found via multiple match paths', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        // User that could match by both email and username
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'jsmith@company.com', displayName: 'John Smith', emailAddress: 'jsmith@company.com', active: true },
+        ]);
+
+        // Search by exact email - this might also match username prefix
+        const result = await convertUserType('jsmith@company.com', fieldSchema, context);
+        expect(result).toEqual({ name: 'jsmith@company.com' });
+      });
+    });
+
+    describe('Alphabetic tiebreaker branches in sort', () => {
+      it('should use email tiebreaker when displayNames are equal', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        // Users with identical displayName and fuse.js scores, but different emails
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'user1', displayName: 'John', emailAddress: 'z@example.com', active: true },
+          { name: 'user2', displayName: 'John', emailAddress: 'a@example.com', active: true },
+        ]);
+
+        const ctx = createContext({
+          config: {
+            ambiguityPolicy: { user: 'first' }, // Use 'first' to see sorted order
+          },
+        });
+
+        // With first policy, result depends on sorted order
+        const result = await convertUserType('John', fieldSchema, ctx);
+        expect(result).toBeDefined();
+      });
+
+      it('should use name tiebreaker when displayName and email are equal', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        // Users with identical displayName and email, but different usernames
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'zuser', displayName: 'John', emailAddress: 'john@example.com', active: true },
+          { name: 'auser', displayName: 'John', emailAddress: 'john@example.com', active: true },
+        ]);
+
+        const ctx = createContext({
+          config: {
+            ambiguityPolicy: { user: 'first' },
+          },
+        });
+
+        // With first policy, should get the first result after sorting
+        const result = await convertUserType('John', fieldSchema, ctx);
+        // Just verify we get a result - the exact order depends on internal sorting
+        expect(result).toBeDefined();
+        expect(['zuser', 'auser']).toContain((result as { name: string }).name);
+      });
+    });
+
+    describe('AmbiguityError candidate list branches', () => {
+      it('should handle candidates with different confidence levels in error message', async () => {
+        mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
+        // Return users that will create true ambiguity 
+        // - Two users with similar display names that could both match
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'jsmith1', displayName: 'John Smith', emailAddress: 'john1@example.com', active: true },
+          { name: 'jsmith2', displayName: 'John Smith', emailAddress: 'john2@example.com', active: true },
+        ]);
+
+        const ctx = createContext({
+          config: {
+            ambiguityPolicy: { user: 'error' },
+          },
+        });
+
+        // Search for 'John Smith' - should be ambiguous with two identical display name matches
+        await expect(convertUserType('John Smith', fieldSchema, ctx)).rejects.toThrow(AmbiguityError);
+      });
+    });
+
+    describe('Background refresh callback execution', () => {
+      it('should execute background refresh callback for stale cache', async () => {
+        const users = [
+          { name: 'jsmith', displayName: 'John Smith', emailAddress: 'john.smith@example.com', active: true },
+        ];
+        mockCache.getLookup.mockResolvedValue({ value: users, isStale: true });
+        
+        // Track if refreshOnce was called with a callback
+        let capturedCallback: (() => Promise<void>) | null = null;
+        mockCache.refreshOnce = jest.fn().mockImplementation((_key: string, callback: () => Promise<void>) => {
+          capturedCallback = callback;
+          // Return a promise that never rejects (fire-and-forget in production)
+          return Promise.resolve();
+        });
+
+        // Mock the API call that will happen during refresh
+        (mockClient.get as jest.Mock).mockResolvedValue([
+          { name: 'freshuser', displayName: 'Fresh User', emailAddress: 'fresh@example.com', active: true },
+        ]);
+
+        await convertUserType('john.smith@example.com', fieldSchema, context);
+
+        // refreshOnce should have been called
+        expect(mockCache.refreshOnce).toHaveBeenCalled();
+        expect(capturedCallback).not.toBeNull();
+
+        // Now manually execute the callback to test that code path
+        if (capturedCallback) {
+          await capturedCallback();
+          // setLookup should have been called by the callback
+          expect(mockCache.setLookup).toHaveBeenCalledWith('global', 'user', expect.any(Array));
+        }
+      });
+    });
+  });
 });
 

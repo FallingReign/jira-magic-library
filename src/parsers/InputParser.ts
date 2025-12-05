@@ -510,6 +510,7 @@ function sanitizeValues<T>(data: T): T {
 
   if (Array.isArray(data)) {
     // Recursively sanitize array elements
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return data.map((item) => sanitizeValues(item)) as T;
   }
 

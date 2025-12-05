@@ -3,8 +3,7 @@
  * Story: E4-S13 - AC1: Create Preprocessing Utility
  */
 
-import { preprocessHierarchyRecords, PreprocessResult } from '../../../src/operations/bulk/HierarchyPreprocessor.js';
-import { HierarchyLevel } from '../../../src/operations/bulk/HierarchyLevels.js';
+import { preprocessHierarchyRecords } from '../../../src/operations/bulk/HierarchyPreprocessor.js';
 
 // Mock dependencies
 jest.mock('../../../src/schema/SchemaDiscovery.js');

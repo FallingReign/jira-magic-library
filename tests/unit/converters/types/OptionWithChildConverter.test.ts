@@ -268,6 +268,16 @@ describe('OptionWithChildConverter', () => {
           convertOptionWithChildType(['MP', 'ZM'] as any, fieldSchema, context)
         ).rejects.toThrow(ValidationError);
       });
+
+      it('should throw ValidationError on object with non-extractable value', async () => {
+        // Object that isn't { parent, child } and doesn't have extractable string value
+        await expect(
+          convertOptionWithChildType({ nested: { complex: 'structure' } } as any, fieldSchema, context)
+        ).rejects.toThrow(ValidationError);
+        await expect(
+          convertOptionWithChildType({ nested: { complex: 'structure' } } as any, fieldSchema, context)
+        ).rejects.toThrow(/Invalid object format for cascading select field/);
+      });
     });
   });
 

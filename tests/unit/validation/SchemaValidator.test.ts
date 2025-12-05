@@ -1258,6 +1258,159 @@ describe('ValidationService', () => {
       expect(result.errors.every(e => e.rowIndex === 0)).toBe(true);
     });
   });
+
+  describe('Branch Coverage: Edge Cases', () => {
+    it('should re-throw non-NotFoundError exceptions from schema lookup', async () => {
+      const unexpectedError = new Error('Unexpected database connection failure');
+      mockSchemaDiscovery.getFieldsForIssueType.mockRejectedValue(unexpectedError);
+
+      mockParseInput.mockResolvedValue({
+        data: [{ Project: 'TEST', 'Issue Type': 'Task', Summary: 'Test' }],
+        format: 'json',
+        source: 'array'
+      });
+
+      await expect(
+        validationService.validate({
+          data: [{ Project: 'TEST', 'Issue Type': 'Task', Summary: 'Test' }]
+        })
+      ).rejects.toThrow('Unexpected database connection failure');
+    });
+
+    it('should handle number field with non-finite values', async () => {
+      mockParseInput.mockResolvedValue({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          'Story Points': Infinity
+        }],
+        format: 'json',
+        source: 'array'
+      });
+
+      const result = await validationService.validate({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          'Story Points': Infinity
+        }]
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors[0].code).toBe('INVALID_TYPE');
+      expect(result.errors[0].message).toContain('finite number');
+    });
+
+    it('should handle number field with boolean value', async () => {
+      mockParseInput.mockResolvedValue({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          'Story Points': true
+        }],
+        format: 'json',
+        source: 'array'
+      });
+
+      const result = await validationService.validate({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          'Story Points': true
+        }]
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors[0].code).toBe('INVALID_TYPE');
+      expect(result.errors[0].message).toContain('must be a number');
+    });
+
+    it('should handle priority field with number value - requires string or object', async () => {
+      mockParseInput.mockResolvedValue({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          Priority: 123
+        }],
+        format: 'json',
+        source: 'array'
+      });
+
+      const result = await validationService.validate({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          Priority: 123
+        }]
+      });
+
+      // Priority requires string or object, number is invalid type
+      expect(result.valid).toBe(false);
+      expect(result.errors[0].code).toBe('INVALID_TYPE');
+      expect(result.errors[0].message).toContain('string or object');
+    });
+
+    it('should handle priority field with boolean value - requires string or object', async () => {
+      mockParseInput.mockResolvedValue({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          Priority: false
+        }],
+        format: 'json',
+        source: 'array'
+      });
+
+      const result = await validationService.validate({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          Priority: false
+        }]
+      });
+
+      // Priority requires string or object, boolean is invalid type
+      expect(result.valid).toBe(false);
+      expect(result.errors[0].code).toBe('INVALID_TYPE');
+      expect(result.errors[0].message).toContain('string or object');
+    });
+
+    it('should handle enum value with complex object with numeric id', async () => {
+      mockParseInput.mockResolvedValue({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          Priority: { id: 999, name: 123 }  // Numeric id and name
+        }],
+        format: 'json',
+        source: 'array'
+      });
+
+      const result = await validationService.validate({
+        data: [{ 
+          Project: 'TEST', 
+          'Issue Type': 'Task', 
+          Summary: 'Test',
+          Priority: { id: 999, name: 123 }
+        }]
+      });
+
+      // Numeric name gets converted to string "123"
+      expect(result.valid).toBe(false);
+      expect(result.errors[0].code).toBe('INVALID_ENUM_VALUE');
+    });
+  });
 });
+
+
 
 

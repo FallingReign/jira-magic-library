@@ -89,8 +89,10 @@ async function fetchAllUsers(context: ConversionContext): Promise<JiraUser[]> {
   let startAt = 0;
   const maxResults = 1000; // API max per request
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     // Use "." as wildcard - matches all users in JIRA Server/DC
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     const batch = (await context.client.get('/rest/api/2/user/search', {
       username: '.',
       startAt,

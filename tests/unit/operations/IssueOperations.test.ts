@@ -1817,5 +1817,66 @@ describe('IssueOperations', () => {
         expect(mockSchema.getFieldsForIssueType).toHaveBeenCalled();
       });
     });
+
+    describe('Per-call options (mergeConfig)', () => {
+      const validInput = {
+        Project: 'ENG',
+        'Issue Type': 'Bug',
+        Summary: 'Test issue',
+      };
+
+      beforeEach(() => {
+        mockSchema.getFieldsForIssueType.mockResolvedValue({
+          projectKey: 'ENG',
+          issueType: 'Bug',
+          fields: {}
+        });
+        mockResolver.resolveFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test issue'
+        });
+        mockConverter.convertFields.mockResolvedValue({
+          project: { key: 'ENG' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test issue'
+        });
+        mockClient.post.mockResolvedValue({
+          key: 'ENG-1',
+          id: '10001',
+          self: 'https://...'
+        });
+      });
+
+      it('should use instance config when no per-call options provided', async () => {
+        const result = await issueOps.create(validInput);
+        expect(result).toHaveProperty('key', 'ENG-1');
+      });
+
+      it('should merge per-call ambiguityPolicy with instance config', async () => {
+        // Create with per-call ambiguity override
+        const result = await issueOps.create(validInput, {
+          ambiguityPolicy: { user: 'first' }
+        });
+        expect(result).toHaveProperty('key', 'ENG-1');
+      });
+
+      it('should merge per-call fuzzyMatch with instance config', async () => {
+        // Create with per-call fuzzy match override
+        const result = await issueOps.create(validInput, {
+          fuzzyMatch: { enabled: true, threshold: 0.8 }
+        });
+        expect(result).toHaveProperty('key', 'ENG-1');
+      });
+
+      it('should merge both ambiguityPolicy and fuzzyMatch per-call options', async () => {
+        const result = await issueOps.create(validInput, {
+          ambiguityPolicy: { user: 'error' },
+          fuzzyMatch: { enabled: false }
+        });
+        expect(result).toHaveProperty('key', 'ENG-1');
+      });
+    });
   });
 });
+

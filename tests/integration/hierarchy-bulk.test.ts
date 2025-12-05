@@ -40,7 +40,7 @@ describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
         try {
           await (client as any).client.delete(`/rest/api/2/issue/${key}`);
           console.log(`   ✓ Deleted ${key}`);
-        } catch (error) {
+        } catch {
           console.warn(`   ⚠️  Failed to delete ${key}`);
         }
       }

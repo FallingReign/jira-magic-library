@@ -30,6 +30,20 @@ describe('UidDetector', () => {
     expect(result.uidsByIndex).toEqual({});
   });
 
+  it('should skip UIDs that become empty after trimming', () => {
+    const input = [
+      { uid: '   ' }, // Whitespace only - becomes empty after trim
+      { uid: '\t\n' }, // Tab and newline
+      { uid: 'valid-uid' },
+    ];
+
+    const result = detectUids(input);
+
+    expect(result.hasUids).toBe(true);
+    expect(result.uidMap).toEqual({ 'valid-uid': 2 });
+    expect(result.uidsByIndex).toEqual({ 2: 'valid-uid' });
+  });
+
   it('should throw ValidationError on duplicate UIDs with index details', () => {
     const input = [
       { uid: 'dup-1' },

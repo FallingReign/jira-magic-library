@@ -237,3 +237,88 @@ describe('isIdOnlyObject', () => {
     expect(isIdOnlyObject({ id: 10000 })).toBe(false);
   });
 });
+
+describe('extractFromObject edge cases', () => {
+  it('should extract key from object with key only', () => {
+    const input = { project: { key: 'ENG' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBe('ENG');
+  });
+
+  it('should extract name from object with name but no key', () => {
+    const input = { 'issue type': { name: 'Bug' } };
+    const result = findSystemField(input, 'issuetype');
+    expect(result?.extracted).toBe('Bug');
+  });
+
+  it('should extract id from object with id but no key or name', () => {
+    const input = { project: { id: '10000' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBe('10000');
+  });
+
+  it('should extract single-key object value', () => {
+    // extractFieldValue rule 4: single key with primitive → extract value
+    const input = { project: { unknownField: 'value' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBe('value');
+  });
+
+  it('should return null for object with multiple keys and no key/name/id', () => {
+    // extractFieldValue rule 3: multiple keys pass through
+    const input = { project: { a: '1', b: '2' } };
+    const result = findSystemField(input, 'project');
+    // Object passes through, no key/name/id to extract
+    expect(result?.extracted).toBeNull();
+  });
+
+  it('should handle empty key string', () => {
+    const input = { project: { key: '' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBeNull();
+  });
+
+  it('should handle empty name string', () => {
+    const input = { project: { name: '' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBeNull();
+  });
+
+  it('should handle empty id string', () => {
+    const input = { project: { id: '' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBeNull();
+  });
+
+  it('should handle whitespace-only id string', () => {
+    const input = { project: { id: '   ' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBeNull();
+  });
+
+  it('should prefer key over name', () => {
+    const input = { project: { key: 'KEY', name: 'Name' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBe('KEY');
+  });
+
+  it('should prefer name over id', () => {
+    const input = { project: { name: 'Name', id: '10000' } };
+    const result = findSystemField(input, 'project');
+    expect(result?.extracted).toBe('Name');
+  });
+
+  it('should handle boolean extraction', () => {
+    const input = { flagged: true };
+    // For a custom "flagged" field that might be treated as issuetype lookup
+    const result = findSystemField(input, 'flagged');
+    expect(result?.extracted).toBe('true');
+  });
+
+  it('should handle number extraction', () => {
+    const input = { priority: 123 };
+    // For a custom field that might have numeric value
+    const result = findSystemField(input, 'priority');
+    expect(result?.extracted).toBe('123');
+  });
+});

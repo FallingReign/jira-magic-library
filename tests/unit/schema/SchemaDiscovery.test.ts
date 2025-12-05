@@ -28,6 +28,7 @@ describe('SchemaDiscovery', () => {
       del: jest.fn(),
       clear: jest.fn(),
       ping: jest.fn(),
+      refreshOnce: jest.fn().mockResolvedValue(undefined),
     } as jest.Mocked<CacheClient>;
 
     discovery = new SchemaDiscovery(mockClient, mockCache, baseUrl);
@@ -893,4 +894,81 @@ describe('SchemaDiscovery', () => {
       expect(result[1]).toEqual({ id: '2', name: 'Task' });
     });
   });
+
+  describe('Stale-while-revalidate', () => {
+    it('should return stale cache value and trigger background refresh', async () => {
+      const cachedSchema: ProjectSchema = {
+        projectKey: 'ENG',
+        issueType: 'Task',
+        fields: {
+          summary: {
+            id: 'summary',
+            name: 'Summary',
+            type: 'string',
+            required: true,
+            schema: { type: 'string', system: 'summary' }
+          }
+        }
+      };
+
+      // Return stale cached value
+      mockCache.get.mockResolvedValue({ 
+        value: JSON.stringify(cachedSchema), 
+        isStale: true 
+      });
+      mockCache.refreshOnce.mockResolvedValue(undefined);
+
+      const result = await discovery.getFieldsForIssueType('ENG', 'Task');
+
+      // Should return the stale value immediately
+      expect(result.projectKey).toBe('ENG');
+      expect(result.fields.summary).toBeDefined();
+
+      // Should trigger background refresh
+      expect(mockCache.refreshOnce).toHaveBeenCalled();
+    });
+
+    it('should handle background refresh failure gracefully', async () => {
+      const cachedSchema: ProjectSchema = {
+        projectKey: 'ENG',
+        issueType: 'Task',
+        fields: {
+          summary: {
+            id: 'summary',
+            name: 'Summary',
+            type: 'string',
+            required: true,
+            schema: { type: 'string', system: 'summary' }
+          }
+        }
+      };
+
+      // Return stale cached value
+      mockCache.get.mockResolvedValue({ 
+        value: JSON.stringify(cachedSchema), 
+        isStale: true 
+      });
+      // Simulate background refresh failure
+      mockCache.refreshOnce.mockRejectedValue(new Error('Network error'));
+
+      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+      const result = await discovery.getFieldsForIssueType('ENG', 'Task');
+
+      // Should still return the stale value
+      expect(result.projectKey).toBe('ENG');
+
+      // Give time for the catch to execute
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Should log the error
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Background schema refresh failed'),
+        expect.any(Error)
+      );
+
+      consoleWarnSpy.mockRestore();
+    });
+  });
 });
+
