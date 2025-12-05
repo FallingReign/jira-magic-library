@@ -50,7 +50,7 @@ describe('OptionWithChildConverter', () => {
   const mockCache = createMockCache();
 
   const context: ConversionContext = createMockContext({
-    projectKey: 'ZUL',
+    projectKey: 'PROJ',
     issueType: 'Story',
     cache: mockCache as any,
   });
@@ -436,13 +436,14 @@ describe('OptionWithChildConverter', () => {
           ],
         };
 
+        // 'backyard' fuzzy matches both 'map_backyard_01' and 'map_backyard_02' equally
         await expect(
-          convertOptionWithChildType({ parent: 'MP', child: 'map_train' }, ambiguousSchema, context)
+          convertOptionWithChildType({ parent: 'MP', child: 'backyard' }, ambiguousSchema, context)
         ).rejects.toThrow(AmbiguityError);
 
         await expect(
-          convertOptionWithChildType({ parent: 'MP', child: 'map_train' }, ambiguousSchema, context)
-        ).rejects.toThrow(/Ambiguous value "map_train" for field.*Multiple close matches/);
+          convertOptionWithChildType({ parent: 'MP', child: 'backyard' }, ambiguousSchema, context)
+        ).rejects.toThrow(/Ambiguous value "backyard" for field.*Multiple close matches/);
       });
 
       it('should throw AmbiguityError if multiple children match when auto-detecting parent', async () => {
@@ -462,13 +463,14 @@ describe('OptionWithChildConverter', () => {
           ],
         };
 
+        // 'level_backyard' fuzzy matches both children equally
         await expect(
-          convertOptionWithChildType({ child: 'level_train' }, ambiguousSchema, context)
+          convertOptionWithChildType({ child: 'level_back' }, ambiguousSchema, context)
         ).rejects.toThrow(AmbiguityError);
 
         await expect(
-          convertOptionWithChildType({ child: 'level_train' }, ambiguousSchema, context)
-        ).rejects.toThrow(/Ambiguous value "level_train" for field.*Multiple close matches/);
+          convertOptionWithChildType({ child: 'level_back' }, ambiguousSchema, context)
+        ).rejects.toThrow(/Ambiguous value "level_back" for field.*Multiple close matches/);
       });
 
       it('should throw NotFoundError if child not found in any parent', async () => {

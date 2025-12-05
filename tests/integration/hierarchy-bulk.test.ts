@@ -15,7 +15,7 @@ const createdIssues: string[] = [];
 
 describe('Integration: E4-S13 AC4 - Hierarchy Bulk Creation', () => {
   let client: JML;
-  const projectKey = process.env.JIRA_PROJECT_KEY || 'ZUL';
+  const projectKey = process.env.JIRA_PROJECT_KEY || 'PROJ';
   
   beforeAll(async () => {
     if (!process.env.JIRA_BASE_URL) {

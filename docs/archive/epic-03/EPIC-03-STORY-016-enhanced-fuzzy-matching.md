@@ -32,7 +32,7 @@ const matches = allowedValues.filter(v =>
 );
 ```
 
-**Result**: `"zul_ms7_2025".includes("ms7 2025")` → `false` ❌
+**Result**: `"proj_ms7_2025".includes("ms7 2025")` → `false` ❌
 
 **Solution**: Integrate [`fuse.js`](https://fusejs.io/) for intelligent fuzzy matching with configurable threshold.
 

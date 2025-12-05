@@ -19,7 +19,7 @@ import { JiraClientImpl } from '../../src/client/JiraClient.js';
 describe('Integration: Retry with Manifest Support (E4-S05)', () => {
   let jml: JML;
   let client: JiraClientImpl;
-  const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'ZUL';
+  const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'PROJ';
   const createdIssues: string[] = [];
 
   beforeAll(async () => {

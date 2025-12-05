@@ -23,7 +23,7 @@ import { JiraClientImpl } from '../../src/client/JiraClient.js';
 describe('Integration: Unified create() Method', () => {
   let jml: JML;
   let client: JiraClientImpl;
-  const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'ZUL';
+  const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'PROJ';
   const createdIssues: string[] = [];
 
   beforeAll(async () => {

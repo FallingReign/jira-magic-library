@@ -362,7 +362,7 @@ describe('FieldResolver', () => {
 
     it('should resolve plural Fix Version/s when user types Fix Version', async () => {
       const input = {
-        'Fix Version': ['ZUL_MS7'],
+        'Fix Version': ['PROJ_MS7'],
       };
 
       const result = await resolver.resolveFields('ENG', 'Bug', input);
@@ -372,7 +372,7 @@ describe('FieldResolver', () => {
 
     it('should resolve Fix Version/s when user types Version', async () => {
       const input = {
-        Version: ['ZUL_MS7'],
+        Version: ['PROJ_MS7'],
       };
 
       const result = await resolver.resolveFields('ENG', 'Bug', input);
@@ -762,7 +762,7 @@ describe('FieldResolver', () => {
 
       // Mock parent issue GET response (for ParentLinkResolver key validation)
       mockClient.get.mockResolvedValueOnce({
-        key: 'ZUL-100',
+        key: 'PROJ-100',
         fields: {
           issuetype: {
             id: '10002',
@@ -773,13 +773,13 @@ describe('FieldResolver', () => {
 
       const input = {
         'Summary': 'Test SuperEpic',
-        'Parent': 'ZUL-100', // Parent synonym
+        'Parent': 'PROJ-100', // Parent synonym
       };
 
-      await resolver.resolveFields('ZUL', 'SuperEpic', input);
+      await resolver.resolveFields('PROJ', 'SuperEpic', input);
 
       // Verify getParentFieldInfo was called with project key AND issue type name
-      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('ZUL', 'SuperEpic');
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'SuperEpic');
     });
 
     it('should throw ConfigurationError with project key when parent field not found', async () => {
@@ -790,19 +790,19 @@ describe('FieldResolver', () => {
 
       const input = {
         'Summary': 'Test Task',
-        'Parent': 'ZUL-200',
+        'Parent': 'PROJ-200',
       };
 
-      await expect(resolver.resolveFields('ZUL', 'SimpleTask', input))
+      await expect(resolver.resolveFields('PROJ', 'SimpleTask', input))
         .rejects
         .toThrow(ConfigurationError);
 
-      await expect(resolver.resolveFields('ZUL', 'SimpleTask', input))
+      await expect(resolver.resolveFields('PROJ', 'SimpleTask', input))
         .rejects
-        .toThrow(/Project ZUL does not have a parent field configured/);
+        .toThrow(/Project PROJ does not have a parent field configured/);
       
       // Verify getParentFieldInfo was called with issue type
-      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('ZUL', 'SimpleTask');
+      expect(mockParentFieldDiscovery.getParentFieldInfo).toHaveBeenCalledWith('PROJ', 'SimpleTask');
     });
 
     it('should resolve different parent fields for Epic vs Story in same project', async () => {

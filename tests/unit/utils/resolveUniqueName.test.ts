@@ -357,11 +357,11 @@ describe('resolveUniqueName', () => {
   });
 
   describe('AC3: Fuzzy Matching with Underscores/Dashes (E3-S16)', () => {
-    it('should match "MS7 2025" to "ZUL_MS7_2025" (underscore normalization)', () => {
+    it('should match "MS7 2025" to "PROJ_MS7_2025" (underscore normalization)', () => {
       const versions = [
-        { id: '1', name: 'ZUL_MS1_2024' },
-        { id: '2', name: 'ZUL_MS7_2025' },
-        { id: '3', name: 'ZUL_MS18_2027' },
+        { id: '1', name: 'PROJ_MS1_2024' },
+        { id: '2', name: 'PROJ_MS7_2025' },
+        { id: '3', name: 'PROJ_MS18_2027' },
       ];
 
       const result = resolveUniqueName('MS7 2025', versions, {
@@ -369,7 +369,7 @@ describe('resolveUniqueName', () => {
         fieldName: 'Fix Version/s',
       });
 
-      expect(result.name).toBe('ZUL_MS7_2025');
+      expect(result.name).toBe('PROJ_MS7_2025');
       expect(result.id).toBe('2');
     });
 
@@ -422,13 +422,14 @@ describe('resolveUniqueName', () => {
       expect(result.id).toBe('1');
     });
 
-    it('should match "newsrom" to "mp_apartment" (missing letter)', () => {
+    it('should match "apartmnt" to "mp_apartment" (missing letter)', () => {
       const options = [
         { id: '1', name: 'mp_apartment' },
-        { id: '2', name: 'mp_zul_warzone' },
+        { id: '2', name: 'mp_proj_warzone' },
       ];
 
-      const result = resolveUniqueName('newsrom', options, {
+      // 'apartmnt' is missing the 'e' - should fuzzy match 'mp_apartment'
+      const result = resolveUniqueName('apartmnt', options, {
         field: 'customfield_10020',
         fieldName: 'Level',
       });
@@ -470,8 +471,8 @@ describe('resolveUniqueName', () => {
 
     it('should return single clear winner when scores differ significantly', () => {
       const versions = [
-        { id: '1', name: 'ZUL_MS7_2025' },
-        { id: '2', name: 'ZUL_MS17_2025' },
+        { id: '1', name: 'PROJ_MS7_2025' },
+        { id: '2', name: 'PROJ_MS17_2025' },
       ];
 
       const result = resolveUniqueName('MS7 2025', versions, {
@@ -479,8 +480,8 @@ describe('resolveUniqueName', () => {
         fieldName: 'Fix Version/s',
       });
 
-      // "MS7 2025" should match "ZUL_MS7_2025" much better than "ZUL_MS17_2025"
-      expect(result.name).toBe('ZUL_MS7_2025');
+      // "MS7 2025" should match "PROJ_MS7_2025" much better than "PROJ_MS17_2025"
+      expect(result.name).toBe('PROJ_MS7_2025');
       expect(result.id).toBe('1');
     });
 

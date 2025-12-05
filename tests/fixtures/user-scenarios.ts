@@ -7,7 +7,7 @@
  * - Fuzzy matching values (case-insensitive, partial matches)
  * 
  * **Environment Variables Required:**
- * - JIRA_PROJECT_KEY: Project to test against (e.g., 'ZUL')
+ * - JIRA_PROJECT_KEY: Project to test against (e.g., 'PROJ')
  * - JIRA_TEST_USER_NAME: Valid unique user email/username for assignee tests
  * - TEST_PARENT_ISSUE_KEY: Valid parent issue for hierarchy tests (optional)
  * 
@@ -45,13 +45,13 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive-exact',
     testDescription: 'should create Task with all available fields using exact matching values',
     payload: {
-      Project: process.env.JIRA_PROJECT_KEY || 'ZUL',
+      Project: process.env.JIRA_PROJECT_KEY || 'PROJ',
       'Issue Type': 'Task',
       Summary: 'Task with all fields - exact match test',
       Description: 'Testing all available fields with exact string matches.\n\nCreated by E3-S15 data-driven integration test suite.',
       Priority: 'P1 - Critical',
       'Component/s': ['Code - Automation'],
-      'Fix Version/s': ['ZUL_MS1_2024'],
+      'Fix Version/s': ['PROJ_MS1_2024'],
       'Due Date': '2025-12-31',
       Assignee: process.env.JIRA_TEST_USER_NAME || 'Slack Tools',
       Level: 'MP -> mp_apartment', // Cascading select
@@ -78,13 +78,13 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive-fuzzy',
     testDescription: 'should create Task with all available fields using fuzzy matching (lowercase, mixed case)',
     payload: {
-      Project: 'Zulu',
+      Project: 'PROJ',
       'Issue Type': 'task',
       Summary: 'Task with all fields - fuzzy match test',
       Description: 'Testing all available fields with fuzzy/case-insensitive values.',
       Priority: 'P0',
       'Component/s': 'code - automation',
-      'Fix Version/s': 'MS7 2025', // Should fuzzy match to ZUL_MS7_2025
+      'Fix Version/s': 'MS7 2025', // Should fuzzy match to PROJ_MS7_2025
       'Due Date': '2025-12-31',
       Assignee: 'Slack Tools',
       Level: { parent: 'mp', child: 'apartment' },
@@ -108,7 +108,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive-fuzzy',
     testDescription: 'should create Bug with mixed format values (exact, fuzzy, passthrough)',
     payload: {
-      Project: process.env.JIRA_PROJECT_KEY || 'ZUL',
+      Project: process.env.JIRA_PROJECT_KEY || 'PROJ',
       'Issue Type': 'BuG', // MIXED CASE - fuzzy match
       Summary: 'Bug with mixed formats - integration test',
       Description: 'Testing mixed value formats in one issue.',
@@ -135,7 +135,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'edge-cases',
     testDescription: 'should create Task with minimal fields, null optionals, and empty arrays',
     payload: {
-      Project: process.env.JIRA_PROJECT_KEY || 'ZUL',
+      Project: process.env.JIRA_PROJECT_KEY || 'PROJ',
       'Issue Type': 'TaSk', // MIXED CASE - fuzzy match
       Summary: 'Minimal task with nulls and empty arrays - edge case test',
       Description: null, // Explicitly null
@@ -153,7 +153,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'edge-cases',
     testDescription: 'should create Task with ultra-fuzzy values and still resolve correctly',
     payload: {
-      Project: 'ZUL', // Project keys must be exact (no fuzzy matching)
+      Project: 'PROJ', // Project keys must be exact (no fuzzy matching)
       'Issue Type': 'TASK', // UPPERCASE
       Summary: 'Task with ultra-fuzzy values - edge case test',
       Description: 'Testing extreme fuzzy matching capabilities.',

@@ -31,17 +31,17 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
   let mockCache: jest.Mocked<RedisCache>;
 
   const testInput = [
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Issue 1' },
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Issue 2' },
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Issue 3' },
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Issue 4' },
-    { Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Issue 5' },
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Issue 1' },
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Issue 2' },
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Issue 3' },
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Issue 4' },
+    { Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Issue 5' },
   ];
 
   beforeEach(() => {
     mockClient = {
       post: jest.fn(),
-      get: jest.fn().mockResolvedValue({ id: '10000', key: 'ZUL', name: 'Zulu Project' }),
+      get: jest.fn().mockResolvedValue({ id: '10000', key: 'PROJ', name: 'Test Project' }),
     } as any;
 
     mockSchema = {
@@ -68,7 +68,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
     // Setup default mocks
     mockSchema.getFieldsForIssueType.mockResolvedValue({
-      projectKey: 'ZUL',
+      projectKey: 'PROJ',
       issueType: 'Task',
       fields: {
         summary: { id: 'summary', name: 'Summary', type: 'string', required: true, schema: { type: 'string' } },
@@ -77,17 +77,17 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
     });
 
     mockResolver.resolveFields.mockResolvedValue({
-      project: { key: 'ZUL' },
+      project: { key: 'PROJ' },
       issuetype: { name: 'Task' },
       summary: 'Test issue',
       description: 'Test description',
     });
 
     mockResolver.resolveFieldsWithExtraction.mockResolvedValue({
-      projectKey: 'ZUL',
+      projectKey: 'PROJ',
       issueType: 'Task',
       fields: {
-        project: { key: 'ZUL' },
+        project: { key: 'PROJ' },
         issuetype: { name: 'Task' },
         summary: 'Test issue',
         description: 'Test description',
@@ -95,7 +95,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
     });
 
     mockConverter.convertFields.mockResolvedValue({
-      project: { key: 'ZUL' },
+      project: { key: 'PROJ' },
       issuetype: { name: 'Task' },
       summary: 'Test issue',
       description: 'Test description',
@@ -110,7 +110,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const manifest = createBasicManifest(manifestId);
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2']);
+      setupBulkSuccess(mockClient, ['PROJ-2']);
 
       await issueOps.create(testInput.slice(0, 2), { retry: manifestId });
 
@@ -142,7 +142,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
       const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation();
       setupManifestInCache(mockCache, oldManifest);
-      setupBulkSuccess(mockClient, ['ZUL-124']);
+      setupBulkSuccess(mockClient, ['PROJ-124']);
 
       await issueOps.create(testInput.slice(0, 2), { retry: manifestId });
 
@@ -157,7 +157,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const manifest = createMultiFailureManifest(manifestId);
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-3', 'ZUL-5']);
+      setupBulkSuccess(mockClient, ['PROJ-3', 'PROJ-5']);
 
       await issueOps.create(testInput, { retry: manifestId }) as BulkResult;
 
@@ -185,7 +185,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-2' }],
+        [{ index: 0, key: 'PROJ-2' }],
         [{ index: 1, status: 400, errors: { field: 'still error' } }]
       );
 
@@ -207,7 +207,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       };
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2', 'ZUL-3']);
+      setupBulkSuccess(mockClient, ['PROJ-2', 'PROJ-3']);
 
       await issueOps.create(testInput.slice(0, 3), { retry: manifestId });
 
@@ -250,8 +250,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupBulkPartialFailure(
         mockClient,
         [
-          { index: 0, key: 'ZUL-3' }, // Filtered index 0 → original index 2
-          { index: 1, key: 'ZUL-5' }, // Filtered index 1 → original index 4
+          { index: 0, key: 'PROJ-3' }, // Filtered index 0 → original index 2
+          { index: 1, key: 'PROJ-5' }, // Filtered index 1 → original index 4
         ],
         []
       );
@@ -259,8 +259,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const result = await issueOps.create(testInput, { retry: manifestId }) as BulkResult;
 
       // Check that results use original indices
-      expect(result.manifest.created['2']).toBe('ZUL-3');
-      expect(result.manifest.created['4']).toBe('ZUL-5');
+      expect(result.manifest.created['2']).toBe('PROJ-3');
+      expect(result.manifest.created['4']).toBe('PROJ-5');
     });
 
     it('should track which retried rows succeeded/failed', async () => {
@@ -276,7 +276,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-2' }], // Index 1 succeeds
+        [{ index: 0, key: 'PROJ-2' }], // Index 1 succeeds
         [{ index: 1, status: 400, errors: { field: 'still error' } }] // Index 2 still fails
       );
 
@@ -302,7 +302,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-2' }],
+        [{ index: 0, key: 'PROJ-2' }],
         [{ index: 1, status: 400, errors: { field: 'still error' } }]
       );
 
@@ -325,7 +325,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-2' }], // Row 1 succeeds
+        [{ index: 0, key: 'PROJ-2' }], // Row 1 succeeds
         [{ index: 1, status: 400, errors: { field: 'still error' } }] // Row 2 still fails
       );
 
@@ -345,13 +345,13 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       };
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2', 'ZUL-3']);
+      setupBulkSuccess(mockClient, ['PROJ-2', 'PROJ-3']);
 
       const result = await issueOps.create(testInput.slice(0, 3), { retry: manifestId }) as BulkResult;
 
-      expect(result.manifest.created['0']).toBe('ZUL-1'); // Original
-      expect(result.manifest.created['1']).toBe('ZUL-2'); // New
-      expect(result.manifest.created['2']).toBe('ZUL-3'); // New
+      expect(result.manifest.created['0']).toBe('PROJ-1'); // Original
+      expect(result.manifest.created['1']).toBe('PROJ-2'); // New
+      expect(result.manifest.created['2']).toBe('PROJ-3'); // New
     });
 
     it('should update manifest.errors with new/updated errors', async () => {
@@ -367,7 +367,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-2' }], // Row 1 succeeds
+        [{ index: 0, key: 'PROJ-2' }], // Row 1 succeeds
         [{ index: 1, status: 400, errors: { field: 'new error' } }] // Row 2 new error
       );
 
@@ -385,7 +385,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const manifest = createBasicManifest(manifestId);
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2']);
+      setupBulkSuccess(mockClient, ['PROJ-2']);
 
       await issueOps.create(testInput.slice(0, 2), { retry: manifestId });
 
@@ -408,15 +408,15 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-2' }],
+        [{ index: 0, key: 'PROJ-2' }],
         [{ index: 1, status: 400, errors: { field: 'still error' } }]
       );
 
       const result = await issueOps.create(testInput.slice(0, 3), { retry: manifestId }) as BulkResult;
 
       expect(result.results).toHaveLength(3); // All 3 rows
-      expect(result.results[0]).toMatchObject({ index: 0, success: true, key: 'ZUL-1' });
-      expect(result.results[1]).toMatchObject({ index: 1, success: true, key: 'ZUL-2' });
+      expect(result.results[0]).toMatchObject({ index: 0, success: true, key: 'PROJ-1' });
+      expect(result.results[1]).toMatchObject({ index: 1, success: true, key: 'PROJ-2' });
       expect(result.results[2]).toMatchObject({ index: 2, success: false });
     });
 
@@ -428,8 +428,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupBulkPartialFailure(
         mockClient,
         [
-          { index: 0, key: 'ZUL-3' },
-          { index: 1, key: 'ZUL-5' },
+          { index: 0, key: 'PROJ-3' },
+          { index: 1, key: 'PROJ-5' },
         ],
         []
       );
@@ -444,7 +444,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const manifest = createBasicManifest(manifestId);
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2']);
+      setupBulkSuccess(mockClient, ['PROJ-2']);
 
       const result = await issueOps.create(testInput.slice(0, 2), { retry: manifestId }) as BulkResult;
 
@@ -462,7 +462,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       };
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2', 'ZUL-3']);
+      setupBulkSuccess(mockClient, ['PROJ-2', 'PROJ-3']);
 
       const result = await issueOps.create(testInput.slice(0, 3), { retry: manifestId }) as BulkResult;
 
@@ -476,7 +476,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-3' }],
+        [{ index: 0, key: 'PROJ-3' }],
         [{ index: 1, status: 400, errors: { field: 'still error' } }]
       );
 
@@ -529,7 +529,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
     it('should parse retry input when parse options are provided', async () => {
       const manifest = createPartialRetryManifest('bulk-parse');
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-3', 'ZUL-4']);
+      setupBulkSuccess(mockClient, ['PROJ-3', 'PROJ-4']);
 
       const parseInputSpy = jest
         .spyOn(InputParser, 'parseInput')
@@ -579,7 +579,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
           created: [
             {
               index: 99,
-              key: 'ZUL-999',
+              key: 'PROJ-999',
               id: '100099',
               self: 'https://jira/rest/api/2/issue/100099',
             },
@@ -668,7 +668,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       setupManifestInCache(mockCache, manifest1);
       setupBulkPartialFailure(
         mockClient,
-        [{ index: 0, key: 'ZUL-3' }],
+        [{ index: 0, key: 'PROJ-3' }],
         [{ index: 1, status: 400, errors: { field: 'error' } }]
       );
 
@@ -678,11 +678,11 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const manifest2 = createPartialRetryManifest(manifestId);
       manifest2.succeeded = [0, 1, 2];
       manifest2.failed = [3];
-      manifest2.created = { '0': 'ZUL-1', '1': 'ZUL-2', '2': 'ZUL-3' };
+      manifest2.created = { '0': 'PROJ-1', '1': 'PROJ-2', '2': 'PROJ-3' };
       manifest2.errors = { '3': { status: 400, errors: { field: 'error' } } };
 
       setupManifestInCache(mockCache, manifest2);
-      setupBulkSuccess(mockClient, ['ZUL-4']);
+      setupBulkSuccess(mockClient, ['PROJ-4']);
 
       const result = await issueOps.create(testInput.slice(0, 4), { retry: manifestId }) as BulkResult;
 
@@ -696,7 +696,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       // Manifest with 2 failures
       const manifest = createPartialRetryManifest(manifestId);
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-3', 'ZUL-4']);
+      setupBulkSuccess(mockClient, ['PROJ-3', 'PROJ-4']);
 
       await issueOps.create(testInput.slice(0, 4), { retry: manifestId });
 
@@ -709,7 +709,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       const manifest = createMultiFailureManifest(manifestId);
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-3', 'ZUL-5']);
+      setupBulkSuccess(mockClient, ['PROJ-3', 'PROJ-5']);
 
       const result = await issueOps.create(testInput, { retry: manifestId }) as BulkResult;
 
@@ -728,7 +728,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       };
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2', 'ZUL-3']);
+      setupBulkSuccess(mockClient, ['PROJ-2', 'PROJ-3']);
 
       const result = await issueOps.create(testInput.slice(0, 3), { retry: manifestId }) as BulkResult;
 
@@ -742,9 +742,9 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
   // E4-S13 AC8: Hierarchy-aware retry
   describe('E4-S13 AC8: Hierarchy-aware Retry', () => {
     const hierarchyInput = [
-      { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Epic 1' },
-      { uid: 'task-1', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
-      { uid: 'task-2', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task 2', Parent: 'epic-1' },
+      { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+      { uid: 'task-1', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'epic-1' },
+      { uid: 'task-2', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 2', Parent: 'epic-1' },
     ];
 
     it('should route to hierarchy retry when manifest has uidMap', async () => {
@@ -756,12 +756,12 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         total: 3,
         succeeded: [0],      // Epic succeeded
         failed: [1, 2],      // Tasks failed
-        created: { '0': 'ZUL-100' },
+        created: { '0': 'PROJ-100' },
         errors: {
           '1': { status: 400, errors: { parent: 'Invalid parent' } },
           '2': { status: 400, errors: { parent: 'Invalid parent' } },
         },
-        uidMap: { 'epic-1': 'ZUL-100' }, // This triggers hierarchy retry
+        uidMap: { 'epic-1': 'PROJ-100' }, // This triggers hierarchy retry
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -769,8 +769,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       // Mock bulk API success for retry
       mockClient.post.mockResolvedValueOnce({
         issues: [
-          { key: 'ZUL-101', id: '10101', self: 'https://...' },
-          { key: 'ZUL-102', id: '10102', self: 'https://...' }
+          { key: 'PROJ-101', id: '10101', self: 'https://...' },
+          { key: 'PROJ-102', id: '10102', self: 'https://...' }
         ],
         errors: []
       });
@@ -781,7 +781,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       expect(result.succeeded).toBe(3); // Epic + 2 tasks
       expect(result.failed).toBe(0);
       expect(result.manifest.uidMap).toBeDefined();
-      expect(result.manifest.uidMap!['epic-1']).toBe('ZUL-100');
+      expect(result.manifest.uidMap!['epic-1']).toBe('PROJ-100');
     });
 
     it('should use existing UID mappings when retrying hierarchy', async () => {
@@ -792,26 +792,26 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         total: 2,
         succeeded: [0],
         failed: [1],
-        created: { '0': 'ZUL-200' },
+        created: { '0': 'PROJ-200' },
         errors: {
           '1': { status: 500, errors: { server: 'Temporary error' } },
         },
-        uidMap: { 'epic-1': 'ZUL-200' },
+        uidMap: { 'epic-1': 'PROJ-200' },
       };
 
       setupManifestInCache(mockCache, manifest);
 
       // Mock bulk success for the child task
       mockClient.post.mockResolvedValueOnce({
-        issues: [{ key: 'ZUL-201', id: '10201', self: 'https://...' }],
+        issues: [{ key: 'PROJ-201', id: '10201', self: 'https://...' }],
         errors: []
       });
 
       const result = await issueOps.create(hierarchyInput.slice(0, 2), { retry: manifestId }) as BulkResult;
 
       // UID replacement should use existing mapping
-      expect(result.manifest.uidMap!['epic-1']).toBe('ZUL-200');
-      expect(result.manifest.uidMap!['task-1']).toBe('ZUL-201');
+      expect(result.manifest.uidMap!['epic-1']).toBe('PROJ-200');
+      expect(result.manifest.uidMap!['task-1']).toBe('PROJ-201');
     });
 
     it('should handle partial failure during hierarchy retry', async () => {
@@ -822,19 +822,19 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         total: 3,
         succeeded: [0],
         failed: [1, 2],
-        created: { '0': 'ZUL-300' },
+        created: { '0': 'PROJ-300' },
         errors: {
           '1': { status: 500, errors: { server: 'Error' } },
           '2': { status: 500, errors: { server: 'Error' } },
         },
-        uidMap: { 'epic-1': 'ZUL-300' },
+        uidMap: { 'epic-1': 'PROJ-300' },
       };
 
       setupManifestInCache(mockCache, manifest);
 
       // Mock partial failure: task-1 succeeds, task-2 fails
       mockClient.post.mockResolvedValueOnce({
-        issues: [{ key: 'ZUL-301', id: '10301', self: 'https://...' }],
+        issues: [{ key: 'PROJ-301', id: '10301', self: 'https://...' }],
         errors: [{
           status: 400,
           failedElementNumber: 1,
@@ -859,7 +859,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       };
 
       setupManifestInCache(mockCache, manifest);
-      setupBulkSuccess(mockClient, ['ZUL-2']);
+      setupBulkSuccess(mockClient, ['PROJ-2']);
 
       const result = await issueOps.create(testInput.slice(0, 2), { retry: manifestId }) as BulkResult;
 
@@ -877,9 +877,9 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         total: 2,
         succeeded: [0, 1],
         failed: [],
-        created: { '0': 'ZUL-400', '1': 'ZUL-401' },
+        created: { '0': 'PROJ-400', '1': 'PROJ-401' },
         errors: {},
-        uidMap: { 'epic-1': 'ZUL-400', 'task-1': 'ZUL-401' },
+        uidMap: { 'epic-1': 'PROJ-400', 'task-1': 'PROJ-401' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -896,9 +896,9 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       // Scenario: Epic succeeded but Story and its child Task both failed
       // Story is parent of Task, creating 2 levels in the retry set
       const multiLevelHierarchyInput = [
-        { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Epic 1' },
-        { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Story 1', Parent: 'epic-1' },
-        { uid: 'task-1', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'story-1' },
+        { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic 1' },
+        { uid: 'story-1', Project: 'PROJ', 'Issue Type': 'Story', Summary: 'Story 1', Parent: 'epic-1' },
+        { uid: 'task-1', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task 1', Parent: 'story-1' },
       ];
 
       const manifestId = 'bulk-multilevel-123';
@@ -908,12 +908,12 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         total: 3,
         succeeded: [0],      // Epic succeeded
         failed: [1, 2],      // Story and Task failed (forming 2 levels)
-        created: { '0': 'ZUL-500' },
+        created: { '0': 'PROJ-500' },
         errors: {
           '1': { status: 500, errors: { server: 'Temporary error' } },
           '2': { status: 500, errors: { server: 'Temporary error' } },
         },
-        uidMap: { 'epic-1': 'ZUL-500' },
+        uidMap: { 'epic-1': 'PROJ-500' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -939,12 +939,12 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       // Mock bulk API responses for each level
       // Level 0: Story (parent is epic-1 which is external/succeeded)
       mockClient.post.mockResolvedValueOnce({
-        issues: [{ key: 'ZUL-501', id: '10501', self: 'https://...' }],
+        issues: [{ key: 'PROJ-501', id: '10501', self: 'https://...' }],
         errors: []
       });
       // Level 1: Task (parent is story-1)
       mockClient.post.mockResolvedValueOnce({
-        issues: [{ key: 'ZUL-502', id: '10502', self: 'https://...' }],
+        issues: [{ key: 'PROJ-502', id: '10502', self: 'https://...' }],
         errors: []
       });
 
@@ -957,18 +957,18 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       expect(result.succeeded).toBe(3);
       expect(result.failed).toBe(0);
       expect(result.manifest.uidMap).toBeDefined();
-      expect(result.manifest.uidMap!['story-1']).toBe('ZUL-501');
-      expect(result.manifest.uidMap!['task-1']).toBe('ZUL-502');
+      expect(result.manifest.uidMap!['story-1']).toBe('PROJ-501');
+      expect(result.manifest.uidMap!['task-1']).toBe('PROJ-502');
     });
 
     it('should merge multi-level retry results back to original manifest indices', async () => {
       // 4-level deep hierarchy: Epic -> Feature -> Story -> Task
       // All but Epic failed, creating 3 levels in retry
       const deepHierarchyInput = [
-        { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Epic' },
-        { uid: 'feature-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Feature', Parent: 'epic-1' },
-        { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Story', Parent: 'feature-1' },
-        { uid: 'task-1', Project: 'ZUL', 'Issue Type': 'Task', Summary: 'Task', Parent: 'story-1' },
+        { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Epic' },
+        { uid: 'feature-1', Project: 'PROJ', 'Issue Type': 'Story', Summary: 'Feature', Parent: 'epic-1' },
+        { uid: 'story-1', Project: 'PROJ', 'Issue Type': 'Story', Summary: 'Story', Parent: 'feature-1' },
+        { uid: 'task-1', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Task', Parent: 'story-1' },
       ];
 
       const manifestId = 'bulk-deep-456';
@@ -978,13 +978,13 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         total: 4,
         succeeded: [0],
         failed: [1, 2, 3],
-        created: { '0': 'ZUL-600' },
+        created: { '0': 'PROJ-600' },
         errors: {
           '1': { status: 500, errors: { server: 'Error' } },
           '2': { status: 500, errors: { server: 'Error' } },
           '3': { status: 500, errors: { server: 'Error' } },
         },
-        uidMap: { 'epic-1': 'ZUL-600' },
+        uidMap: { 'epic-1': 'PROJ-600' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -1010,15 +1010,15 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       // Mock responses for 3 levels
       mockClient.post
         .mockResolvedValueOnce({
-          issues: [{ key: 'ZUL-601', id: '10601', self: 'https://...' }],
+          issues: [{ key: 'PROJ-601', id: '10601', self: 'https://...' }],
           errors: []
         })
         .mockResolvedValueOnce({
-          issues: [{ key: 'ZUL-602', id: '10602', self: 'https://...' }],
+          issues: [{ key: 'PROJ-602', id: '10602', self: 'https://...' }],
           errors: []
         })
         .mockResolvedValueOnce({
-          issues: [{ key: 'ZUL-603', id: '10603', self: 'https://...' }],
+          issues: [{ key: 'PROJ-603', id: '10603', self: 'https://...' }],
           errors: []
         });
 
@@ -1032,10 +1032,10 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       expect(result.failed).toBe(0);
       
       // Original indices preserved in manifest
-      expect(result.manifest.created['0']).toBe('ZUL-600');
-      expect(result.manifest.created['1']).toBe('ZUL-601');
-      expect(result.manifest.created['2']).toBe('ZUL-602');
-      expect(result.manifest.created['3']).toBe('ZUL-603');
+      expect(result.manifest.created['0']).toBe('PROJ-600');
+      expect(result.manifest.created['1']).toBe('PROJ-601');
+      expect(result.manifest.created['2']).toBe('PROJ-602');
+      expect(result.manifest.created['3']).toBe('PROJ-603');
     });
 
     it('should capture unexpected validation failures in hierarchy retry fallback', async () => {
@@ -1048,7 +1048,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         failed: [0],
         created: {},
         errors: { '0': { status: 400, errors: { parent: 'missing' } } },
-        uidMap: { 'epic-1': 'ZUL-1' },
+        uidMap: { 'epic-1': 'PROJ-1' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -1058,7 +1058,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         .mockResolvedValueOnce([{ status: 'rejected', reason: 'hierarchy boom' } as PromiseRejectedResult]);
 
       const result = await issueOps.create(
-        [{ uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' }],
+        [{ uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Retry Epic' }],
         { retry: manifestId }
       ) as BulkResult;
 
@@ -1077,7 +1077,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         failed: [0],
         created: {},
         errors: { '0': { status: 400, errors: { parent: 'missing' } } },
-        uidMap: { 'epic-1': 'ZUL-1' },
+        uidMap: { 'epic-1': 'PROJ-1' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -1087,7 +1087,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       });
 
       const result = await issueOps.create(
-        [{ uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' }],
+        [{ uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Retry Epic' }],
         { retry: manifestId }
       ) as BulkResult;
 
@@ -1107,7 +1107,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
           '0': { status: 400, errors: { parent: 'missing' } },
           '1': { status: 400, errors: { parent: 'missing' } },
         },
-        uidMap: { 'epic-1': 'ZUL-1' },
+        uidMap: { 'epic-1': 'PROJ-1' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -1116,8 +1116,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       jest.spyOn(hierarchyPreprocessor, 'preprocessHierarchyRecords').mockResolvedValueOnce({
         hasHierarchy: true,
         levels: [
-          { issues: [{ index: 0, record: { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic' } }] },
-          { issues: [{ index: 1, record: { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Parent: 'epic-1' } }] },
+          { issues: [{ index: 0, record: { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic' } }] },
+          { issues: [{ index: 1, record: { uid: 'story-1', Project: 'PROJ', 'Issue Type': 'Story', Parent: 'epic-1' } }] },
         ],
         uidMap: { 'epic-1': 0, 'story-1': 1 },
       });
@@ -1129,30 +1129,30 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
           total: 2,
           succeeded: [0],
           failed: [1],
-          created: { '0': 'ZUL-101' },
+          created: { '0': 'PROJ-101' },
           errors: { '1': { status: 400, errors: { summary: 'bad' } } },
-          uidMap: { 'epic-1': 'ZUL-101' },
+          uidMap: { 'epic-1': 'PROJ-101' },
         },
         total: 2,
         succeeded: 1,
         failed: 1,
         results: [
-          { index: 0, success: true as const, key: 'ZUL-101' },
+          { index: 0, success: true as const, key: 'PROJ-101' },
           { index: 1, success: false as const, error: { status: 400, errors: { summary: 'bad' } } },
         ],
       });
 
       const result = await issueOps.create(
         [
-          { uid: 'epic-1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
-          { uid: 'story-1', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'epic-1' },
+          { uid: 'epic-1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
+          { uid: 'story-1', Project: 'PROJ', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'epic-1' },
         ],
         { retry: manifestId }
       ) as BulkResult;
 
       expect(result.results).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ index: 0, success: true, key: 'ZUL-101' }),
+          expect.objectContaining({ index: 0, success: true, key: 'PROJ-101' }),
           expect.objectContaining({ index: 1, success: false }),
         ])
       );
@@ -1171,7 +1171,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
           '0': { status: 400, errors: { parent: 'missing' } },
           '1': { status: 400, errors: { parent: 'missing' } },
         },
-        uidMap: { 'u1': 'ZUL-1' },
+        uidMap: { 'u1': 'PROJ-1' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -1183,20 +1183,20 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
       (issueOps as any).bulkApiWrapper = {
         createBulk: jest.fn().mockResolvedValue({
-          created: [{ index: 0, key: 'ZUL-200', id: '200', self: '' }],
+          created: [{ index: 0, key: 'PROJ-200', id: '200', self: '' }],
           failed: [{ index: 1, status: 400, errors: { summary: 'bad' } }],
         }),
       };
 
       const result = await issueOps.create(
         [
-          { uid: 'u1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
-          { uid: 'u2', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'u1' },
+          { uid: 'u1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
+          { uid: 'u2', Project: 'PROJ', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'u1' },
         ],
         { retry: manifestId }
       ) as BulkResult;
 
-      expect(result.manifest.created['0']).toBe('ZUL-200');
+      expect(result.manifest.created['0']).toBe('PROJ-200');
       expect(result.manifest.errors['1']).toBeDefined();
 
       allSettledSpy.mockRestore();
@@ -1212,7 +1212,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         failed: [0, 1],
         created: {},
         errors: {},
-        uidMap: { 'u1': 'ZUL-1' },
+        uidMap: { 'u1': 'PROJ-1' },
       };
 
       setupManifestInCache(mockCache, manifest);
@@ -1230,20 +1230,20 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
       (issueOps as any).bulkApiWrapper = {
         createBulk: jest.fn().mockResolvedValue({
-          created: [{ index: 0, key: 'ZUL-300', id: '300', self: '' }],
+          created: [{ index: 0, key: 'PROJ-300', id: '300', self: '' }],
           failed: [{ index: 1, status: 400, errors: { summary: 'bad' } }],
         }),
       };
 
       const result = await issueOps.create(
         [
-          { uid: 'u1', Project: 'ZUL', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
-          { uid: 'u2', Project: 'ZUL', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'u1' },
+          { uid: 'u1', Project: 'PROJ', 'Issue Type': 'Epic', Summary: 'Retry Epic' },
+          { uid: 'u2', Project: 'PROJ', 'Issue Type': 'Story', Summary: 'Retry Story', Parent: 'u1' },
         ],
         { retry: manifestId }
       ) as BulkResult;
 
-      expect(result.manifest.created['0']).toBe('ZUL-300');
+      expect(result.manifest.created['0']).toBe('PROJ-300');
       expect(result.manifest.errors['1']).toBeDefined();
     });
   });

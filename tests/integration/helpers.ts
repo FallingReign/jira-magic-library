@@ -41,7 +41,7 @@ export function skipIfNoJira(): void {
  * Logs warnings if deletion fails (e.g., issue already deleted, no permissions).
  * 
  * @param client - JIRA API client
- * @param issueKeys - Array of issue keys to delete (e.g., ['ZUL-123', 'ZUL-124'])
+ * @param issueKeys - Array of issue keys to delete (e.g., ['PROJ-123', 'PROJ-124'])
  * 
  * @example
  * ```typescript

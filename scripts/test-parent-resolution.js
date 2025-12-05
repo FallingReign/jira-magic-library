@@ -10,8 +10,8 @@
  *   node scripts/test-parent-resolution.js <projectKey> <searchQuery> [issueTypeName]
  * 
  * Examples:
- *   node scripts/test-parent-resolution.js ZUL "my epic"
- *   node scripts/test-parent-resolution.js ZUL "my super epic" SuperEpic
+ *   node scripts/test-parent-resolution.js PROJ "my epic"
+ *   node scripts/test-parent-resolution.js PROJ "my super epic" SuperEpic
  */
 
 import { config } from 'dotenv';
@@ -35,8 +35,8 @@ if (args.length < 2) {
   console.log('Usage: node scripts/test-parent-resolution.js <projectKey> <searchQuery> [issueTypeName]');
   console.log('');
   console.log('Examples:');
-  console.log('  node scripts/test-parent-resolution.js ZUL "my epic"');
-  console.log('  node scripts/test-parent-resolution.js ZUL "super epic" SuperEpic');
+  console.log('  node scripts/test-parent-resolution.js PROJ "my epic"');
+  console.log('  node scripts/test-parent-resolution.js PROJ "super epic" SuperEpic');
   process.exit(1);
 }
 

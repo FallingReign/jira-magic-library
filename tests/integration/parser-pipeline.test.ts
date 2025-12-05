@@ -19,7 +19,7 @@ import { isJiraConfigured } from './helpers.js';
 
 describe('Integration: Parser → Pipeline Compatibility', () => {
   let jml: JML;
-  const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'ZUL';
+  const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'PROJ';
 
   beforeAll(async () => {
     if (!isJiraConfigured()) {

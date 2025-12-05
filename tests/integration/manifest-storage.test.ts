@@ -45,11 +45,11 @@ describe('Integration: ManifestStorage with Real Redis', () => {
         succeeded: [0, 1, 2, 3, 4],
         failed: [5, 6, 7],
         created: {
-          '0': 'ZUL-100',
-          '1': 'ZUL-101',
-          '2': 'ZUL-102',
-          '3': 'ZUL-103',
-          '4': 'ZUL-104',
+          '0': 'PROJ-100',
+          '1': 'PROJ-101',
+          '2': 'PROJ-102',
+          '3': 'PROJ-103',
+          '4': 'PROJ-104',
         },
         errors: {
           '5': {
@@ -84,7 +84,7 @@ describe('Integration: ManifestStorage with Real Redis', () => {
       expect(retrieved?.id).toBe(manifestId);
       expect(retrieved?.succeeded).toEqual([0, 1, 2, 3, 4]);
       expect(retrieved?.failed).toEqual([5, 6, 7]);
-      expect(retrieved?.created['0']).toBe('ZUL-100');
+      expect(retrieved?.created['0']).toBe('PROJ-100');
       expect(retrieved?.errors['5'].errors.issuetype).toBe('issue type is required');
     });
 
@@ -138,9 +138,9 @@ describe('Integration: ManifestStorage with Real Redis', () => {
         succeeded: [0, 1, 2],
         failed: [3, 4, 5, 6, 7],
         created: {
-          '0': 'ZUL-100',
-          '1': 'ZUL-101',
-          '2': 'ZUL-102',
+          '0': 'PROJ-100',
+          '1': 'PROJ-101',
+          '2': 'PROJ-102',
         },
         errors: {
           '3': { status: 400, errors: { field1: 'error1' } },
@@ -159,8 +159,8 @@ describe('Integration: ManifestStorage with Real Redis', () => {
         succeeded: [3, 5],
         failed: [4, 6, 7],
         created: {
-          '3': 'ZUL-103',
-          '5': 'ZUL-105',
+          '3': 'PROJ-103',
+          '5': 'PROJ-105',
         },
         errors: {
           '4': { status: 400, errors: { field2: 'updated error' } },
@@ -175,8 +175,8 @@ describe('Integration: ManifestStorage with Real Redis', () => {
       expect(updated).not.toBeNull();
       expect(updated?.succeeded).toEqual([0, 1, 2, 3, 5]);
       expect(updated?.failed).toEqual([4, 6, 7]);
-      expect(updated?.created['3']).toBe('ZUL-103');
-      expect(updated?.created['5']).toBe('ZUL-105');
+      expect(updated?.created['3']).toBe('PROJ-103');
+      expect(updated?.created['5']).toBe('PROJ-105');
       expect(updated?.errors).not.toHaveProperty('3'); // Removed (now succeeded)
       expect(updated?.errors).not.toHaveProperty('5'); // Removed (now succeeded)
       expect(updated?.errors['4'].errors.field2).toBe('updated error');

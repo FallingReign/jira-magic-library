@@ -701,8 +701,8 @@ describe('UserConverter', () => {
 
       const result = await convertUserType('cached@example.com', fieldSchema, context);
 
-      // User directory is cached at project level (no issueType)
-      expect(mockCache.getLookup).toHaveBeenCalledWith('TEST', 'user');
+      // User directory is cached globally (users are not project-specific)
+      expect(mockCache.getLookup).toHaveBeenCalledWith('global', 'user');
       expect(result).toEqual({ name: 'cached' });
       expect(mockClient.get).not.toHaveBeenCalled(); // Cache hit, no API call
     });
@@ -722,9 +722,9 @@ describe('UserConverter', () => {
 
       await convertUserType(emailPrimary, fieldSchema, context);
 
-      // User directory is cached at project level (no issueType)
+      // User directory is cached globally (users are not project-specific)
       expect(mockCache.setLookup).toHaveBeenCalledWith(
-        'TEST',
+        'global',
         'user',
         mockUsers
       );

@@ -86,7 +86,7 @@ describe('Integration: Data-Driven User Scenarios', () => {
       // Verify issue created successfully
       expect(result).toBeDefined();
       expect(result.key).toBeTruthy();
-      expect(result.key).toMatch(/^[A-Z]+-\d+$/); // Matches pattern like "ZUL-123"
+      expect(result.key).toMatch(/^[A-Z]+-\d+$/); // Matches pattern like "PROJ-123"
       
       createdIssues.push(result.key);
       
@@ -116,7 +116,7 @@ describe('Integration: Data-Driven User Scenarios', () => {
     // Missing: component, datetime, number, option, version
     // - component/version are tested via array converter (Component/s, Fix Version/s fields)
     // - option is tested via Priority field (type: option)
-    // - datetime/number may not exist in ZUL project schema
+    // - datetime/number may not exist in test project schema
     expect(coverage.percentage).toBeGreaterThanOrEqual(60); // 10/15 = 67%
     expect(coverage.missing.length).toBeLessThanOrEqual(5); // Max 5 missing converters
     

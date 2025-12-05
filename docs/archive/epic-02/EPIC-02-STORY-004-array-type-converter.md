@@ -328,10 +328,10 @@ Output: ["bug", "frontend", "ui"]
 **Demo Required**: ❌ No
 
 **Reason**: Integration tests already demonstrate all key features:
-- Test 1: Labels as array input ([PROJ-22231](https://zulip.atlassian.net/browse/PROJ-22231))
-- Test 2: Labels as CSV string ([PROJ-22232](https://zulip.atlassian.net/browse/PROJ-22232))
-- Test 3: CSV with whitespace trimming ([PROJ-22233](https://zulip.atlassian.net/browse/PROJ-22233))
-- Test 4: Empty array handling ([PROJ-22234](https://zulip.atlassian.net/browse/PROJ-22234))
+- Test 1: Labels as array input (PROJ-22231)
+- Test 2: Labels as CSV string (PROJ-22232)
+- Test 3: CSV with whitespace trimming (PROJ-22233)
+- Test 4: Empty array handling (PROJ-22234)
 
 **Alternative Evidence**:
 - Integration tests: [create-issue.test.ts#L557-654](../../tests/integration/create-issue.test.ts)

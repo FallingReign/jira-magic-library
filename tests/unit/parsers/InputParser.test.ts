@@ -770,13 +770,13 @@ ENG,Issue 2`;
     it('should auto-detect CSV array input when format omitted (line 199 alternate path)', async () => {
       const arrayOfArrays = [
         ['Project', 'Summary'],
-        ['ZUL', 'Retry Test']
+        ['PROJ', 'Retry Test']
       ];
 
       const result = await parseInput({ data: arrayOfArrays });
 
       expect(result.format).toBe('csv');
-      expect(result.data[0]).toEqual({ Project: 'ZUL', Summary: 'Retry Test' });
+      expect(result.data[0]).toEqual({ Project: 'PROJ', Summary: 'Retry Test' });
     });
 
     it('should handle empty data array (line 199 false branch)', async () => {

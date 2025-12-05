@@ -32,7 +32,7 @@ describe('Integration: E3-S14 AC5 - Multi-Level Hierarchy Creation', () => {
       return;
     }
 
-    projectKey = process.env.JIRA_PROJECT_KEY || 'ZUL';
+    projectKey = process.env.JIRA_PROJECT_KEY || 'PROJ';
     config = loadConfig();
     client = new JML(config);
   });

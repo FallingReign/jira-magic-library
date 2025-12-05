@@ -96,7 +96,7 @@ describe('ManifestStorage', () => {
         total: 10,
         succeeded: [0, 1, 2],
         failed: [3, 4],
-        created: { '0': 'ZUL-123', '1': 'ZUL-124', '2': 'ZUL-125' },
+        created: { '0': 'PROJ-123', '1': 'PROJ-124', '2': 'PROJ-125' },
         errors: {
           '3': { status: 400, errors: { issuetype: 'issue type is required' } },
           '4': { status: 400, errors: { priority: 'priority is invalid' } },
@@ -120,7 +120,7 @@ describe('ManifestStorage', () => {
         total: 1,
         succeeded: [0],
         failed: [],
-        created: { '0': 'ZUL-123' },
+        created: { '0': 'PROJ-123' },
         errors: {},
       };
 
@@ -227,16 +227,16 @@ describe('ManifestStorage', () => {
         succeeded: [0, 1, 2],
         failed: [],
         created: {
-          '0': 'ZUL-123',
-          '1': 'ZUL-124',
-          '2': 'ZUL-125',
+          '0': 'PROJ-123',
+          '1': 'PROJ-124',
+          '2': 'PROJ-125',
         },
         errors: {},
       };
 
-      expect(manifest.created['0']).toBe('ZUL-123');
-      expect(manifest.created['1']).toBe('ZUL-124');
-      expect(manifest.created['2']).toBe('ZUL-125');
+      expect(manifest.created['0']).toBe('PROJ-123');
+      expect(manifest.created['1']).toBe('PROJ-124');
+      expect(manifest.created['2']).toBe('PROJ-125');
     });
 
     it('should store errors with status and field errors (matches E4-S03 format)', () => {
@@ -320,7 +320,7 @@ describe('ManifestStorage', () => {
         total: 2,
         succeeded: [0],
         failed: [1],
-        created: { '0': 'ZUL-999' },
+        created: { '0': 'PROJ-999' },
         errors: {
           '1': {
             status: 400,
