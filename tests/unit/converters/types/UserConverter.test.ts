@@ -1589,12 +1589,12 @@ describe('UserConverter', () => {
         mockCache.getLookup.mockResolvedValue({ value: null, isStale: false });
         // User that could match by both email and username
         (mockClient.get as jest.Mock).mockResolvedValue([
-          { name: 'jsmith@company.com', displayName: 'John Smith', emailAddress: 'jsmith@company.com', active: true },
+          { name: 'john.smith@company.com', displayName: 'John Smith', emailAddress: 'john.smith@company.com', active: true },
         ]);
 
         // Search by exact email - this might also match username prefix
-        const result = await convertUserType('jsmith@company.com', fieldSchema, context);
-        expect(result).toEqual({ name: 'jsmith@company.com' });
+        const result = await convertUserType('john.smith@company.com', fieldSchema, context);
+        expect(result).toEqual({ name: 'john.smith@company.com' });
       });
     });
 
