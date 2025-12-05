@@ -231,18 +231,18 @@ function parseFromData(
       return parseCSVFromArray(data as unknown[][]);
     }
 
-    // Array of objects (already parsed JSON)
+    // Array of objects (already parsed JSON) - sanitize in case values have whitespace
     return {
-      data: data as Record<string, unknown>[],
+      data: sanitizeValues(data as Record<string, unknown>[]),
       format: 'json',
       source: 'array',
     };
   }
 
-  // Case 2: Single object (normalize to array)
+  // Case 2: Single object (normalize to array) - sanitize in case values have whitespace
   if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
     return {
-      data: [data],
+      data: [sanitizeValues(data)],
       format: 'json',
       source: 'object',
     };
@@ -316,7 +316,7 @@ function parseCSVContent(content: string): Record<string, unknown>[] {
       raw: true,
     }) as Array<{ record: Record<string, unknown>; raw?: string }>;
 
-    return records.map((entry) => {
+    const processed = records.map((entry) => {
       const rowRecord = entry.record;
       const rawRow = entry.raw;
       if (!rawRow) {
@@ -335,6 +335,9 @@ function parseCSVContent(content: string): Record<string, unknown>[] {
 
       return rowRecord;
     });
+
+    // Sanitize all string values (trim whitespace from keys and values)
+    return sanitizeValues(processed);
   } catch (error) {
     throw new InputParseError(
       `Invalid CSV format: ${(error as Error).message}`,
@@ -371,8 +374,9 @@ function parseCSVFromArray(data: unknown[][]): ParsedInput {
     return obj;
   });
 
+  // Sanitize all string values (trim whitespace from keys and values)
   return {
-    data: parsed,
+    data: sanitizeValues(parsed),
     format: 'csv',
     source: 'array',
   };
@@ -385,11 +389,11 @@ function parseJSONContent(content: string): Record<string, unknown>[] {
   try {
     const parsed: unknown = JSON.parse(content);
 
-    // Normalize to array
+    // Normalize to array and sanitize string values
     if (Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>[];
+      return sanitizeValues(parsed as Record<string, unknown>[]);
     } else if (typeof parsed === 'object' && parsed !== null) {
-      return [parsed as Record<string, unknown>];
+      return [sanitizeValues(parsed as Record<string, unknown>)];
     } else {
       throw new Error('JSON must be an object or array of objects');
     }
@@ -433,7 +437,8 @@ function parseYAMLContent(content: string): Record<string, unknown>[] {
       }
     }
 
-    return result;
+    // Sanitize all string values (trim whitespace from keys and values)
+    return sanitizeValues(result);
   } catch (error) {
     throw new InputParseError(
       `Invalid YAML format: ${(error as Error).message}`,
@@ -477,4 +482,49 @@ function getCsvQuotedFlags(rawRow: string, expectedFieldCount: number): boolean[
   }
 
   return flags;
+}
+
+/**
+ * Recursively sanitize string values in parsed data.
+ * 
+ * - Trims leading/trailing whitespace from all string values (including array elements)
+ * - Trims whitespace from object keys (keys should never be multiline)
+ * - Preserves internal newlines in string values (for multiline fields like description)
+ * - Handles nested objects and arrays recursively
+ * 
+ * This fixes issues where input sources (e.g., Slack) insert accidental
+ * line breaks in field values like:
+ *   issue type: "
+ *   Bug"
+ * 
+ * @param data - Parsed data to sanitize
+ * @returns Sanitized data with trimmed string values and keys
+ */
+function sanitizeValues<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return data;
+  }
+
+  if (typeof data === 'string') {
+    // Trim leading/trailing whitespace but preserve internal newlines
+    return data.replace(/^\s+|\s+$/g, '') as T;
+  }
+
+  if (Array.isArray(data)) {
+    // Recursively sanitize array elements
+    return data.map((item) => sanitizeValues(item)) as T;
+  }
+
+  if (typeof data === 'object') {
+    // Recursively sanitize object values and trim keys
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      const trimmedKey = key.trim();
+      result[trimmedKey] = sanitizeValues(value);
+    }
+    return result as T;
+  }
+
+  // Non-string primitives (numbers, booleans) pass through unchanged
+  return data;
 }

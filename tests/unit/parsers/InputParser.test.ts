@@ -800,4 +800,221 @@ ENG,Issue 2`;
       ).rejects.toThrow(InputParseError);
     });
   });
+
+  // Whitespace Sanitization (Slack line break bug fix)
+  describe('Whitespace Sanitization', () => {
+    describe('YAML with leading/trailing whitespace', () => {
+      it('should trim leading newlines from YAML values (Slack bug)', async () => {
+        // This is the exact bug: Slack inserts a newline after the quote
+        const yaml = 'issue type: "\nBug"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0]['issue type']).toBe('Bug');
+      });
+
+      it('should trim trailing newlines from YAML values', async () => {
+        const yaml = 'Summary: "Test issue\n"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].Summary).toBe('Test issue');
+      });
+
+      it('should trim leading/trailing spaces from YAML values', async () => {
+        const yaml = 'Project: "  ENG  "';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].Project).toBe('ENG');
+      });
+
+      it('should preserve internal newlines in YAML multiline values', async () => {
+        // Using YAML literal block scalar - internal newlines preserved, trailing trimmed
+        const yaml = 'Description: |\n  Line 1\n  Line 2\n  Line 3';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        // Internal newlines are preserved, but trailing newline from block scalar gets trimmed
+        expect(result.data[0].Description).toBe('Line 1\nLine 2\nLine 3');
+      });
+
+      it('should trim whitespace from YAML keys', async () => {
+        // Keys with accidental whitespace should be normalized
+        const yaml = '" Summary ": Test\n" Project ": ENG';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0]).toHaveProperty('Summary', 'Test');
+        expect(result.data[0]).toHaveProperty('Project', 'ENG');
+      });
+
+      it('should handle mixed whitespace in YAML document stream', async () => {
+        const yaml = 'Project: " ENG "\nSummary: "\n  First issue  \n"\n---\nProject: "  PROJ  "\nSummary: "Second"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data).toHaveLength(2);
+        expect(result.data[0].Project).toBe('ENG');
+        expect(result.data[0].Summary).toBe('First issue');
+        expect(result.data[1].Project).toBe('PROJ');
+        expect(result.data[1].Summary).toBe('Second');
+      });
+    });
+
+    describe('JSON with leading/trailing whitespace', () => {
+      it('should trim whitespace from JSON string values', async () => {
+        const json = '[{"Project": "  ENG  ", "Summary": "\\nTest\\n"}]';
+        const result = await parseInput({ data: json, format: 'json' });
+
+        expect(result.data[0].Project).toBe('ENG');
+        expect(result.data[0].Summary).toBe('Test');
+      });
+
+      it('should preserve internal newlines in JSON values', async () => {
+        const json = '[{"Description": "  Line 1\\nLine 2  "}]';
+        const result = await parseInput({ data: json, format: 'json' });
+
+        expect(result.data[0].Description).toBe('Line 1\nLine 2');
+      });
+
+      it('should trim whitespace from JSON keys', async () => {
+        const json = '[{" Project ": "ENG", " Summary ": "Test"}]';
+        const result = await parseInput({ data: json, format: 'json' });
+
+        expect(result.data[0]).toHaveProperty('Project', 'ENG');
+        expect(result.data[0]).toHaveProperty('Summary', 'Test');
+      });
+
+      it('should sanitize single JSON object input', async () => {
+        const data = { ' Project ': '  ENG  ', Summary: '\nTest\n' };
+        const result = await parseInput({ data });
+
+        expect(result.data[0]).toHaveProperty('Project', 'ENG');
+        expect(result.data[0].Summary).toBe('Test');
+      });
+
+      it('should sanitize array of objects passed directly', async () => {
+        const data = [
+          { Project: '  ENG  ', Summary: '\nIssue 1\n' },
+          { Project: 'PROJ', Summary: '  Issue 2  ' }
+        ];
+        const result = await parseInput({ data });
+
+        expect(result.data[0].Project).toBe('ENG');
+        expect(result.data[0].Summary).toBe('Issue 1');
+        expect(result.data[1].Summary).toBe('Issue 2');
+      });
+    });
+
+    describe('CSV with leading/trailing whitespace', () => {
+      it('should trim whitespace from CSV string values', async () => {
+        const csv = 'Project,Summary\n  ENG  ,  Test Issue  ';
+        const result = await parseInput({ data: csv, format: 'csv' });
+
+        expect(result.data[0].Project).toBe('ENG');
+        expect(result.data[0].Summary).toBe('Test Issue');
+      });
+
+      it('should trim whitespace from CSV headers (keys)', async () => {
+        const csv = ' Project , Summary \nENG,Test';
+        const result = await parseInput({ data: csv, format: 'csv' });
+
+        expect(result.data[0]).toHaveProperty('Project', 'ENG');
+        expect(result.data[0]).toHaveProperty('Summary', 'Test');
+      });
+
+      it('should preserve internal newlines in quoted CSV fields', async () => {
+        const csv = 'Project,Description\nENG,"  Line 1\nLine 2  "';
+        const result = await parseInput({ data: csv, format: 'csv' });
+
+        expect(result.data[0].Description).toBe('Line 1\nLine 2');
+      });
+
+      it('should sanitize CSV array-of-arrays input', async () => {
+        const data = [
+          [' Project ', ' Summary '],
+          ['  ENG  ', '  Test  ']
+        ];
+        const result = await parseInput({ data, format: 'csv' });
+
+        expect(result.data[0]).toHaveProperty('Project', 'ENG');
+        expect(result.data[0]).toHaveProperty('Summary', 'Test');
+      });
+    });
+
+    describe('Nested objects and arrays', () => {
+      it('should recursively sanitize nested objects in YAML', async () => {
+        const yaml = 'field:\n  nested: "  value  "\n  deep:\n    key: "  deep value  "';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect((result.data[0].field as any).nested).toBe('value');
+        expect((result.data[0].field as any).deep.key).toBe('deep value');
+      });
+
+      it('should sanitize array elements in JSON', async () => {
+        const json = '[{"labels": ["  tag1  ", "  tag2  ", "\\ntag3\\n"]}]';
+        const result = await parseInput({ data: json, format: 'json' });
+
+        expect(result.data[0].labels).toEqual(['tag1', 'tag2', 'tag3']);
+      });
+
+      it('should sanitize YAML array values', async () => {
+        const yaml = 'components:\n  - "  Backend  "\n  - "  Frontend  "';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].components).toEqual(['Backend', 'Frontend']);
+      });
+
+      it('should handle mixed nested structures', async () => {
+        const data = {
+          ' outerKey ': {
+            ' innerKey ': '  nested value  ',
+            arrayField: ['  item1  ', { ' deepKey ': '  deep  ' }]
+          }
+        };
+        const result = await parseInput({ data });
+
+        expect(result.data[0]).toHaveProperty('outerKey');
+        expect((result.data[0].outerKey as any).innerKey).toBe('nested value');
+        expect((result.data[0].outerKey as any).arrayField[0]).toBe('item1');
+        expect((result.data[0].outerKey as any).arrayField[1]).toHaveProperty('deepKey', 'deep');
+      });
+    });
+
+    describe('Edge cases', () => {
+      it('should handle null and undefined values without error', async () => {
+        const data = [{ Project: null, Summary: undefined, Description: 'Test' }];
+        const result = await parseInput({ data });
+
+        expect(result.data[0].Project).toBeNull();
+        expect(result.data[0].Summary).toBeUndefined();
+        expect(result.data[0].Description).toBe('Test');
+      });
+
+      it('should handle numeric and boolean values unchanged', async () => {
+        const data = [{ points: 5, active: true, ratio: 3.14 }];
+        const result = await parseInput({ data });
+
+        expect(result.data[0].points).toBe(5);
+        expect(result.data[0].active).toBe(true);
+        expect(result.data[0].ratio).toBe(3.14);
+      });
+
+      it('should handle empty string after trimming', async () => {
+        const yaml = 'field: "   "';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].field).toBe('');
+      });
+
+      it('should handle only-whitespace values with newlines', async () => {
+        const yaml = 'field: "\n  \n  \n"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].field).toBe('');
+      });
+
+      it('should handle tabs and mixed whitespace', async () => {
+        const yaml = 'field: "\t  value\t  "';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].field).toBe('value');
+      });
+    });
+  });
 });
