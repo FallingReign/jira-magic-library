@@ -1,8 +1,6 @@
 /**
  * Unified Input Parser for CSV, JSON, and YAML formats
  * 
- * Story: E4-S01 - Unified Input Parser
- * 
  * Parses issue data from various input sources and formats:
  * - CSV: From file, string, or array of arrays
  * - JSON: From file, string, array of objects, or single object
