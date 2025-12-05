@@ -295,6 +295,9 @@ function main() {
   console.log(`       "ignoreFiles": ["path/to/ignore"]`);
   console.log(`     }${NC}\n`);
   
+  console.log(`${RED}${BOLD}⚠️  AGENTS: Do NOT modify .pii-config.json without explicit user approval.${NC}`);
+  console.log(`${RED}   Ask the user before adding entries to the whitelist.${NC}\n`);
+  
   process.exit(1);
 }
 
