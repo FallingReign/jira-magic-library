@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.3.1] - 2025-12-06
+
+### Added
+- **New cascading select delimiters** - Support `>` and `|` as delimiters (e.g., `"Design > Level"`, `"Design | Level"`)
+- **Fallback delimiter detection** - Automatically split on any single non-alphanumeric separator group when standard delimiters aren't used (e.g., `"Design - Level"`, `"Product Design & Level One"`)
+- **Ambiguity detection** - Helpful error messages when input has multiple potential split points (e.g., `"Product-Design - Level-One"`)
+
+### Fixed
+- **Cascading select with hyphens** - Values like `"Design - Level"` now correctly resolve to parent/child instead of failing with "not found"
+
 ## [1.3.0] - 2025-12-05
 
 ### Added
