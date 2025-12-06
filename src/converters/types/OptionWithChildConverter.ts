@@ -99,7 +99,8 @@ function parseInput(value: string | object): ParsedInput {
     const trimmed = value.trim();
 
     // Delimiters in priority order (note: no single hyphen to avoid conflicts with names like "AP-PROJ")
-    const delimiters = ['->', ',', '/'];
+    // -> is highest priority, then comma, slash, greater-than, pipe
+    const delimiters = ['->', ',', '/', '>', '|'];
 
     for (const delimiter of delimiters) {
       // Escape special regex characters
@@ -165,6 +166,124 @@ function resolveChild(
 }
 
 /**
+ * Try to split a value on a single non-alphanumeric group as a fallback.
+ * 
+ * Valid splits have exactly ONE consecutive group of non-alphanumeric characters
+ * (excluding pure whitespace) between alphanumeric words.
+ * 
+ * Examples:
+ * - "Design - Level" → { parent: "Design", child: "Level" }
+ * - "Product Design --# Level One" → { parent: "Product Design", child: "Level One" }
+ * - "A & B" → { parent: "A", child: "B" }
+ * 
+ * Ambiguous (multiple split points):
+ * - "Product-Design - Level-One" → throws AmbiguityError
+ * - "Design - Level_One" → throws AmbiguityError
+ * 
+ * @returns ParsedInput with parent and child, or null if no valid split found
+ * @throws AmbiguityError if multiple split points detected
+ */
+function tryFallbackSplit(value: string, fieldName: string): ParsedInput | null {
+  const trimmed = value.trim();
+  
+  // Strategy: Find all non-alphanumeric "separator groups" (sequences that contain
+  // at least one non-alphanumeric, non-whitespace character).
+  // If there's exactly one such group, split on it.
+  // If there are multiple, it's ambiguous.
+  
+  // First, normalize multiple spaces to single space
+  const normalized = trimmed.replace(/\s+/g, ' ');
+  
+  // Find all separator groups: sequences containing at least one non-alnum, non-space char
+  // This regex finds any run of characters that includes at least one [^a-zA-Z0-9\s]
+  // Pattern: match sequences that are NOT pure alphanumeric and NOT pure whitespace
+  
+  // Split the string into tokens: alphanumeric words vs separator groups
+  // A separator group is any sequence between alphanumeric words that contains non-alnum chars
+  
+  // Find all matches of: (optional spaces)(one or more non-alnum chars with optional spaces)(optional spaces)
+  // But we need to identify DISTINCT separator groups
+  
+  // Simpler approach: find all positions where a non-alnum (non-space) char appears
+  // Group consecutive non-alnum (including adjacent spaces) as one separator
+  
+  // Use a state machine approach: iterate through and identify separator regions
+  const separatorGroups: Array<{ start: number; end: number; content: string }> = [];
+  let i = 0;
+  
+  while (i < normalized.length) {
+    const char = normalized[i]!;
+    
+    // Skip alphanumeric characters
+    if (/[a-zA-Z0-9]/.test(char)) {
+      i++;
+      continue;
+    }
+    
+    // Found start of a potential separator group
+    const start = i;
+    let hasNonSpace = false;
+    
+    // Consume all non-alphanumeric characters (including spaces within the group)
+    while (i < normalized.length && !/[a-zA-Z0-9]/.test(normalized[i]!)) {
+      if (!/\s/.test(normalized[i]!)) {
+        hasNonSpace = true;
+      }
+      i++;
+    }
+    
+    // Only count as separator if it contains at least one non-space, non-alnum char
+    if (hasNonSpace) {
+      separatorGroups.push({
+        start,
+        end: i,
+        content: normalized.substring(start, i),
+      });
+    }
+  }
+  
+  if (separatorGroups.length === 0) {
+    // No separator found
+    return null;
+  }
+  
+  if (separatorGroups.length === 1) {
+    // Exactly one separator group - valid split
+    const sep = separatorGroups[0]!;
+    const parent = normalized.substring(0, sep.start).trim();
+    const child = normalized.substring(sep.end).trim();
+    
+    if (parent && child) {
+      return { parent, child };
+    }
+    // One of them is empty (separator at start or end)
+    return null;
+  }
+  
+  // Multiple separator groups - ambiguous
+  // Extract the parts between separators for the error message
+  const parts: string[] = [];
+  let lastEnd = 0;
+  for (const sep of separatorGroups) {
+    const part = normalized.substring(lastEnd, sep.start).trim();
+    if (part) parts.push(part);
+    lastEnd = sep.end;
+  }
+  const lastPart = normalized.substring(lastEnd).trim();
+  if (lastPart) parts.push(lastPart);
+  
+  throw new AmbiguityError(
+    `Ambiguous input '${value}' for field "${fieldName}" has multiple potential split points. ` +
+    `Please use a supported delimiter: -> , / > |`,
+    {
+      field: fieldName,
+      input: value,
+      candidates: parts.map(p => ({ id: '', name: p })),
+    }
+  );
+}
+
+/**
  * Auto-detect parent from child-only input by searching all parents' children
  */
 function resolveChildAcrossParents(
@@ -204,6 +323,30 @@ function resolveChildAcrossParents(
   }
 
   if (matchingParents.length === 0) {
+    // Before giving up, try fallback splitting on single non-alphanumeric group
+    try {
+      const fallbackParsed = tryFallbackSplit(childName, fieldName);
+      if (fallbackParsed && fallbackParsed.parent && fallbackParsed.child) {
+        // Try to resolve with the split parent and child
+        const parent = resolveParent(fallbackParsed.parent, options, fieldName);
+        const parentOption = options.find((opt) => opt.id === parent.id);
+        
+        if (parentOption?.children) {
+          const child = resolveChild(fallbackParsed.child, parentOption.children, parent.value, fieldName);
+          return {
+            parentId: parent.id,
+            childId: child.id,
+          };
+        }
+      }
+    } catch (err) {
+      // If fallback throws AmbiguityError, propagate it
+      if (err instanceof AmbiguityError) {
+        throw err;
+      }
+      // Otherwise continue to NotFoundError
+    }
+    
     throw new NotFoundError(
       `Child option '${childName}' not found in any parent for field "${fieldName}"`,
       { field: fieldName, value: childName }

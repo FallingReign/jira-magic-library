@@ -676,4 +676,318 @@ describe('OptionWithChildConverter', () => {
       ).rejects.toThrow(ValidationError);
     });
   });
+
+  describe('Additional Delimiters (> and |)', () => {
+    it('should parse "MP > mp_backyard_01" with greater-than delimiter', async () => {
+      const result = await convertOptionWithChildType(
+        'MP > mp_backyard_01',
+        fieldSchema,
+        context
+      );
+
+      expect(result).toEqual({
+        id: '10000',
+        child: { id: '10076' },
+      });
+    });
+
+    it('should parse "ZM | zm_castle" with pipe delimiter', async () => {
+      const result = await convertOptionWithChildType(
+        'ZM | zm_castle',
+        fieldSchema,
+        context
+      );
+
+      expect(result).toEqual({
+        id: '10001',
+        child: { id: '10080' },
+      });
+    });
+
+    it('should handle no spaces with > delimiter: "CP>cp_hacienda"', async () => {
+      const result = await convertOptionWithChildType(
+        'CP>cp_hacienda',
+        fieldSchema,
+        context
+      );
+
+      expect(result).toEqual({
+        id: '10002',
+        child: { id: '10090' },
+      });
+    });
+
+    it('should handle no spaces with | delimiter: "MP|mp_apartment"', async () => {
+      const result = await convertOptionWithChildType(
+        'MP|mp_apartment',
+        fieldSchema,
+        context
+      );
+
+      expect(result).toEqual({
+        id: '10000',
+        child: { id: '10075' },
+      });
+    });
+
+    it('should prioritize -> over > when both present', async () => {
+      // "A -> B > C" should split on -> first
+      const result = await convertOptionWithChildType(
+        'MP -> mp_backyard_01',
+        fieldSchema,
+        context
+      );
+
+      expect(result).toEqual({
+        id: '10000',
+        child: { id: '10076' },
+      });
+    });
+  });
+
+  describe('Fallback Delimiter Detection (single non-alphanumeric group)', () => {
+    // Extended schema with realistic multi-word options
+    const extendedFieldSchema: FieldSchema = {
+      id: 'customfield_10051',
+      name: 'Department',
+      type: 'option-with-child',
+      required: false,
+      schema: { 
+        type: 'option-with-child', 
+        custom: 'com.atlassian.jira.plugin.system.customfieldtypes:cascadingselect',
+        customId: 10051 
+      },
+      allowedValues: [
+        {
+          id: '20000',
+          name: 'Design',
+          value: 'Design',
+          children: [
+            { id: '20001', value: 'Level' },
+            { id: '20002', value: 'Level One' },
+            { id: '20003', value: 'Senior' },
+          ],
+        },
+        {
+          id: '20010',
+          name: 'Engineering',
+          value: 'Engineering',
+          children: [
+            { id: '20011', value: 'Backend' },
+            { id: '20012', value: 'Frontend' },
+          ],
+        },
+        {
+          id: '20020',
+          name: 'Product Design',
+          value: 'Product Design',
+          children: [
+            { id: '20021', value: 'Level One' },
+            { id: '20022', value: 'Level Two' },
+          ],
+        },
+      ],
+    };
+
+    describe('Valid single non-alphanumeric group splits', () => {
+      it('should split "Design - Level" on single hyphen group', async () => {
+        const result = await convertOptionWithChildType(
+          'Design - Level',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20000',
+          child: { id: '20001' },
+        });
+      });
+
+      it('should split "Engineering -- Backend" on double hyphen group', async () => {
+        const result = await convertOptionWithChildType(
+          'Engineering -- Backend',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20010',
+          child: { id: '20011' },
+        });
+      });
+
+      it('should split "Design & Level" on ampersand', async () => {
+        const result = await convertOptionWithChildType(
+          'Design & Level',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20000',
+          child: { id: '20001' },
+        });
+      });
+
+      it('should split "Product Design - Level One" with multi-word parent and child', async () => {
+        const result = await convertOptionWithChildType(
+          'Product Design - Level One',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20020',
+          child: { id: '20021' },
+        });
+      });
+
+      it('should split on complex delimiter group "Product Design --# Level Two"', async () => {
+        const result = await convertOptionWithChildType(
+          'Product Design --# Level Two',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20020',
+          child: { id: '20022' },
+        });
+      });
+
+      it('should split "Engineering * Frontend" on asterisk', async () => {
+        const result = await convertOptionWithChildType(
+          'Engineering * Frontend',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20010',
+          child: { id: '20012' },
+        });
+      });
+
+      it('should split "Design +/@ Senior" on mixed symbols', async () => {
+        const result = await convertOptionWithChildType(
+          'Design +/@ Senior',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20000',
+          child: { id: '20003' },
+        });
+      });
+    });
+
+    describe('Ambiguous splits (multiple non-alphanumeric groups)', () => {
+      it('should throw AmbiguityError for "Product-Design - Level-One" (multiple split points)', async () => {
+        await expect(
+          convertOptionWithChildType(
+            'Product-Design - Level-One',
+            extendedFieldSchema,
+            context
+          )
+        ).rejects.toThrow(AmbiguityError);
+      });
+
+      it('should throw AmbiguityError for "Design - Level_One" (hyphen and underscore)', async () => {
+        await expect(
+          convertOptionWithChildType(
+            'Design - Level_One',
+            extendedFieldSchema,
+            context
+          )
+        ).rejects.toThrow(AmbiguityError);
+      });
+
+      it('should include helpful message about using supported delimiters', async () => {
+        await expect(
+          convertOptionWithChildType(
+            'Product-Design - Level-One',
+            extendedFieldSchema,
+            context
+          )
+        ).rejects.toThrow(/use a supported delimiter/i);
+      });
+    });
+
+    describe('Fallback order verification', () => {
+      it('should try child-only match before fallback split', async () => {
+        // "mp_apartment" should match as child directly, not try to split
+        const result = await convertOptionWithChildType(
+          'mp_apartment',
+          fieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '10000',
+          child: { id: '10075' },
+        });
+      });
+
+      it('should try parent-only match before fallback split', async () => {
+        // "Engineering" is a valid parent name
+        const result = await convertOptionWithChildType(
+          'Engineering',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({ id: '20010' });
+      });
+
+      it('should use fallback split only when child and parent lookups fail', async () => {
+        // "Design - Level" won't match as child or parent, so fallback splits it
+        const result = await convertOptionWithChildType(
+          'Design - Level',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20000',
+          child: { id: '20001' },
+        });
+      });
+    });
+
+    describe('Edge cases', () => {
+      it('should handle leading/trailing spaces in fallback split', async () => {
+        const result = await convertOptionWithChildType(
+          '  Design  -  Level  ',
+          extendedFieldSchema,
+          context
+        );
+
+        expect(result).toEqual({
+          id: '20000',
+          child: { id: '20001' },
+        });
+      });
+
+      it('should throw NotFoundError when fallback split parent not found', async () => {
+        await expect(
+          convertOptionWithChildType(
+            'Unknown - Level',
+            extendedFieldSchema,
+            context
+          )
+        ).rejects.toThrow(NotFoundError);
+      });
+
+      it('should throw NotFoundError when fallback split child not found', async () => {
+        await expect(
+          convertOptionWithChildType(
+            'Design - Unknown',
+            extendedFieldSchema,
+            context
+          )
+        ).rejects.toThrow(NotFoundError);
+      });
+    });
+  });
 });
