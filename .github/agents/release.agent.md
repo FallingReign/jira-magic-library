@@ -57,7 +57,15 @@ Based on commit history, determine the appropriate version bump:
 2. **Update `package.json` version**:
    - Edit the `"version"` field to the new version
 
-3. **Update `CHANGELOG.md`**:
+3. **Update version references in documentation**:
+   - Search for old version in `README.md` and update (e.g., git dependency example)
+   - Check any other docs that reference specific versions
+   ```bash
+   # Find version references
+   Select-String -Path "README.md" -Pattern "v[0-9]+\.[0-9]+\.[0-9]+"
+   ```
+
+4. **Update `CHANGELOG.md`**:
    - Add a new section at the top (after the header) with format:
    ```markdown
    ## [X.Y.Z] - YYYY-MM-DD
@@ -75,14 +83,14 @@ Based on commit history, determine the appropriate version bump:
    - Write user-friendly descriptions (not just commit messages)
    - Group related changes together
 
-### Step 4: Commit Version Bump
+### Step 5: Commit Version Bump
 
 ```bash
-git add package.json CHANGELOG.md
+git add package.json CHANGELOG.md README.md
 git commit -m "Release v<VERSION>"
 ```
 
-### Step 5: Create and Push Tag
+### Step 6: Create and Push Tag
 
 ```bash
 git tag -a v<VERSION> -m "Release v<VERSION>"
@@ -90,7 +98,7 @@ git push origin main
 git push origin v<VERSION>
 ```
 
-### Step 6: Notify User
+### Step 7: Notify User
 
 Present a summary:
 ```
