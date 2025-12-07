@@ -282,7 +282,7 @@ Stories outside the active epics but still tracked for delivery.
 | E4-S11 | [Performance Testing & Optimization](stories/EPIC-04-STORY-011-performance-testing.md) | M (5) | P1 | 📋 Ready |
 | E4-S12 | [Bulk Operations Documentation](stories/EPIC-04-STORY-012-documentation.md) | S (3) | P1 | 📋 Ready |
 | E4-S13 | [Hierarchy Support with Level-Based Batching](stories/EPIC-04-STORY-013-hierarchy-level-batching.md) | M (5) | P0 | ✅ Done *(GitHub Copilot, started 2025-11-27)* |
-| E4-S14 | [Quote Preprocessor Integration](stories/EPIC-04-STORY-014-quote-preprocessor.md) | M (5) | P1 | ✅ Done *(GitHub Copilot, completed 2025-12-07)* |
+| E4-S14 | [Quote Preprocessor Integration](stories/EPIC-04-STORY-014-quote-preprocessor.md) | M (5) | P1 | ✅ Done *(GitHub Copilot, Commit f235f60)* |
 
 **Total Story Points**: 76 points (increased from 71: added E4-S14)  
 **Completed**: 44 points (58%)  
