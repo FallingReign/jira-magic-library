@@ -40,6 +40,7 @@ import * as path from 'path';
 import { parse as parseCSV } from 'csv-parse/sync';
 import * as yaml from 'js-yaml';
 import { InputParseError, FileNotFoundError } from '../errors/index.js';
+import { preprocessQuotes } from './quote-preprocessor.js';
 
 /**
  * Parsed input with normalized data array
@@ -95,6 +96,12 @@ export interface ParseInputOptions {
   data?: string | unknown[] | Record<string, unknown>;
   /** Explicit format (required for string data without file extension) */
   format?: 'csv' | 'json' | 'yaml';
+  /**
+   * Whether to preprocess quotes in the input to fix common copy/paste issues.
+   * When enabled, the parser will automatically escape unescaped quotes in string values.
+   * @default true
+   */
+  preprocessQuotes?: boolean;
 }
 
 /**
@@ -139,9 +146,12 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
     );
   }
 
+  // Default preprocessQuotes to true if not specified
+  const shouldPreprocessQuotes = options.preprocessQuotes !== false;
+
   // Case 1: File path provided
   if (options.from) {
-    return parseFromFile(options.from, options.format);
+    return parseFromFile(options.from, options.format, shouldPreprocessQuotes);
   }
 
   // Case 2: Data provided (string, array, or object)
@@ -151,7 +161,7 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
       { options }
     );
   }
-  return parseFromData(options.data, options.format);
+  return parseFromData(options.data, options.format, shouldPreprocessQuotes);
 }
 
 /**
@@ -159,7 +169,8 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
  */
 async function parseFromFile(
   filePath: string,
-  explicitFormat?: 'csv' | 'json' | 'yaml'
+  explicitFormat?: 'csv' | 'json' | 'yaml',
+  shouldPreprocessQuotes = true
 ): Promise<ParsedInput> {
   // Check if file exists
   try {
@@ -201,7 +212,7 @@ async function parseFromFile(
   const content = await fs.readFile(filePath, 'utf-8');
 
   // Parse based on format
-  const data = parseContent(content, format);
+  const data = parseContent(content, format, shouldPreprocessQuotes);
 
   return {
     data,
@@ -215,7 +226,8 @@ async function parseFromFile(
  */
 function parseFromData(
   data: string | unknown[] | Record<string, unknown>,
-  explicitFormat?: 'csv' | 'json' | 'yaml'
+  explicitFormat?: 'csv' | 'json' | 'yaml',
+  shouldPreprocessQuotes = true
 ): ParsedInput {
   // Case 1: Array of objects (pass-through)
   if (Array.isArray(data)) {
@@ -255,7 +267,7 @@ function parseFromData(
       );
     }
 
-    const parsed = parseContent(data, explicitFormat);
+    const parsed = parseContent(data, explicitFormat, shouldPreprocessQuotes);
     return {
       data: parsed,
       format: explicitFormat,
@@ -272,16 +284,35 @@ function parseFromData(
 
 /**
  * Parse content string based on format
+ * @param content - The raw content string to parse
+ * @param format - The format of the content (csv, json, yaml)
+ * @param shouldPreprocessQuotes - Whether to run quote preprocessing (default: true)
  */
-function parseContent(content: string, format: 'csv' | 'json' | 'yaml'): Record<string, unknown>[] {
+function parseContent(
+  content: string,
+  format: 'csv' | 'json' | 'yaml',
+  shouldPreprocessQuotes = true
+): Record<string, unknown>[] {
+  // Apply quote preprocessing if enabled
+  let processedContent = content;
+  if (shouldPreprocessQuotes) {
+    const preprocessed = preprocessQuotes(content, format);
+    if (preprocessed !== content) {
+      // Debug logging when preprocessing modifies input
+      // eslint-disable-next-line no-console
+      console.debug(`Input required quote preprocessing for ${format} format`);
+    }
+    processedContent = preprocessed;
+  }
+
   try {
     switch (format) {
       case 'csv':
-        return parseCSVContent(content);
+        return parseCSVContent(processedContent);
       case 'json':
-        return parseJSONContent(content);
+        return parseJSONContent(processedContent);
       case 'yaml':
-        return parseYAMLContent(content);
+        return parseYAMLContent(processedContent);
       default: {
         // Exhaustiveness check
         const _exhaustive: never = format;

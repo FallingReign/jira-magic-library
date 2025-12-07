@@ -16,7 +16,7 @@ This backlog contains all epics and high-level user stories for the JIRA Magic L
 | **Epic 1** | [Basic Issue Creation](#epic-1-basic-issue-creation) | 📁 Archived 2025-10-13 | 13 (63/63 pts) | HIGH | None |
 | **Epic 2** | [Core Field Types](#epic-2-core-field-types) | 📁 Archived 2025-10-23 | 14 (68/68 pts) | HIGH | Epic 1 ✅ |
 | **Epic 3** | [Issue Hierarchy & Complex Types](#epic-3-issue-hierarchy--complex-types) | 📁 Archived 2025-11-11 | 16 (66/74 pts) | HIGH | Epic 2 ✅ |
-| **Epic 4** | [Bulk Operations](#epic-4-bulk-operations) | ⏳ In Progress | 13 (74 pts) | HIGH | Epic 2 ✅ |
+| **Epic 4** | [Bulk Operations](#epic-4-bulk-operations) | ⏳ In Progress | 14 (76 pts) | HIGH | Epic 2 ✅ |
 | **Epic 5** | [Issue Updates & Transitions](#epic-5-issue-updates--transitions) | 📋 Planned | 7 (38 pts) | MEDIUM | Epic 2 ✅ |
 | **Epic 6** | [Advanced Features](#epic-6-advanced-features) | 📋 Planned | 10 (48 pts) | LOW | Epic 3, 5 |
 | **Epic 7** | [CLI Interface](#epic-7-cli-interface) | 📋 Planned | 5 (23 pts) | LOW | Epic 4 |
@@ -238,8 +238,8 @@ Stories outside the active epics but still tracked for delivery.
 
 **Status**: ⏳ In Progress
 
-**Total Story Points**: 66 points  
-**Completed**: 39 points (59%)  
+**Total Story Points**: 76 points  
+**Completed**: 39 points (51%)  
 
 **Acceptance Criteria**:
 - ✅ Single `create()` method handles single issues, arrays, files, and in-memory data
@@ -282,9 +282,10 @@ Stories outside the active epics but still tracked for delivery.
 | E4-S11 | [Performance Testing & Optimization](stories/EPIC-04-STORY-011-performance-testing.md) | M (5) | P1 | 📋 Ready |
 | E4-S12 | [Bulk Operations Documentation](stories/EPIC-04-STORY-012-documentation.md) | S (3) | P1 | 📋 Ready |
 | E4-S13 | [Hierarchy Support with Level-Based Batching](stories/EPIC-04-STORY-013-hierarchy-level-batching.md) | M (5) | P0 | ✅ Done *(GitHub Copilot, started 2025-11-27)* |
+| E4-S14 | [Quote Preprocessor Integration](stories/EPIC-04-STORY-014-quote-preprocessor.md) | M (5) | P1 | ✅ Done *(GitHub Copilot, completed 2025-12-07)* |
 
-**Total Story Points**: 71 points (reduced from 74: E4-S13 changed from 8 to 5 points)  
-**Completed**: 34 points (48%)  
+**Total Story Points**: 76 points (increased from 71: added E4-S14)  
+**Completed**: 44 points (58%)  
 **Status**: ⏳ In Progress
 
 **Note**: E4-S13 redesigned November 2025 after architectural review. Previous implementation (14 commits) violated SRP and had wrong validation timing. New approach uses preprocessing + level-based batching (additive changes only).

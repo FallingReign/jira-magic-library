@@ -1017,4 +1017,42 @@ ENG,Issue 2`;
       });
     });
   });
+
+  describe('Quote Preprocessing', () => {
+    describe('preprocessQuotes option', () => {
+      it('should preprocess quotes by default (preprocessQuotes: true)', async () => {
+        // Input with broken quotes that would normally fail to parse
+        const yaml = 'summary: "Test with internal "quote" inside"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        // Should successfully parse after preprocessing escapes the internal quotes
+        expect(result.data[0].summary).toBeDefined();
+        expect(result.data[0].summary).toContain('quote');
+      });
+
+      it('should skip preprocessing when preprocessQuotes is false', async () => {
+        // Valid input that should work without preprocessing
+        const json = '[{"field": "value"}]';
+        const result = await parseInput({ data: json, format: 'json', preprocessQuotes: false });
+
+        expect(result.data[0].field).toBe('value');
+      });
+
+      it('should still work with valid input when preprocessing is enabled', async () => {
+        // Valid YAML that should pass through unchanged
+        const yaml = 'Project: ENG\nSummary: "A proper \\"escaped\\" quote"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].Project).toBe('ENG');
+      });
+
+      it('should handle CSV with preprocessQuotes option', async () => {
+        const csv = 'Project,Summary\nENG,"Test value"';
+        const result = await parseInput({ data: csv, format: 'csv', preprocessQuotes: true });
+
+        expect(result.data[0].Project).toBe('ENG');
+        expect(result.data[0].Summary).toBe('Test value');
+      });
+    });
+  });
 });

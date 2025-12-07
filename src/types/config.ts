@@ -117,6 +117,29 @@ export interface JMLConfig {
    * @example { user: { enabled: true, threshold: 0.3 } }
    */
   fuzzyMatch?: FuzzyMatchConfig;
+
+  /**
+   * Enable automatic quote preprocessing for YAML/JSON/CSV input.
+   *
+   * When enabled (default), the library automatically detects and escapes
+   * unescaped quote characters in field values before parsing. This handles
+   * common issues when users copy/paste text from Slack, emails, or other
+   * sources that contain unescaped quotes.
+   *
+   * - YAML: Escapes internal `"` as `\"` and `'` as `''`
+   * - JSON: Escapes internal `"` as `\"`
+   * - CSV: Escapes internal `"` as `""` (RFC 4180)
+   *
+   * Set to `false` to disable preprocessing and require properly escaped input.
+   *
+   * @default true
+   * @example
+   * ```typescript
+   * // Disable preprocessing (require valid input)
+   * { preprocessQuotes: false }
+   * ```
+   */
+  preprocessQuotes?: boolean;
 }
 
 /**
