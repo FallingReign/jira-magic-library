@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.4.0] - 2025-12-07
+
+### Added
+- **Automatic quote preprocessing** - Library automatically escapes unescaped quotes in YAML, JSON, and CSV input before parsing
+- New `preprocessQuotes` and `preprocessQuotesWithDetails` exports for direct access to preprocessing
+- New `preprocessQuotes?: boolean` config option to enable/disable preprocessing (default: `true`)
+- Handles multiline values, code blocks, markdown content with embedded quotes
+- Preserves line ending style (CRLF/LF/CR) during preprocessing
+
+### Changed
+- InputParser now preprocesses all input transparently before parsing
+- Debug logging when preprocessing modifies input: `"Input required quote preprocessing for {format} format"`
+
 ## [1.3.1] - 2025-12-06
 
 ### Added
