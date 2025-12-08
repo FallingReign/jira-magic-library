@@ -325,10 +325,11 @@ function findYamlClosingQuote(
   // For single-line detection, we use multiple signals:
   const isEOF = nextLine === undefined;
   const isOddQuotes = quotePositions.length % 2 === 1;
-  const nextIsKey = isYamlKeyLine(nextLine);
 
-  // Close if: EOF, or odd quotes (unpaired), or next line is definitely a new key
-  if (isEOF || isOddQuotes || nextIsKey) {
+  // Close if: EOF, or odd quotes (unpaired)
+  // For even quotes (like "word" pairs), only close if EOF - otherwise they're likely
+  // internal content and we should continue to multiline mode to find the real closing quote.
+  if (isEOF || isOddQuotes) {
     return {
       closed: true,
       content: content.substring(0, lastQuotePos),
@@ -336,7 +337,9 @@ function findYamlClosingQuote(
     };
   }
 
-  // Even quotes and next line doesn't look like a key - value may continue
+  // Even quotes - don't trust nextIsKey because content might look like keys
+  // (e.g., 'Keys: "PROJ-123"' inside a quoted value)
+  // Continue to multiline mode to find the actual closing quote
   return { closed: false, content, remainder: '' };
 }
 
@@ -393,9 +396,13 @@ function findYamlClosingQuoteMultiline(
 /**
  * Check if a line looks like a YAML key (unindented or less indented),
  * an array item start (- ), or a document separator (---)
+ * 
+ * NOTE: Currently unused - kept for potential future use. Previously used to detect
+ * value boundaries, but this caused issues when content looked like YAML keys
+ * (e.g., "Keys: ..." inside a quoted value).
  */
 /* istanbul ignore next -- heuristic function with many interrelated branches */
-function isYamlKeyLine(line: string | undefined): boolean {
+function _isYamlKeyLine(line: string | undefined): boolean {
   if (line === undefined) return false;
   // Empty or whitespace-only lines are NOT key lines (could be inside multiline value)
   if (line.trim() === '') return false;
