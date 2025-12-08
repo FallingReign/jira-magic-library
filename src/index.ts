@@ -53,6 +53,9 @@ export type { ParsedInput, ParseInputOptions } from './parsers/InputParser.js';
 // Quote Preprocessor (E4-S14)
 export { preprocessQuotes, preprocessQuotesWithDetails } from './parsers/quote-preprocessor.js';
 
+// Custom Block Preprocessor (S6)
+export { preprocessCustomBlocks } from './parsers/custom-block-preprocessor.js';
+
 // Bulk Operations (E4-S02)
 export { ManifestStorage } from './operations/ManifestStorage.js';
 export type { BulkManifest, BulkResult, ManifestUpdateData } from './types/bulk.js';

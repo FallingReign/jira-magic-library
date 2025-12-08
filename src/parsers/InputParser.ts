@@ -41,6 +41,7 @@ import { parse as parseCSV } from 'csv-parse/sync';
 import * as yaml from 'js-yaml';
 import { InputParseError, FileNotFoundError } from '../errors/index.js';
 import { preprocessQuotes } from './quote-preprocessor.js';
+import { preprocessCustomBlocks } from './custom-block-preprocessor.js';
 
 /**
  * Parsed input with normalized data array
@@ -97,6 +98,12 @@ export interface ParseInputOptions {
   /** Explicit format (required for string data without file extension) */
   format?: 'csv' | 'json' | 'yaml';
   /**
+   * Whether to preprocess custom blocks (<<< >>>) in the input.
+   * When enabled, custom block syntax is converted to properly quoted strings.
+   * @default true
+   */
+  preprocessCustomBlocks?: boolean;
+  /**
    * Whether to preprocess quotes in the input to fix common copy/paste issues.
    * When enabled, the parser will automatically escape unescaped quotes in string values.
    * @default true
@@ -146,12 +153,13 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
     );
   }
 
-  // Default preprocessQuotes to true if not specified
+  // Default both preprocessing options to true if not specified
+  const shouldPreprocessCustomBlocks = options.preprocessCustomBlocks !== false;
   const shouldPreprocessQuotes = options.preprocessQuotes !== false;
 
   // Case 1: File path provided
   if (options.from) {
-    return parseFromFile(options.from, options.format, shouldPreprocessQuotes);
+    return parseFromFile(options.from, options.format, shouldPreprocessCustomBlocks, shouldPreprocessQuotes);
   }
 
   // Case 2: Data provided (string, array, or object)
@@ -161,7 +169,7 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
       { options }
     );
   }
-  return parseFromData(options.data, options.format, shouldPreprocessQuotes);
+  return parseFromData(options.data, options.format, shouldPreprocessCustomBlocks, shouldPreprocessQuotes);
 }
 
 /**
@@ -170,6 +178,7 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
 async function parseFromFile(
   filePath: string,
   explicitFormat?: 'csv' | 'json' | 'yaml',
+  shouldPreprocessCustomBlocks = true,
   shouldPreprocessQuotes = true
 ): Promise<ParsedInput> {
   // Check if file exists
@@ -212,7 +221,7 @@ async function parseFromFile(
   const content = await fs.readFile(filePath, 'utf-8');
 
   // Parse based on format
-  const data = parseContent(content, format, shouldPreprocessQuotes);
+  const data = parseContent(content, format, shouldPreprocessCustomBlocks, shouldPreprocessQuotes);
 
   return {
     data,
@@ -227,6 +236,7 @@ async function parseFromFile(
 function parseFromData(
   data: string | unknown[] | Record<string, unknown>,
   explicitFormat?: 'csv' | 'json' | 'yaml',
+  shouldPreprocessCustomBlocks = true,
   shouldPreprocessQuotes = true
 ): ParsedInput {
   // Case 1: Array of objects (pass-through)
@@ -267,7 +277,7 @@ function parseFromData(
       );
     }
 
-    const parsed = parseContent(data, explicitFormat, shouldPreprocessQuotes);
+    const parsed = parseContent(data, explicitFormat, shouldPreprocessCustomBlocks, shouldPreprocessQuotes);
     return {
       data: parsed,
       format: explicitFormat,
@@ -286,18 +296,32 @@ function parseFromData(
  * Parse content string based on format
  * @param content - The raw content string to parse
  * @param format - The format of the content (csv, json, yaml)
+ * @param shouldPreprocessCustomBlocks - Whether to run custom block preprocessing (default: true)
  * @param shouldPreprocessQuotes - Whether to run quote preprocessing (default: true)
  */
 function parseContent(
   content: string,
   format: 'csv' | 'json' | 'yaml',
+  shouldPreprocessCustomBlocks = true,
   shouldPreprocessQuotes = true
 ): Record<string, unknown>[] {
-  // Apply quote preprocessing if enabled
   let processedContent = content;
-  if (shouldPreprocessQuotes) {
-    const preprocessed = preprocessQuotes(content, format);
+
+  // Step 1: Apply custom block preprocessing if enabled (must run BEFORE quote preprocessing)
+  if (shouldPreprocessCustomBlocks) {
+    const preprocessed = preprocessCustomBlocks(content, format);
     if (preprocessed !== content) {
+      // Debug logging when preprocessing modifies input
+      // eslint-disable-next-line no-console
+      console.debug(`Input required custom block preprocessing for ${format} format`);
+    }
+    processedContent = preprocessed;
+  }
+
+  // Step 2: Apply quote preprocessing if enabled
+  if (shouldPreprocessQuotes) {
+    const preprocessed = preprocessQuotes(processedContent, format);
+    if (preprocessed !== processedContent) {
       // Debug logging when preprocessing modifies input
       // eslint-disable-next-line no-console
       console.debug(`Input required quote preprocessing for ${format} format`);

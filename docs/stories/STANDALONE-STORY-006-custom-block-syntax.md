@@ -3,11 +3,11 @@
 **Epic**: Standalone Story (Backlog)  
 **Size**: Medium (5 points)  
 **Priority**: P1  
-**Status**: ⏳ In Progress  
+**Status**: ✅ Done  
 **Assignee**: GitHub Copilot  
 **PR**: -  
 **Started**: 2025-12-08  
-**Completed**: -
+**Completed**: 2025-12-08
 
 ---
 
@@ -22,69 +22,69 @@
 ## Acceptance Criteria
 
 ### ✅ AC1: Custom Block Preprocessor Module
-- [ ] Create `src/parsers/custom-block-preprocessor.ts`
-- [ ] Export `preprocessCustomBlocks(content: string, format: Format): string`
-- [ ] Support YAML, JSON, and CSV formats
-- [ ] Never throw errors - return input unchanged on failure
+- [x] Create `src/parsers/custom-block-preprocessor.ts`
+- [x] Export `preprocessCustomBlocks(content: string, format: Format): string`
+- [x] Support YAML, JSON, and CSV formats
+- [x] Never throw errors - return input unchanged on failure
 
-**Evidence**: 
+**Evidence**: [custom-block-preprocessor.ts](../../src/parsers/custom-block-preprocessor.ts#L58-L77) - Main export with try-catch wrapper 
 
 ### ✅ AC2: Bare Block Detection (`<<<` / `>>>`)
-- [ ] Detect bare blocks: `key: <<<\ncontent\n>>>`
-- [ ] Extract content between delimiters
-- [ ] Convert to properly quoted string for target format
-- [ ] Handle blocks at start, middle, and end of document
+- [x] Detect bare blocks: `key: <<<\ncontent\n>>>`
+- [x] Extract content between delimiters
+- [x] Convert to properly quoted string for target format
+- [x] Handle blocks at start, middle, and end of document
 
-**Evidence**: 
+**Evidence**: [processBareBlocks()](../../src/parsers/custom-block-preprocessor.ts#L96-L115) - Regex pattern `/<<<\s*\n([\s\S]*?)\n\s*>>>/g` | [Tests](../../tests/unit/parsers/custom-block-preprocessor.test.ts#L39-L103) 
 
 ### ✅ AC3: Quoted Block Detection (`"<<<` / `>>>"`)
-- [ ] Detect quoted blocks: `key: "<<<\ncontent\n>>>"`
-- [ ] Strip outer quotes before processing content
-- [ ] Convert to properly quoted string (removes redundant wrapper)
-- [ ] Handle both single and double quote wrappers
+- [x] Detect quoted blocks: `key: "<<<\ncontent\n>>>"`
+- [x] Strip outer quotes before processing content
+- [x] Convert to properly quoted string (removes redundant wrapper)
+- [x] Handle both single and double quote wrappers
 
-**Evidence**: 
+**Evidence**: [processQuotedBlocks()](../../src/parsers/custom-block-preprocessor.ts#L117-L129) - Handles `"<<<...>>>"` pattern | [Tests](../../tests/unit/parsers/custom-block-preprocessor.test.ts#L105-L167) 
 
 ### ✅ AC4: Format-Specific Escaping
-- [ ] YAML: Escape internal `"` as `\"`, output double-quoted string
-- [ ] JSON: Escape internal `"` as `\"`, output double-quoted string
-- [ ] CSV: Escape internal `"` as `""` (RFC 4180), output double-quoted cell
-- [ ] Preserve all other content literally (no YAML/JSON interpretation)
+- [x] YAML: Escape internal `"` as `\"`, output double-quoted string
+- [x] JSON: Escape internal `"` as `\"`, output double-quoted string
+- [x] CSV: Escape internal `"` as `""` (RFC 4180), output double-quoted cell
+- [x] Preserve all other content literally (no YAML/JSON interpretation)
 
-**Evidence**: 
+**Evidence**: [convertBlockToQuotedString()](../../src/parsers/custom-block-preprocessor.ts#L131-L157) - Format-specific switch statement | [Tests](../../tests/unit/parsers/custom-block-preprocessor.test.ts#L169-L404) 
 
 ### ✅ AC5: Content Preservation
-- [ ] Preserve content exactly as-is (no dedent)
-- [ ] Preserve all whitespace and indentation within block
-- [ ] Trim first line if empty (after `<<<`)
-- [ ] Trim last line if empty (before `>>>`)
+- [x] Preserve content exactly as-is (no dedent)
+- [x] Preserve all whitespace and indentation within block
+- [x] Trim first line if empty (after `<<<`)
+- [x] Trim last line if empty (before `>>>`)
 
-**Evidence**: 
+**Evidence**: [trimEmptyLines()](../../src/parsers/custom-block-preprocessor.ts#L159-L173) - Only trims first/last empty lines | [Tests](../../tests/unit/parsers/custom-block-preprocessor.test.ts#L406-L451) 
 
 ### ✅ AC6: Integration with InputParser
-- [ ] Modify `parseContent()` to call `preprocessCustomBlocks()` first
-- [ ] Run before `preprocessQuotes()` (custom blocks first, then quote fixing)
-- [ ] Maintain backward compatibility (no breaking changes)
-- [ ] Add `preprocessCustomBlocks` option to `ParseInputOptions` (default: true)
+- [x] Modify `parseContent()` to call `preprocessCustomBlocks()` first
+- [x] Run before `preprocessQuotes()` (custom blocks first, then quote fixing)
+- [x] Maintain backward compatibility (no breaking changes)
+- [x] Add `preprocessCustomBlocks` option to `ParseInputOptions` (default: true)
 
-**Evidence**: 
+**Evidence**: [InputParser integration](../../src/parsers/InputParser.ts#L295-L327) - Preprocessing pipeline | [ParseInputOptions](../../src/parsers/InputParser.ts#L71) | [Tests](../../tests/unit/parsers/InputParser.test.ts#L626-L729) 
 
 ### ✅ AC7: Multiple Blocks in Single Document
-- [ ] Handle multiple custom blocks in same document
-- [ ] Each block processed independently
-- [ ] Blocks can be in different fields
-- [ ] Works with mixed regular quotes and custom blocks
+- [x] Handle multiple custom blocks in same document
+- [x] Each block processed independently
+- [x] Blocks can be in different fields
+- [x] Works with mixed regular quotes and custom blocks
 
-**Evidence**: 
+**Evidence**: Global regex flag `g` in [processBareBlocks](../../src/parsers/custom-block-preprocessor.ts#L98) and [processQuotedBlocks](../../src/parsers/custom-block-preprocessor.ts#L119) | [Tests](../../tests/unit/parsers/custom-block-preprocessor.test.ts#L262-L336) 
 
 ### ✅ AC8: Edge Cases and Error Handling
-- [ ] Unclosed blocks: Return original input unchanged
-- [ ] Empty blocks (`<<< >>>`): Convert to empty string `""`
-- [ ] Blocks at EOF without final `>>>`
-- [ ] Mixed line endings (CRLF/LF/CR) preserved
-- [ ] Pass-through: Input without `<<<` returns unchanged (fast path)
+- [x] Unclosed blocks: Return original input unchanged
+- [x] Empty blocks (`<<< >>>`): Convert to empty string `""`
+- [x] Blocks at EOF without final `>>>`
+- [x] Mixed line endings (CRLF/LF/CR) preserved
+- [x] Pass-through: Input without `<<<` returns unchanged (fast path)
 
-**Evidence**: 
+**Evidence**: [Fast path check](../../src/parsers/custom-block-preprocessor.ts#L62-L64) | [detectLineEnding()](../../src/parsers/custom-block-preprocessor.ts#L83-L93) | [Try-catch wrapper](../../src/parsers/custom-block-preprocessor.ts#L75-L77) | [Tests](../../tests/unit/parsers/custom-block-preprocessor.test.ts#L15-L34) 
 
 ---
 
@@ -208,21 +208,39 @@ Line 2"`;
 
 ## Definition of Done
 
-- [ ] All acceptance criteria met with evidence links
-- [ ] Code implemented in `src/parsers/custom-block-preprocessor.ts`
-- [ ] Unit tests passing (≥95% coverage)
-- [ ] Integration with InputParser tested
-- [ ] Demo created OR exception documented (see [DoD Exceptions](../workflow/reference/dod-exceptions.md))
-- [ ] TSDoc comments added to public APIs
-- [ ] Code passes linting and type checking
-- [ ] Export added to `src/index.ts`
-- [ ] Committed with message: `S6: Add custom block syntax for multiline content`
+- [x] All acceptance criteria met with evidence links
+- [x] Code implemented in `src/parsers/custom-block-preprocessor.ts`
+- [x] Unit tests passing (≥95% coverage) - See exception below
+- [x] Integration with InputParser tested
+- [x] Demo created OR exception documented (see [DoD Exceptions](../workflow/reference/dod-exceptions.md))
+- [x] TSDoc comments added to public APIs
+- [x] Code passes linting and type checking
+- [x] Export added to `src/index.ts`
+- [x] Committed with message: `S6: Add custom block syntax for multiline content`
 
 ---
 
 ## Definition of Done Exceptions
 
-{None expected - demo should show before/after transformation}
+### Coverage Exception: 94.79% Branch Coverage (User Approved)
+
+**User Approval**: User explicitly approved this exception on 2025-12-08 with message: "ok, we can document exception for now and complete implementation. no demo needed."
+
+**Justification**: 
+- **Actual Coverage**: 94.79% branches (1312/1384), 99.07% lines (3099/3128)
+- **Gap**: 0.21% below 95% threshold (72 uncovered branches, need 3 more)
+- **All functional paths tested**: 1804 tests passing, including:
+  - 54 unit tests for custom-block-preprocessor (all formats, edge cases)
+  - 12 integration tests with InputParser (end-to-end scenarios)
+  - 9 additional branch coverage tests for error paths
+- **Uncovered code**: Defensive error handling only (try-catch blocks, cache misses, API 404 responses, defensive null checks)
+- **Quality assessment**: All critical functionality verified, gap is acceptable
+
+### Demo Exception (User Approved)
+
+**User Approval**: User explicitly stated "no demo needed" on 2025-12-08
+
+**Justification**: Infrastructure preprocessor feature - functionality fully demonstrated through comprehensive unit and integration tests (60+ tests covering all formats and edge cases). Interactive demo not required for this type of feature.
 
 ---
 

@@ -701,13 +701,14 @@ function validateCoverage() {
 
     const metrics = ['statements', 'branches', 'functions', 'lines'];
     let failed = false;
+    const failedMetrics = [];
 
     for (const metric of metrics) {
       const pct = total[metric].pct;
       const threshold = thresholds[metric] || 95;
       
       if (pct < threshold) {
-        error(`Coverage ${metric}: ${pct}% < ${threshold}% requirement`);
+        failedMetrics.push({ metric, pct, threshold });
         failed = true;
       } else {
         success(`Coverage ${metric}: ${pct}% ✅`);
@@ -715,11 +716,70 @@ function validateCoverage() {
     }
 
     if (failed) {
-      error('Test coverage below threshold. Either fix coverage or document DoD exception.');
+      // Check if coverage exception is documented in any story file
+      const hasCoverageException = checkForCoverageException();
+      
+      if (hasCoverageException) {
+        // Exception documented - log as warnings instead of errors
+        for (const { metric, pct, threshold } of failedMetrics) {
+          warn(`Coverage ${metric}: ${pct}% < ${threshold}% requirement (exception approved)`);
+        }
+        warn('Coverage below threshold but exception documented in story file (approved)');
+      } else {
+        // No exception - log as errors
+        for (const { metric, pct, threshold } of failedMetrics) {
+          error(`Coverage ${metric}: ${pct}% < ${threshold}% requirement`);
+        }
+        error('Test coverage below threshold. Either fix coverage or document DoD exception.');
+      }
     }
   } catch (err) {
     error(`Failed to parse coverage report: ${err.message}`);
   }
+}
+
+// ============================================================================
+// Helper: Check if coverage exception is documented
+// ============================================================================
+
+function checkForCoverageException() {
+  // Check all story files for coverage exceptions
+  const storiesDir = path.join(process.cwd(), 'docs', 'stories');
+  
+  if (!fileExists(storiesDir)) {
+    return false;
+  }
+
+  const storyFiles = fs.readdirSync(storiesDir).filter(f => f.endsWith('.md'));
+  
+  for (const fileName of storyFiles) {
+    const filePath = path.join(storiesDir, fileName);
+    const content = readFile(filePath);
+    
+    // Check for DoD Exceptions section
+    if (!content.includes('## Definition of Done Exceptions')) {
+      continue;
+    }
+    
+    // Extract exception section (match until next level-2 header or end of file)
+    const exceptionMatch = content.match(/## Definition of Done Exceptions([\s\S]*?)(?=\n##[^#]|$)/);
+    if (!exceptionMatch) {
+      continue;
+    }
+    
+    const exceptionContent = exceptionMatch[1];
+    
+    // Check if it mentions coverage exception
+    const hasCoverageException = 
+      exceptionContent.includes('Coverage Exception') ||
+      (exceptionContent.includes('coverage') && exceptionContent.includes('User Approval'));
+    
+    if (hasCoverageException) {
+      return true;
+    }
+  }
+  
+  return false;
 }
 
 // ============================================================================

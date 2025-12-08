@@ -754,6 +754,27 @@ ENG,Issue 2`;
       await expect(parseInput(options as any)).rejects.toThrow('No data provided');
     });
 
+    it('should handle parseFromFile path through parseInput', async () => {
+      // Test the from path (line 108) - create a temp fixture
+      const csvPath = path.join(fixturesDir, 'coverage-test.csv');
+      await fs.mkdir(fixturesDir, { recursive: true });
+      await fs.writeFile(csvPath, 'Project,Summary\nTEST,Branch coverage');
+
+      const result = await parseInput({ from: csvPath });
+      
+      expect(result.format).toBe('csv');
+      expect(result.data.length).toBe(1);
+      expect(result.data[0]).toEqual({ Project: 'TEST', Summary: 'Branch coverage' });
+    });
+
+    it('should handle parseFromData path through parseInput', async () => {
+      // Test the data path (line 113-115)
+      const result = await parseInput({ 
+        data: [{ Project: 'TEST', Summary: 'Issue' }]
+      });
+      expect(result.data).toEqual([{ Project: 'TEST', Summary: 'Issue' }]);
+    });
+
     it('should detect array of arrays (line 199)', async () => {
       // Test: if (data.length > 0 && Array.isArray(data[0]))
       const arrayOfArrays = [
@@ -798,6 +819,85 @@ ENG,Issue 2`;
       await expect(
         parseInput({ data: 'invalid: yaml: data:', format: 'yaml' })
       ).rejects.toThrow(InputParseError);
+    });
+
+    it('should handle parseInput with no options provided', async () => {
+      // Covers: if (!options.from && options.data === undefined)
+      await expect(
+        parseInput({} as any)
+      ).rejects.toThrow(InputParseError);
+      await expect(
+        parseInput({} as any)
+      ).rejects.toThrow(/No input provided/i);
+    });
+
+    it('should handle file path with unsupported extension', async () => {
+      // Covers: default case in parseFromFile switch statement
+      const tempPath = path.join(fixturesDir, 'test.txt');
+      await fs.writeFile(tempPath, 'some content', 'utf-8');
+      
+      await expect(
+        parseInput({ from: tempPath })
+      ).rejects.toThrow(/Unsupported file extension/i);
+      
+      await fs.unlink(tempPath);
+    });
+
+    it('should handle explicit format override for file parsing', async () => {
+      // Covers: if (explicitFormat) branch in parseFromFile
+      const tempPath = path.join(fixturesDir, 'test.txt');
+      await fs.writeFile(tempPath, 'project: ENG\nsummary: Test', 'utf-8');
+      
+      const result = await parseInput({ from: tempPath, format: 'yaml' });
+      expect(result.data[0]).toHaveProperty('project', 'ENG');
+      
+      await fs.unlink(tempPath);
+    });
+
+    it('should handle object data input', async () => {
+      // Covers: if (typeof data === 'object' && data !== null && !Array.isArray(data))
+      const result = await parseInput({ 
+        data: { project: 'ENG', summary: 'Test' } as any 
+      });
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toHaveProperty('project', 'ENG');
+    });
+
+    it('should handle array of arrays as CSV data', async () => {
+      // Covers: if (data.length > 0 && Array.isArray(data[0]))
+      const arrayData = [
+        ['Project', 'Summary'],
+        ['ENG', 'Issue 1']
+      ];
+      const result = await parseInput({ data: arrayData as any });
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toHaveProperty('Project', 'ENG');
+    });
+
+    it('should handle array of objects', async () => {
+      // Covers: array return path when not array of arrays
+      const arrayData = [
+        { project: 'ENG', summary: 'Issue 1' },
+        { project: 'PROD', summary: 'Issue 2' }
+      ];
+      const result = await parseInput({ data: arrayData as any });
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0]).toHaveProperty('project', 'ENG');
+    });
+
+    it('should handle string data with explicit CSV format', async () => {
+      // Covers: parseFromData with string + explicitFormat
+      const csvString = 'Project,Summary\nENG,Issue 1';
+      const result = await parseInput({ data: csvString, format: 'csv' });
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toHaveProperty('Project', 'ENG');
+    });
+
+    it('should reject invalid data types', async () => {
+      // Covers: final throw in parseFromData
+      await expect(
+        parseInput({ data: 123 as any })
+      ).rejects.toThrow(/Invalid input data type/i);
     });
   });
 
@@ -1052,6 +1152,168 @@ ENG,Issue 2`;
 
         expect(result.data[0].Project).toBe('ENG');
         expect(result.data[0].Summary).toBe('Test value');
+      });
+    });
+  });
+
+  // =========================================================================
+  // CUSTOM BLOCK PREPROCESSING (S6)
+  // =========================================================================
+  describe('Custom Block Preprocessing', () => {
+    describe('preprocessCustomBlocks option', () => {
+      it('should preprocess custom blocks by default (preprocessCustomBlocks: true)', async () => {
+        const yaml = `description: <<<
+Multiline with "quotes"
+>>>`;
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].description).toBe('Multiline with "quotes"');
+      });
+
+      it('should skip preprocessing when preprocessCustomBlocks is false', async () => {
+        const yaml = `description: <<<
+Content
+>>>`;
+        // With preprocessing disabled, this will fail to parse as valid YAML
+        await expect(
+          parseInput({ data: yaml, format: 'yaml', preprocessCustomBlocks: false })
+        ).rejects.toThrow();
+      });
+
+      it('should process custom blocks before quote preprocessing', async () => {
+        // Custom block with unescaped quotes inside
+        const yaml = `description: <<<
+Say "hello" world
+>>>`;
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        // Should successfully parse (custom blocks converted first, then quotes escaped)
+        expect(result.data[0].description).toBe('Say "hello" world');
+      });
+    });
+
+    describe('YAML with custom blocks end-to-end', () => {
+      it('should parse YAML with bare custom block', async () => {
+        const yaml = `project: PROJ
+summary: Test
+description: <<<
+  Line 1
+  Line 2
+>>>
+priority: High`;
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0].project).toBe('PROJ');
+        // YAML preserves leading whitespace in block strings
+        expect(result.data[0].description).toBe('Line 1\n  Line 2');
+        expect(result.data[0].priority).toBe('High');
+      });
+
+      it('should parse YAML with quoted custom block', async () => {
+        const yaml = `description: "<<<
+Content here
+>>>"`;
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].description).toBe('Content here');
+      });
+
+      it('should handle multiple custom blocks', async () => {
+        const yaml = `summary: <<<
+First block
+>>>
+description: <<<
+Second block
+>>>`;
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].summary).toBe('First block');
+        expect(result.data[0].description).toBe('Second block');
+      });
+    });
+
+    describe('JSON with custom blocks end-to-end', () => {
+      it('should parse JSON with custom block', async () => {
+        const json = `{
+  "summary": "Test",
+  "description": <<<
+Line 1
+Line 2
+>>>
+}`;
+        const result = await parseInput({ data: json, format: 'json' });
+
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0].summary).toBe('Test');
+        expect(result.data[0].description).toBe('Line 1\nLine 2');
+      });
+
+      it('should parse JSON array with custom blocks', async () => {
+        const json = `[
+  {
+    "description": <<<
+First issue
+>>>
+  },
+  {
+    "description": <<<
+Second issue
+>>>
+  }
+]`;
+        const result = await parseInput({ data: json, format: 'json' });
+
+        expect(result.data).toHaveLength(2);
+        expect(result.data[0].description).toBe('First issue');
+        expect(result.data[1].description).toBe('Second issue');
+      });
+    });
+
+    describe('CSV with custom blocks end-to-end', () => {
+      it('should parse CSV with custom block', async () => {
+        const csv = `Project,Summary,Description
+PROJ,Test,<<<
+Line 1
+Line 2
+>>>`;
+        const result = await parseInput({ data: csv, format: 'csv' });
+
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0].Project).toBe('PROJ');
+        expect(result.data[0].Summary).toBe('Test');
+        expect(result.data[0].Description).toBe('Line 1\nLine 2');
+      });
+
+      it('should handle CSV with quoted custom blocks', async () => {
+        const csv = `A,B
+1,"<<<
+Content
+>>>"`;
+        const result = await parseInput({ data: csv, format: 'csv' });
+
+        expect(result.data[0].B).toBe('Content');
+      });
+    });
+
+    describe('Real-world scenario', () => {
+      it('should handle Slack-copied content in YAML', async () => {
+        const yaml = `project: PROJ
+summary: Bug report
+description: <<<
+User reported: "The login fails"
+Keys: "PROJ-123"
+Links: https://example.com
+
+This is real Slack content.
+>>>
+priority: High`;
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+
+        expect(result.data[0].project).toBe('PROJ');
+        expect(result.data[0].description).toContain('User reported: "The login fails"');
+        expect(result.data[0].description).toContain('Keys: "PROJ-123"');
+        expect(result.data[0].priority).toBe('High');
       });
     });
   });
