@@ -40,6 +40,7 @@ Stories outside the active epics but still tracked for delivery.
 - ✅ [S2: Fuzzy User Matching](stories/BACKLOG-STORY-002-fuzzy-user-matching.md) - 5 points *(GitHub Copilot)*
 - 📋 [S3: Fuzzy Field Name Resolution](stories/BACKLOG-STORY-003-fuzzy-field-name-resolution.md) - 5 points
 - ✅ [S4: Defer Project/IssueType Extraction to FieldResolver](stories/BACKLOG-STORY-004-defer-project-issuetype-extraction.md) - 3 points
+- 📋 [S5: Unified Debug Logging Infrastructure](stories/STANDALONE-STORY-005-debug-logging.md) - 5 points
 
 ---
 
