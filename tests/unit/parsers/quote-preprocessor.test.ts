@@ -168,6 +168,43 @@ Level: engineering`;
           expect(output).toContain("'this'");
           expect(output).toContain('Level: engineering');
         });
+
+        it('should handle Slack variable with content that looks like YAML keys', () => {
+          // Real Slack payload - the description contains "Keys:", "Links:", "Manifest:" 
+          // which look like YAML keys but are actually content inside the quoted value
+          const input = `project: PROJ
+issue type: Bug
+summary: this is an issue test
+description: "this was the last issue
+Keys: "PROJ-25962"
+Links: https://example.com/browse/PROJ-25962
+Manifest: 
+
+wonder if this will "break" might be too complex."
+Level: engineering
+Version: MS8 2026`;
+          
+          const output = preprocessQuotes(input, 'yaml');
+          
+          // Internal quotes should be escaped
+          expect(output).toContain('\\"PROJ-25962\\"');
+          expect(output).toContain('\\"break\\"');
+          
+          // The closing quote should be preserved (after "complex.")
+          // Level should remain as a separate key, not inside description
+          expect(output).toMatch(/Level: engineering/);
+          expect(output).toMatch(/Version: MS8 2026/);
+          
+          // Verify it parses as valid YAML using js-yaml (same as production code)
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const jsYaml = require('js-yaml');
+          const parsed = jsYaml.load(output);
+          
+          expect(parsed.description).toContain('Keys: "PROJ-25962"');
+          expect(parsed.description).toContain('wonder if this will "break"');
+          expect(parsed.Level).toBe('engineering');
+          expect(parsed.Version).toBe('MS8 2026');
+        });
       });
     });
 

@@ -285,7 +285,13 @@ interface CloseInfo {
 
 /**
  * Find closing quote in a single-line value.
- * Uses heuristic: last quote on line is closing if next line is a new key or EOF.
+ * Strategy: Close when we find a quote at end with nothing after AND either:
+ * - EOF (no next line)
+ * - Odd number of quotes (unpaired closing quote)
+ * - Next line is definitely a new key (for simple single-line values)
+ * 
+ * For single-line values, we can trust "next line is a key" because the user
+ * hasn't started a multiline value yet.
  */
 function findYamlClosingQuote(
   content: string,
@@ -296,48 +302,33 @@ function findYamlClosingQuote(
   const quotePositions = findUnescapedQuotes(content, quoteType);
 
   if (quotePositions.length === 0) {
-    // No quotes - check if next line suggests this is multiline
-    const nextIsNewKey = isYamlKeyLine(nextLine);
-    if (nextIsNewKey || nextLine === undefined) {
-      // No closing quote, but value ends here (malformed)
-      return { closed: true, content, remainder: '' };
-    }
+    // No quotes on this line - value continues to next line
     return { closed: false, content, remainder: '' };
   }
 
   // Check last quote - is it the closing quote?
   const lastQuotePos = quotePositions[quotePositions.length - 1];
-  // Guard: quotePositions is guaranteed non-empty since we check length === 0 above
   /* istanbul ignore if -- defensive type guard for noUncheckedIndexedAccess */
   if (lastQuotePos === undefined) {
-    return { closed: true, content, remainder: '' };
+    return { closed: false, content, remainder: '' };
   }
   const afterLastQuote = content.substring(lastQuotePos + 1);
   const trimmedAfter = afterLastQuote.trim();
 
-  // Heuristics for closing quote:
-  // 1. Nothing after it (or just comment)
-  // 2. Next line is a new key or EOF
+  // If there's content after last quote, value continues
   const nothingAfter = trimmedAfter === '' || trimmedAfter.startsWith('#');
-  const nextIsNewKey = isYamlKeyLine(nextLine);
-  const isEOF = nextLine === undefined;
-
-  if (nothingAfter && (nextIsNewKey || isEOF)) {
-    return {
-      closed: true,
-      content: content.substring(0, lastQuotePos),
-      remainder: afterLastQuote,
-    };
-  }
-
-  // Check if we're still within the value (content continues after quote)
-  // This means the last quote is NOT the closing quote
   if (!nothingAfter) {
-    // There's content after the last quote - check if next line continues
-    if (!nextIsNewKey && !isEOF) {
-      return { closed: false, content, remainder: '' };
-    }
-    // Next line is a key, so last quote must be closing even with trailing content
+    return { closed: false, content, remainder: '' };
+  }
+
+  // Last quote has nothing after it. Is it the closing quote?
+  // For single-line detection, we use multiple signals:
+  const isEOF = nextLine === undefined;
+  const isOddQuotes = quotePositions.length % 2 === 1;
+  const nextIsKey = isYamlKeyLine(nextLine);
+
+  // Close if: EOF, or odd quotes (unpaired), or next line is definitely a new key
+  if (isEOF || isOddQuotes || nextIsKey) {
     return {
       closed: true,
       content: content.substring(0, lastQuotePos),
@@ -345,45 +336,49 @@ function findYamlClosingQuote(
     };
   }
 
-  // Value continues to next line
+  // Even quotes and next line doesn't look like a key - value may continue
   return { closed: false, content, remainder: '' };
 }
 
 /**
- * Find closing quote in multiline context
+ * Find closing quote in multiline context.
+ * Strategy: Only close when we find an actual closing quote that is NOT part
+ * of an internal quote pair. Internal pairs like "word" have even quotes.
+ * The closing quote is an unpaired quote at end of line.
  */
 function findYamlClosingQuoteMultiline(
   line: string,
   quoteType: '"' | "'",
-  nextLine: string | undefined
+  _nextLine: string | undefined
 ): CloseInfo {
   const quotePositions = findUnescapedQuotes(line, quoteType);
 
   if (quotePositions.length === 0) {
-    // No quotes on this line - check if value ends
-    const nextIsNewKey = isYamlKeyLine(nextLine);
-    if (nextIsNewKey || nextLine === undefined) {
-      // Value ends here without proper closing quote
-      return { closed: true, content: line, remainder: '' };
-    }
+    // No quotes on this line - value continues
     return { closed: false, content: line, remainder: '' };
   }
 
-  // Check last quote
+  // Check if last quote could be the closing quote
   const lastQuotePos = quotePositions[quotePositions.length - 1];
-  // Guard: quotePositions is guaranteed non-empty since we check length === 0 above
   /* istanbul ignore if -- defensive type guard for noUncheckedIndexedAccess */
   if (lastQuotePos === undefined) {
-    return { closed: true, content: line, remainder: '' };
+    return { closed: false, content: line, remainder: '' };
   }
+  
   const afterLastQuote = line.substring(lastQuotePos + 1);
   const trimmedAfter = afterLastQuote.trim();
-
   const nothingAfter = trimmedAfter === '' || trimmedAfter.startsWith('#');
-  const nextIsNewKey = isYamlKeyLine(nextLine);
-  const isEOF = nextLine === undefined;
 
-  if (nothingAfter && (nextIsNewKey || isEOF)) {
+  if (!nothingAfter) {
+    // Content after last quote - value continues
+    return { closed: false, content: line, remainder: '' };
+  }
+
+  // Last quote has nothing after it. Is it the closing quote or part of a pair?
+  // Heuristic: If there's an ODD number of quotes, last one is unpaired (closing).
+  // If EVEN, they're all paired (internal quotes like "word" or "a" and "b").
+  if (quotePositions.length % 2 === 1) {
+    // Odd number - last quote is unpaired, this is the closing quote
     return {
       closed: true,
       content: line.substring(0, lastQuotePos),
@@ -391,7 +386,7 @@ function findYamlClosingQuoteMultiline(
     };
   }
 
-  // Continue looking
+  // Even number of quotes - they're all paired, value continues
   return { closed: false, content: line, remainder: '' };
 }
 
