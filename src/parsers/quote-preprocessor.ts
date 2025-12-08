@@ -402,6 +402,8 @@ function findYamlClosingQuoteMultiline(
  * (e.g., "Keys: ..." inside a quoted value).
  */
 /* istanbul ignore next -- heuristic function with many interrelated branches */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// @ts-expect-error - Kept for potential future use
 function _isYamlKeyLine(line: string | undefined): boolean {
   if (line === undefined) return false;
   // Empty or whitespace-only lines are NOT key lines (could be inside multiline value)
