@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.4.1] - 2025-12-08
+
+### Fixed
+- **Quote preprocessor handles content that looks like YAML keys** - Fixed multiline quote detection to correctly identify closing quotes when content inside quoted values contains patterns like `Keys:`, `Links:`, or `Manifest:` that look like YAML keys but are actually part of the value content (common in Slack variable replacements)
+
 ## [1.4.0] - 2025-12-07
 
 ### Added
