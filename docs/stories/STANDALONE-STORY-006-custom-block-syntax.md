@@ -3,10 +3,10 @@
 **Epic**: Standalone Story (Backlog)  
 **Size**: Medium (5 points)  
 **Priority**: P1  
-**Status**: 📋 Ready for Development  
-**Assignee**: -  
+**Status**: ⏳ In Progress  
+**Assignee**: GitHub Copilot  
 **PR**: -  
-**Started**: -  
+**Started**: 2025-12-08  
 **Completed**: -
 
 ---
