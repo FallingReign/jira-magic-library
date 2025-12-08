@@ -2,6 +2,29 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.5.0] - 2025-12-08
+
+### Added
+- **Custom block syntax for multiline content** - New `<<<` / `>>>` delimiters for embedding multiline content without manual escaping
+  - Supported in YAML, JSON, and CSV formats
+  - Format-specific handling: YAML/JSON convert newlines to `\n` escape sequences, CSV preserves actual newlines per RFC 4180
+  - Preserves line endings (CRLF/LF/CR) automatically
+  - Trims only empty first/last lines, preserves internal whitespace exactly
+  - Works with both bare blocks (`<<<content>>>`) and quoted blocks (`"<<<content>>>"`)
+- **Unified debug logging infrastructure** - Comprehensive logging system for troubleshooting library behavior
+  - New `debug.enabled` and `debug.namespaces` config options
+  - Logs cache operations, HTTP requests, field resolution, conversions, and more
+  - Zero overhead when disabled (fast path optimization)
+- New `preprocessCustomBlocks` export for direct access to custom block preprocessing
+- New `preprocessCustomBlocks?: boolean` option in InputParser config (default: `true`)
+
+### Changed
+- **Enhanced workflow validator** - Now recognizes documented coverage exceptions in story files
+- InputParser preprocessing pipeline now runs custom block preprocessing before quote preprocessing
+
+### Fixed
+- **Quote preprocessor TypeScript error** - Fixed unused function warning in quote-preprocessor.ts
+
 ## [1.4.1] - 2025-12-08
 
 ### Fixed
