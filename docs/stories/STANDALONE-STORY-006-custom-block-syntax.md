@@ -53,9 +53,9 @@
 
 **Evidence**: 
 
-### ✅ AC5: Indentation Handling
-- [ ] Strip common leading whitespace from block content (dedent)
-- [ ] Preserve relative indentation within block
+### ✅ AC5: Content Preservation
+- [ ] Preserve content exactly as-is (no dedent)
+- [ ] Preserve all whitespace and indentation within block
 - [ ] Trim first line if empty (after `<<<`)
 - [ ] Trim last line if empty (before `>>>`)
 
@@ -142,11 +142,8 @@ const quotedBlockPattern = /"<<<\s*\n([\s\S]*?)\n\s*>>>"/g;
 **Format-Specific Conversion:**
 ```typescript
 function convertBlockToQuotedString(content: string, format: Format): string {
-  // Dedent content (strip common leading whitespace)
-  const dedented = dedent(content);
-  
-  // Trim leading/trailing empty lines
-  const trimmed = trimEmptyLines(dedented);
+  // Trim leading/trailing empty lines only
+  const trimmed = trimEmptyLines(content);
   
   // Escape internal quotes based on format
   switch (format) {
@@ -156,26 +153,6 @@ function convertBlockToQuotedString(content: string, format: Format): string {
     case 'csv':
       return `"${trimmed.replace(/"/g, '""')}"`;
   }
-}
-```
-
-**Dedent Algorithm:**
-```typescript
-function dedent(text: string): string {
-  const lines = text.split('\n');
-  
-  // Find minimum indentation (ignoring empty lines)
-  const minIndent = lines
-    .filter(line => line.trim().length > 0)
-    .reduce((min, line) => {
-      const indent = line.match(/^\s*/)?.[0].length ?? 0;
-      return Math.min(min, indent);
-    }, Infinity);
-  
-  // Strip common prefix from all lines
-  return lines
-    .map(line => line.slice(minIndent))
-    .join('\n');
 }
 ```
 
@@ -280,7 +257,7 @@ describe('CustomBlockPreprocessor', () => {
       it('should convert bare block to quoted string', () => { ... });
       it('should convert quoted block to quoted string', () => { ... });
       it('should escape internal double quotes', () => { ... });
-      it('should dedent content (strip common indent)', () => { ... });
+      it('should preserve content whitespace exactly', () => { ... });
       it('should handle multiple blocks in document', () => { ... });
     });
     
@@ -333,10 +310,10 @@ describe('InputParser with custom blocks', () => {
    - Not commonly used in natural text
    - Similar to shell heredoc syntax (familiar to developers)
 
-2. **Dedent by Default**:
-   - Users naturally indent content inside blocks for readability
-   - Stripping common indent prevents unwanted leading spaces
-   - Matches Python's `textwrap.dedent()` behavior
+2. **Preserve Content Exactly**:
+   - Users may intentionally include leading whitespace
+   - Code blocks, logs, or formatted content should not be modified
+   - Simpler implementation with no edge cases around indentation detection
 
 3. **Support Quoted Wrappers**:
    - Some tools may auto-wrap values in quotes
