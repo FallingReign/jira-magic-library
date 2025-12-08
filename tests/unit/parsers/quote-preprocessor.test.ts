@@ -205,6 +205,46 @@ Version: MS8 2026`;
           expect(parsed.Level).toBe('engineering');
           expect(parsed.Version).toBe('MS8 2026');
         });
+
+        it('should handle duplicate quoted patterns appearing multiple times in value', () => {
+          // Real Slack payload - same pattern "PROJ-25962" appears twice with different meanings:
+          // First occurrence: content inside quoted value
+          // Second occurrence: content that ends with the closing quote for the whole value
+          const input = `project: PROJ
+issue type: Task
+summary: this is an issue test
+description: "This looks like "yaml keys"
+Keys: "PROJ-25962"
+Links: https://example.com/browse/PROJ-25962
+Manifest: 
+
+no good really, breaks the whole thing
+
+Keys: "PROJ-25962" < is probably the most confusing one."
+Level: engineering
+Version: MS8 2026`;
+          
+          const output = preprocessQuotes(input, 'yaml');
+          
+          // All internal quotes should be escaped (both occurrences of "PROJ-25962" and "yaml keys")
+          expect(output).toContain('\\"yaml keys\\"');
+          expect(output).toMatch(/Keys: \\"PROJ-25962\\"/); // First occurrence
+          
+          // Level should remain as a separate key, not inside description
+          expect(output).toMatch(/Level: engineering/);
+          expect(output).toMatch(/Version: MS8 2026/);
+          
+          // Verify it parses as valid YAML
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const jsYaml = require('js-yaml');
+          const parsed = jsYaml.load(output);
+          
+          expect(parsed.description).toContain('This looks like "yaml keys"');
+          expect(parsed.description).toContain('Keys: "PROJ-25962"');
+          expect(parsed.description).toContain('Keys: "PROJ-25962" < is probably the most confusing one.');
+          expect(parsed.Level).toBe('engineering');
+          expect(parsed.Version).toBe('MS8 2026');
+        });
       });
     });
 
@@ -273,6 +313,17 @@ Version: MS8 2026`;
           const output = preprocessQuotes(input, 'json');
           expect(output).toBe('{"description": "line1 \\"a\\"\nline2 \\"b\\""}');
         });
+
+        it('should handle duplicate quoted patterns appearing multiple times in value', () => {
+          // Same pattern appears twice - both should be escaped
+          const input = '{"description": "First "KEY-123" and second "KEY-123" here"}';
+          const output = preprocessQuotes(input, 'json');
+          expect(output).toBe('{"description": "First \\"KEY-123\\" and second \\"KEY-123\\" here"}');
+          
+          // Verify it parses as valid JSON
+          const parsed = JSON.parse(output);
+          expect(parsed.description).toBe('First "KEY-123" and second "KEY-123" here');
+        });
       });
 
       describe('special characters', () => {
@@ -336,6 +387,23 @@ second "quoted" line
 third line",middle,last`;
           const output = preprocessQuotes(input, 'csv');
           expect(output).toContain('""quoted""');
+        });
+
+        it('should handle duplicate quoted patterns appearing multiple times in cell', () => {
+          // Same pattern appears twice in multiline cell - both should be escaped
+          const input = `Project,Description
+PROJ,"First "KEY-123" reference
+some content here
+Second "KEY-123" reference at end"`;
+          const output = preprocessQuotes(input, 'csv');
+          
+          // Both occurrences should be escaped with doubled quotes
+          const matches = output.match(/""KEY-123""/g);
+          expect(matches).toHaveLength(2);
+          
+          // Should still be valid CSV structure
+          expect(output).toContain('Project,Description');
+          expect(output).toContain('PROJ,');
         });
       });
 
