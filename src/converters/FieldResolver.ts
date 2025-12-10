@@ -340,19 +340,15 @@ export class FieldResolver {
     // Fetch all projects (cached)
     const projects = await this.fetchAllProjects();
     
-    // Build lookup array - one entry per project with both key and name searchable
-    const projectLookup = projects.map(p => ({
-      id: p.key,
-      name: p.name,
-      key: p.key, // Include key as searchable field for Fuse.js
-    }));
-    
+    // Use JIRA project objects directly without reshaping
+    // JIRA format: { id: '10000', key: 'ENG', name: 'Engineering' }
+    // resolveUniqueName will search 'name', 'key', and 'id' fields
     try {
-      const matched = resolveUniqueName(input, projectLookup, {
+      const matched = resolveUniqueName(input, projects, {
         field: 'project',
         fieldName: 'Project'
       });
-      return matched.id; // id is the project key
+      return matched.key; // Return project key (e.g., "ENG")
     } catch (error) {
       // Re-throw AmbiguityError as-is (don't mask it)
       if (error instanceof AmbiguityError) {

@@ -112,14 +112,16 @@ export function resolveUniqueName(
 
   // Step 1: Exact match check (fast path - preserves existing performance)
   // E3-S16: Exact matches should always be preferred
-  // Check both 'name' and 'id' fields for exact matches
+  // Check 'name', 'id', 'key', and 'jiraId' fields for exact matches
   const exactMatches = validValues.filter((v) => {
     const nameMatch = v.name.toLowerCase() === normalizedInput;
-    // Also check 'id' field if it exists (for project key matching)
+    // Check 'id' field if it exists
     const idMatch = v.id && v.id.toLowerCase() === normalizedInput;
-    // Check additional 'key' field if it exists (for explicit key matching)
+    // Check 'key' field if it exists (for project key matching)
     const keyMatch = (v as any).key && (v as any).key.toLowerCase() === normalizedInput;
-    return nameMatch || idMatch || keyMatch;
+    // Check 'jiraId' field if it exists (for JIRA's internal ID)
+    const jiraIdMatch = (v as any).jiraId && (v as any).jiraId.toLowerCase() === normalizedInput;
+    return nameMatch || idMatch || keyMatch || jiraIdMatch;
   });
 
   if (exactMatches.length === 1) {
@@ -140,10 +142,12 @@ export function resolveUniqueName(
 
   // Step 2: Fuzzy search with fuse.js (E3-S16)
   // Handles underscores, dashes, typos, partial matches
-  // Search both 'name' and 'key' fields (if key exists, e.g., for projects)
+  // Search name, id, and key fields (supports JIRA project format)
   const searchKeys = ['name'];
-  if (validValues.length > 0 && (validValues[0] as any).key !== undefined) {
-    searchKeys.push('key');
+  if (validValues.length > 0) {
+    const firstValue = validValues[0] as any;
+    if (firstValue.key !== undefined) searchKeys.push('key');
+    if (firstValue.id !== undefined) searchKeys.push('id');
   }
   
   const fuse = new Fuse(validValues, {
