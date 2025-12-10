@@ -1191,6 +1191,36 @@ describe('FieldResolver', () => {
         expect(result.issueType).toBe('Story');
       });
 
+      it('should match project when name equals key (avoid duplicate ambiguity)', async () => {
+        // Mock a project where name === key (common in JIRA)
+        mockClient.get.mockImplementation((url: string) => {
+          if (url === '/rest/api/2/project') {
+            return Promise.resolve([
+              { id: '10000', key: 'HELP', name: 'HELP' }, // name === key
+              { id: '10001', key: 'ENG', name: 'Engineering' },
+            ]);
+          }
+          if (url.includes('/issuetypes')) {
+            return Promise.resolve({
+              values: [{ id: '10001', name: 'Task' }],
+            });
+          }
+          return Promise.reject(new Error(`Unexpected URL: ${url}`));
+        });
+
+        const input = {
+          Project: 'HELP',
+          'Issue Type': 'Task',
+          Summary: 'Test',
+        };
+
+        // Should NOT throw AmbiguityError despite name === key
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP');
+        expect(result.issueType).toBe('Task');
+      });
+
       it('should throw ValidationError for unknown project', async () => {
         const input = {
           Project: 'UNKNOWN',

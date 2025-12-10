@@ -9,6 +9,7 @@ import { resolveParentLink } from '../hierarchy/ParentLinkResolver.js';
 import { DEFAULT_PARENT_SYNONYMS } from '../constants/field-constants.js';
 import { resolveUniqueName } from '../utils/resolveUniqueName.js';
 import { ValidationError } from '../errors/ValidationError.js';
+import { AmbiguityError } from '../errors/AmbiguityError.js';
 import { findSystemField, isIdOnlyObject } from '../utils/findSystemField.js';
 import { normalizeFieldName } from '../utils/normalizeFieldName.js';
 import Fuse from 'fuse.js';
@@ -340,11 +341,18 @@ export class FieldResolver {
     const projects = await this.fetchAllProjects();
     
     // Build lookup array for fuzzy matching (use key as id, name as name)
-    // Also include key as an alias for matching by key
-    const projectLookup = projects.flatMap(p => [
-      { id: p.key, name: p.name },
-      { id: p.key, name: p.key }, // Allow matching by key too
-    ]);
+    // Also include key as an alias for matching by key (but avoid duplicates)
+    const projectLookup = projects.flatMap(p => {
+      // If name === key, only create one entry to avoid duplicate exact matches
+      if (p.name === p.key) {
+        return [{ id: p.key, name: p.name }];
+      }
+      // Otherwise create both entries for matching by name OR key
+      return [
+        { id: p.key, name: p.name },
+        { id: p.key, name: p.key },
+      ];
+    });
     
     try {
       const matched = resolveUniqueName(input, projectLookup, {
@@ -352,8 +360,13 @@ export class FieldResolver {
         fieldName: 'Project'
       });
       return matched.id; // id is the project key
-    } catch {
-      // Enhance error with available projects
+    } catch (error) {
+      // Re-throw AmbiguityError as-is (don't mask it)
+      if (error instanceof AmbiguityError) {
+        throw error;
+      }
+      
+      // Enhance ValidationError with available projects
       const availableKeys = projects.map(p => p.key).join(', ');
       throw new ValidationError(
         `Project '${input}' not found. Available projects: ${availableKeys}`,
@@ -472,8 +485,13 @@ export class FieldResolver {
         fieldName: 'Issue Type'
       });
       return matched.name; // Return name for schema lookup
-    } catch {
-      // Enhance error with available issue types
+    } catch (error) {
+      // Re-throw AmbiguityError as-is (don't mask it)
+      if (error instanceof AmbiguityError) {
+        throw error;
+      }
+      
+      // Enhance ValidationError with available issue types
       const availableTypes = issueTypes.map(it => it.name).join(', ');
       throw new ValidationError(
         `Issue type '${input}' not found in project '${projectKey}'. Available types: ${availableTypes}`,
