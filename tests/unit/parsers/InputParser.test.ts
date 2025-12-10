@@ -1317,4 +1317,57 @@ priority: High`;
       });
     });
   });
+
+  describe('Invisible Unicode Character Sanitization', () => {
+    it('should remove zero-width space from YAML values', async () => {
+      const yaml = 'project: HELP\u200B\nissueType: Task';
+      const result = await parseInput({ data: yaml, format: 'yaml' });
+      
+      expect(result.data[0].project).toBe('HELP');
+      expect(result.data[0].project).not.toContain('\u200B');
+    });
+
+    it('should remove non-breaking space from JSON values', async () => {
+      const json = '{"project": "HELP\u00A0", "issueType": "Task"}';
+      const result = await parseInput({ data: json, format: 'json' });
+      
+      expect(result.data[0].project).toBe('HELP');
+      expect(result.data[0].project).not.toContain('\u00A0');
+    });
+
+    it('should remove byte order mark from CSV values', async () => {
+      const csv = 'project,issueType\n\uFEFFHELP,Task';
+      const result = await parseInput({ data: csv, format: 'csv' });
+      
+      expect(result.data[0].project).toBe('HELP');
+      expect(result.data[0].project).not.toContain('\uFEFF');
+    });
+
+    it('should remove multiple invisible characters', async () => {
+      const yaml = 'project: \uFEFFHELP\u200B\u00A0\nissueType: Task\u200C';
+      const result = await parseInput({ data: yaml, format: 'yaml' });
+      
+      expect(result.data[0].project).toBe('HELP');
+      expect(result.data[0].issueType).toBe('Task');
+    });
+
+    it('should normalize Unicode variations (NFKC)', async () => {
+      // Using composed vs decomposed forms
+      const yaml = 'project: HELP\nname: Café'; // é as single character
+      const result = await parseInput({ data: yaml, format: 'yaml' });
+      
+      // Should normalize to same form
+      expect(result.data[0].name).toBe('Café');
+    });
+
+    it('should sanitize object keys with invisible characters', async () => {
+      const json = '{"project\u200B": "HELP", "issueType": "Task"}';
+      const result = await parseInput({ data: json, format: 'json' });
+      
+      // Key should be sanitized
+      expect(result.data[0]).toHaveProperty('project');
+      expect(result.data[0]).not.toHaveProperty('project\u200B');
+      expect(result.data[0].project).toBe('HELP');
+    });
+  });
 });

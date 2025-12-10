@@ -40,6 +40,21 @@ import type { FuseResult } from 'fuse.js';
 import { AmbiguityError } from '../errors/AmbiguityError.js';
 import { ValidationError } from '../errors/ValidationError.js';
 
+/**
+ * Sanitizes a string by removing invisible Unicode characters and normalizing variations.
+ * 
+ * Fixes bugs where invisible characters from Slack/web interfaces (zero-width spaces,
+ * non-breaking spaces, etc.) prevent matching against clean JIRA API data.
+ * 
+ * @param str - String to sanitize
+ * @returns Sanitized string
+ */
+function sanitizeString(str: string): string {
+  return str
+    .normalize('NFKC')  // Normalize Unicode compatibility forms
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');  // Remove invisible characters
+}
+
 export interface LookupValue {
   id: string;
   name: string;
@@ -71,7 +86,9 @@ export function resolveUniqueName(
     );
   }
 
-  const trimmed = input.trim();
+  // Sanitize input to remove invisible Unicode characters
+  const sanitized = sanitizeString(input);
+  const trimmed = sanitized.trim();
   if (trimmed === '') {
     throw new ValidationError(
       `Empty string is not valid for field "${context.fieldName}"`,

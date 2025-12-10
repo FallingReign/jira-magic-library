@@ -501,4 +501,74 @@ describe('resolveUniqueName', () => {
       expect(result.id).toBe('1');
     });
   });
+
+  describe('Invisible Unicode Character Handling', () => {
+    const projects = [
+      { id: 'HELP', name: 'Help Desk' },
+      { id: 'PROJ', name: 'Project Alpha' },
+    ];
+
+    it('should match despite zero-width space (U+200B)', () => {
+      const result = resolveUniqueName('HELP\u200B', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+
+    it('should match despite zero-width non-joiner (U+200C)', () => {
+      const result = resolveUniqueName('HELP\u200C', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+
+    it('should match despite zero-width joiner (U+200D)', () => {
+      const result = resolveUniqueName('HELP\u200D', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+
+    it('should match despite byte order mark (U+FEFF)', () => {
+      const result = resolveUniqueName('\uFEFFHELP', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+
+    it('should match despite non-breaking space (U+00A0)', () => {
+      const result = resolveUniqueName('HELP\u00A0', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+
+    it('should match despite multiple invisible characters', () => {
+      const result = resolveUniqueName('\uFEFFHELP\u200B\u00A0', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+
+    it('should match by name with invisible characters', () => {
+      const result = resolveUniqueName('Help\u200BDesk', projects, {
+        field: 'project',
+        fieldName: 'Project',
+      });
+
+      expect(result.id).toBe('HELP');
+    });
+  });
 });

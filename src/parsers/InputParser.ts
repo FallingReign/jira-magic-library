@@ -559,8 +559,18 @@ function sanitizeValues<T>(data: T): T {
   }
 
   if (typeof data === 'string') {
+    // Normalize Unicode variations (NFKC handles compatibility forms)
+    // Remove invisible characters that can cause matching failures:
+    // - U+200B: Zero-width space
+    // - U+200C: Zero-width non-joiner
+    // - U+200D: Zero-width joiner
+    // - U+FEFF: Zero-width no-break space (BOM)
+    // - U+00A0: Non-breaking space
+    const normalized = data
+      .normalize('NFKC')
+      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
     // Trim leading/trailing whitespace but preserve internal newlines
-    return data.replace(/^\s+|\s+$/g, '') as T;
+    return normalized.replace(/^\s+|\s+$/g, '') as T;
   }
 
   if (Array.isArray(data)) {
@@ -573,8 +583,12 @@ function sanitizeValues<T>(data: T): T {
     // Recursively sanitize object values and trim keys
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-      const trimmedKey = key.trim();
-      result[trimmedKey] = sanitizeValues(value);
+      // Sanitize keys the same way as values (remove invisible chars + trim)
+      const sanitizedKey = key
+        .normalize('NFKC')
+        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
+        .trim();
+      result[sanitizedKey] = sanitizeValues(value);
     }
     return result as T;
   }
