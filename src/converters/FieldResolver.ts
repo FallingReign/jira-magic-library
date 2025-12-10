@@ -340,19 +340,12 @@ export class FieldResolver {
     // Fetch all projects (cached)
     const projects = await this.fetchAllProjects();
     
-    // Build lookup array for fuzzy matching (use key as id, name as name)
-    // Also include key as an alias for matching by key (but avoid duplicates)
-    const projectLookup = projects.flatMap(p => {
-      // If name === key, only create one entry to avoid duplicate exact matches
-      if (p.name === p.key) {
-        return [{ id: p.key, name: p.name }];
-      }
-      // Otherwise create both entries for matching by name OR key
-      return [
-        { id: p.key, name: p.name },
-        { id: p.key, name: p.key },
-      ];
-    });
+    // Build lookup array - one entry per project with both key and name searchable
+    const projectLookup = projects.map(p => ({
+      id: p.key,
+      name: p.name,
+      key: p.key, // Include key as searchable field for Fuse.js
+    }));
     
     try {
       const matched = resolveUniqueName(input, projectLookup, {

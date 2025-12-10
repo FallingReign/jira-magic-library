@@ -112,9 +112,15 @@ export function resolveUniqueName(
 
   // Step 1: Exact match check (fast path - preserves existing performance)
   // E3-S16: Exact matches should always be preferred
-  const exactMatches = validValues.filter(
-    (v) => v.name.toLowerCase() === normalizedInput
-  );
+  // Check both 'name' and 'id' fields for exact matches
+  const exactMatches = validValues.filter((v) => {
+    const nameMatch = v.name.toLowerCase() === normalizedInput;
+    // Also check 'id' field if it exists (for project key matching)
+    const idMatch = v.id && v.id.toLowerCase() === normalizedInput;
+    // Check additional 'key' field if it exists (for explicit key matching)
+    const keyMatch = (v as any).key && (v as any).key.toLowerCase() === normalizedInput;
+    return nameMatch || idMatch || keyMatch;
+  });
 
   if (exactMatches.length === 1) {
     return exactMatches[0]!;
@@ -134,8 +140,14 @@ export function resolveUniqueName(
 
   // Step 2: Fuzzy search with fuse.js (E3-S16)
   // Handles underscores, dashes, typos, partial matches
+  // Search both 'name' and 'key' fields (if key exists, e.g., for projects)
+  const searchKeys = ['name'];
+  if (validValues.length > 0 && (validValues[0] as any).key !== undefined) {
+    searchKeys.push('key');
+  }
+  
   const fuse = new Fuse(validValues, {
-    keys: ['name'],
+    keys: searchKeys,
     // Threshold 0.3 = balanced fuzzy matching
     // - 0.0 = exact match only
     // - 0.3 = good tolerance for typos, underscores, dashes (chosen based on testing)
