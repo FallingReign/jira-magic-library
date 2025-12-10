@@ -347,7 +347,7 @@ export class FieldResolver {
       const matched = resolveUniqueName(input, projects, {
         field: 'project',
         fieldName: 'Project'
-      });
+      }) as { id: string; key: string; name: string };
       return matched.key; // Return project key (e.g., "ENG")
     } catch (error) {
       // Re-throw AmbiguityError as-is (don't mask it)
