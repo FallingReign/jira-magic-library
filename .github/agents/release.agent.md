@@ -2,7 +2,7 @@
 name: Release
 description: Publish a new version - bump version, update changelog, create and push git tag
 tools: ['runCommands', 'edit', 'search', 'todos', 'changes', 'fetch']
-model: Claude Opus 4.5 (Preview)
+model: Claude Sonnet 4.5
 ---
 
 # Release Agent

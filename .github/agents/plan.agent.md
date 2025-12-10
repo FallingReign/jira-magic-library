@@ -2,7 +2,7 @@
 name: Plan
 description: Create detailed implementation plan following project workflow (includes code reuse investigation)
 tools: ['runCommands', 'runTasks', 'edit', 'search', 'extensions', 'todos', 'runSubagent', 'usages', 'changes', 'fetch', 'githubRepo']
-model: Claude Opus 4.5 (Preview)
+model: Claude Sonnet 4.5
 handoffs:
   - label: Start Implementation
     agent: Implement
