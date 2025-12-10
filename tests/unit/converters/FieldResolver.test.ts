@@ -1221,6 +1221,54 @@ describe('FieldResolver', () => {
         expect(result.issueType).toBe('Task');
       });
 
+      it('should resolve project by JIRA internal ID', async () => {
+        const input = {
+          Project: '10001', // JIRA's internal ID
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP'); // Resolves ID to key
+      });
+
+      it('should resolve project by key "HELP"', async () => {
+        const input = {
+          Project: 'HELP', // Project key
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP');
+      });
+
+      it('should resolve project by name "Help Desk"', async () => {
+        const input = {
+          Project: 'Help Desk', // Full name with space
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP');
+      });
+
+      it('should resolve project by partial name match', async () => {
+        const input = {
+          Project: 'help', // Lowercase partial match
+          'Issue Type': 'Bug',
+          Summary: 'Test',
+        };
+
+        const result = await resolverWithClient.resolveFieldsWithExtraction(input);
+
+        expect(result.projectKey).toBe('HELP');
+      });
+
       it('should throw ValidationError for unknown project', async () => {
         const input = {
           Project: 'UNKNOWN',
