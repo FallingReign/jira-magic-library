@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.5.1] - 2025-12-10
+
+### Fixed
+- **Project matching bug when name equals key** - Fixed edge case where projects with identical name and key (e.g., 'HELP') caused duplicate entries leading to false "ambiguous match" errors
+- **Project lookup optimization** - Eliminated unnecessary data transformation; now uses JIRA project objects directly in native format (`{id, key, name}`)
+- **Enhanced project matching** - Added support for matching projects by JIRA's internal ID field (e.g., '10001') in addition to key and name
+
+### Changed
+- Simplified project resolution logic to pass JIRA data through unchanged, improving maintainability and reducing edge cases
+
 ## [1.5.0] - 2025-12-08
 
 ### Added
