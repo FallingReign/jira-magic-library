@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.6.0] - 2025-01-12
+
+### Added
+- **Configurable HTTP timeouts** - New `timeout` configuration option for fine-grained control over request timeouts
+  - `timeout.default` - Default timeout for all requests (10s default)
+  - `timeout.bulk` - Timeout for bulk operations (30s default, up from 10s)
+  - `timeout.single` - Timeout for single issue creation (10s default)
+  - Per-request timeout overrides available on all HTTP methods
+  - Fully backwards compatible - no configuration required
+- 22 comprehensive unit tests for timeout configuration covering all edge cases and backwards compatibility
+
+### Changed
+- **Bulk operations now default to 30 seconds** (up from 10s) - Provides immediate relief for slow JIRA instances or large bulk operations without configuration
+
 ## [1.5.1] - 2025-12-10
 
 ### Fixed
