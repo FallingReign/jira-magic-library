@@ -21,10 +21,10 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
  * Interface for JIRA HTTP client
  */
 export interface JiraClient {
-  get<T = unknown>(endpoint: string, params?: Record<string, unknown>): Promise<T>;
-  post<T = unknown>(endpoint: string, body: unknown): Promise<T>;
-  put<T = unknown>(endpoint: string, body: unknown): Promise<T>;
-  delete<T = unknown>(endpoint: string): Promise<T>;
+  get<T = unknown>(endpoint: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<T>;
+  post<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T>;
+  put<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T>;
+  delete<T = unknown>(endpoint: string, timeoutMs?: number): Promise<T>;
 }
 
 /**
@@ -68,44 +68,47 @@ export class JiraClientImpl implements JiraClient {
   private readonly semaphore: Semaphore;
   private readonly maxRetries = 3;
   private readonly retryDelays = [1000, 2000, 4000]; // 1s, 2s, 4s
-  private readonly timeout = 10000; // 10 seconds
+  private readonly defaultTimeout: number;
 
   constructor(config: JMLConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
     this.pat = config.auth.token;
     this.semaphore = new Semaphore(10); // Max 10 concurrent requests
+
+    // Initialize default timeout from config
+    this.defaultTimeout = config.timeout?.default ?? 10000;
   }
 
   /**
    * Make a GET request
    */
-  async get<T = unknown>(endpoint: string, params?: Record<string, unknown>): Promise<T> {
+  async get<T = unknown>(endpoint: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<T> {
     const url = this.buildUrl(endpoint, params);
-    return this.request<T>('GET', url);
+    return this.request<T>('GET', url, undefined, timeoutMs);
   }
 
   /**
    * Make a POST request
    */
-  async post<T = unknown>(endpoint: string, body: unknown): Promise<T> {
+  async post<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T> {
     const url = this.buildUrl(endpoint);
-    return this.request<T>('POST', url, body);
+    return this.request<T>('POST', url, body, timeoutMs);
   }
 
   /**
    * Make a PUT request
    */
-  async put<T = unknown>(endpoint: string, body: unknown): Promise<T> {
+  async put<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T> {
     const url = this.buildUrl(endpoint);
-    return this.request<T>('PUT', url, body);
+    return this.request<T>('PUT', url, body, timeoutMs);
   }
 
   /**
    * Make a DELETE request
    */
-  async delete<T = unknown>(endpoint: string): Promise<T> {
+  async delete<T = unknown>(endpoint: string, timeoutMs?: number): Promise<T> {
     const url = this.buildUrl(endpoint);
-    return this.request<T>('DELETE', url);
+    return this.request<T>('DELETE', url, undefined, timeoutMs);
   }
 
   /**
@@ -132,17 +135,20 @@ export class JiraClientImpl implements JiraClient {
   /**
    * Make HTTP request with retry logic and concurrency control
    */
-  private async request<T>(method: HttpMethod, url: string, body?: unknown): Promise<T> {
+  private async request<T>(method: HttpMethod, url: string, body?: unknown, timeoutOverride?: number): Promise<T> {
     // Acquire semaphore slot
     await this.semaphore.acquire();
 
     try {
+      // Use provided timeout override, or default to configured default timeout
+      const timeout = timeoutOverride ?? this.defaultTimeout;
+
       // Attempt request with retries
       for (let attempt = 0; attempt < this.maxRetries; attempt++) {
         try {
           // Create abort controller for timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
 
           // Make request
           const response = await fetch(url, {

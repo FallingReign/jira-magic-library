@@ -168,7 +168,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
           issueUpdates: expect.arrayContaining([
             expect.objectContaining({ fields: expect.any(Object) })
           ])
-        })
+        }),
+        expect.any(Number) // Timeout parameter
       );
     });
 

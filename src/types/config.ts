@@ -63,6 +63,45 @@ export interface FuzzyMatchConfig {
 }
 
 /**
+ * HTTP timeout configuration for API requests.
+ *
+ * Allows fine-grained control over request timeouts to handle slow JIRA instances
+ * or large bulk operations.
+ *
+ * @example
+ * ```typescript
+ * {
+ *   timeout: {
+ *     default: 15000,  // 15s default
+ *     bulk: 60000,     // 60s for bulk operations
+ *     single: 10000    // 10s for single issues
+ *   }
+ * }
+ * ```
+ */
+export interface TimeoutConfig {
+  /**
+   * Default timeout for all requests in milliseconds.
+   * @default 10000 (10 seconds)
+   */
+  default?: number;
+
+  /**
+   * Timeout for bulk operations in milliseconds.
+   * Takes precedence over `default` for bulk API calls.
+   * @default 30000 (30 seconds)
+   */
+  bulk?: number;
+
+  /**
+   * Timeout for single issue operations in milliseconds.
+   * Takes precedence over `default` for single issue creation.
+   * @default 10000 (10 seconds)
+   */
+  single?: number;
+}
+
+/**
  * Main configuration interface for the JIRA Magic Library
  */
 export interface JMLConfig {
@@ -140,6 +179,27 @@ export interface JMLConfig {
    * ```
    */
   preprocessQuotes?: boolean;
+
+  /**
+   * HTTP timeout configuration for API requests.
+   *
+   * Allows fine-grained control over request timeouts:
+   * - `default`: Fallback timeout for all requests (10s)
+   * - `bulk`: Timeout for bulk operations (30s)
+   * - `single`: Timeout for single issue creation (10s)
+   *
+   * @example
+   * ```typescript
+   * {
+   *   timeout: {
+   *     default: 15000,  // 15s default
+   *     bulk: 120000,    // 2 minutes for bulk operations
+   *     single: 10000    // 10s for single issues
+   *   }
+   * }
+   * ```
+   */
+  timeout?: TimeoutConfig;
 }
 
 /**

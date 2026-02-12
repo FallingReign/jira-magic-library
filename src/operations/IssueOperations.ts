@@ -101,7 +101,10 @@ export class IssueOperations implements IssuesAPI {
     // Note: LookupCache is always RedisCache at runtime (from JML constructor)
     if (cache) {
       this.manifestStorage = new ManifestStorage(cache as unknown as RedisCache);
-      this.bulkApiWrapper = new JiraBulkApiWrapper(client);
+
+      // Pass bulk timeout from config to wrapper (default 30s if not configured)
+      const bulkTimeout = this.config?.timeout?.bulk;
+      this.bulkApiWrapper = new JiraBulkApiWrapper(client, bulkTimeout);
     }
   }
 

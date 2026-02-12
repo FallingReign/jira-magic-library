@@ -41,7 +41,8 @@ describe('JiraBulkApiWrapper', () => {
       // Verify correct endpoint and payload structure
       expect(mockClient.post).toHaveBeenCalledWith(
         '/rest/api/2/issue/bulk',
-        { issueUpdates: payloads }
+        { issueUpdates: payloads },
+        30000 // Default bulk timeout
       );
     });
 

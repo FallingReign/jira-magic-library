@@ -58,12 +58,20 @@ interface BulkIssuePayload {
  * ```
  */
 export class JiraBulkApiWrapper {
+  private readonly bulkTimeout: number;
+
   /**
    * Creates a new JiraBulkApiWrapper instance
-   * 
+   *
    * @param client - JIRA API client from E1-S05
+   * @param bulkTimeout - Optional timeout for bulk operations in milliseconds (default: 30000)
    */
-  constructor(private readonly client: JiraClient) {}
+  constructor(
+    private readonly client: JiraClient,
+    bulkTimeout?: number
+  ) {
+    this.bulkTimeout = bulkTimeout ?? 30000; // Default 30s for bulk operations
+  }
 
   /**
    * Create multiple issues using JIRA bulk API
@@ -96,10 +104,11 @@ export class JiraBulkApiWrapper {
    */
   async createBulk(payloads: BulkIssuePayload[]): Promise<BulkApiResult> {
     try {
-      // Call JIRA bulk API
+      // Call JIRA bulk API with bulk-specific timeout
       const response = await this.client.post<JiraBulkApiResponse>(
         '/rest/api/2/issue/bulk',
-        { issueUpdates: payloads }
+        { issueUpdates: payloads },
+        this.bulkTimeout // Pass bulk timeout to client
       );
 
       // Normalize response to BulkApiResult
