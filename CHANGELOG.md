@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
-## [1.6.0] - 2025-01-12
+## [1.6.0] - 2025-02-12
 
 ### Added
 - **Configurable HTTP timeouts** - New `timeout` configuration option for fine-grained control over request timeouts
