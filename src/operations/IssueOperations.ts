@@ -13,6 +13,7 @@ import { RedisCache } from '../cache/RedisCache.js';
 import { UidReplacer } from './bulk/UidReplacer.js';
 import type { HierarchyLevel } from './bulk/HierarchyLevels.js';
 import { preprocessHierarchyRecords } from './bulk/HierarchyPreprocessor.js';
+import { IssueSearch } from './IssueSearch.js';
 
 /**
  * Input supported by {@link JML.issues | `jml.issues.create`}.
@@ -77,16 +78,40 @@ export interface IssuesAPI {
     input: IssuesCreateInput,
     options?: IssuesCreateOptions
   ): Promise<Issue | BulkResult>;
+
+  /**
+   * Search for issues using human-readable field names and values.
+   *
+   * - Leverages existing field resolution and value conversion logic.
+   * - Generates optimized JQL queries automatically.
+   * - Supports fuzzy matching, custom fields, and complex criteria.
+   *
+   * @param criteria - Search criteria with human-readable field names.
+   * @returns Array of matching issues.
+   * @example
+   * ```typescript
+   * const issues = await jml.issues.search({
+   *   project: "Engineering",
+   *   assignee: "John Smith",
+   *   status: "In Progress",
+   *   "Risk Level": "High",
+   *   labels: ["backend", "urgent"],
+   *   createdSince: "2025-02-12"
+   * });
+   * ```
+   */
+  search(criteria: Record<string, unknown>): Promise<Issue[]>;
 }
 
 /**
  * Issue operations for creating, updating, and managing JIRA issues
- * 
+ *
  * E4-S04: Unified create() method supports both single and bulk creation
  */
 export class IssueOperations implements IssuesAPI {
   private manifestStorage?: ManifestStorage;
   private bulkApiWrapper?: JiraBulkApiWrapper;
+  private issueSearch: IssueSearch;
 
   constructor(
     private client: JiraClient,
@@ -106,6 +131,9 @@ export class IssueOperations implements IssuesAPI {
       const bulkTimeout = this.config?.timeout?.bulk;
       this.bulkApiWrapper = new JiraBulkApiWrapper(client, bulkTimeout);
     }
+
+    // Initialize Issue Search API (Phase 2.1)
+    this.issueSearch = new IssueSearch(client, schema, resolver, converter);
   }
 
   /**
@@ -1247,6 +1275,42 @@ export class IssueOperations implements IssuesAPI {
         })),
       ],
     };
+  }
+
+  /**
+   * Search for issues using human-readable field names and values.
+   *
+   * This method provides a friendly search API that:
+   * - Resolves field names via the schema (e.g., "Risk Level" → "customfield_12345")
+   * - Converts values using existing converters (e.g., "John Smith" → user accountId)
+   * - Generates optimized JQL queries automatically
+   * - Supports fuzzy matching, custom fields, and complex criteria
+   *
+   * @param criteria - Search criteria with human-readable field names
+   * @returns Array of matching issues
+   *
+   * @example
+   * ```typescript
+   * // Simple search
+   * const issues = await jml.issues.search({
+   *   project: "Engineering",
+   *   assignee: "John Smith",
+   *   status: "In Progress"
+   * });
+   *
+   * // Advanced search with custom fields and date filters
+   * const issues = await jml.issues.search({
+   *   project: "ENG",
+   *   "Risk Level": "High",
+   *   labels: ["backend", "urgent"],
+   *   createdSince: "2025-02-12",
+   *   maxResults: 50,
+   *   orderBy: "created DESC"
+   * });
+   * ```
+   */
+  async search(criteria: Record<string, unknown>): Promise<Issue[]> {
+    return this.issueSearch.search(criteria);
   }
 }
 

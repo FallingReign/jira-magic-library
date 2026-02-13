@@ -17,6 +17,10 @@ export type {
   IssuesCreateOptions,
 } from './operations/IssueOperations.js';
 
+// Issue Search API (Phase 2.1)
+export { IssueSearch } from './operations/IssueSearch.js';
+export type { IssuesSearchOptions } from './operations/IssueSearch.js';
+
 // Configuration
 export { loadConfig } from './config/loader.js';
 

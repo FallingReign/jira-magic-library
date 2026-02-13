@@ -4,8 +4,15 @@
  */
 
 /**
+ * Payload for a single issue in bulk creation
+ */
+export interface BulkIssuePayload {
+  fields: Record<string, unknown>;
+}
+
+/**
  * Manifest tracking bulk operation results
- * 
+ *
  * Structure aligns with E4-S03 JIRA bulk API response format for zero-conversion storage.
  */
 export interface BulkManifest {
