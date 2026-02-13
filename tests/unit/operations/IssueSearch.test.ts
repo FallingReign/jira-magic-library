@@ -362,4 +362,155 @@ describe('IssueSearch', () => {
       );
     });
   });
+
+  describe('Raw JQL Support', () => {
+    it('should accept raw JQL query', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({
+        issues: [
+          { key: 'PROJ-1', fields: { summary: 'Test' } },
+          { key: 'PROJ-2', fields: { summary: 'Another' } }
+        ],
+        total: 2
+      });
+
+      // Act
+      const results = await issueSearch.search({
+        jql: 'project = PROJ AND issuetype = Task AND cf[10306] = mp_proj_newsroom AND status = Done AND labels = mp-mode'
+      });
+
+      // Assert
+      expect(results).toHaveLength(2);
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: 'project = PROJ AND issuetype = Task AND cf[10306] = mp_proj_newsroom AND status = Done AND labels = mp-mode'
+        })
+      );
+    });
+
+    it('should ignore object fields when raw JQL provided', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({ issues: [], total: 0 });
+
+      // Act
+      await issueSearch.search({
+        jql: 'project = PROJ',
+        project: 'Engineering', // Should be ignored
+        status: 'Done'           // Should be ignored
+      });
+
+      // Assert
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: 'project = PROJ'
+        })
+      );
+
+      // Verify object fields were not processed
+      expect(mockResolver.resolveFieldName).not.toHaveBeenCalled();
+      expect(mockConverter.convert).not.toHaveBeenCalled();
+    });
+
+    it('should apply createdSince filter to raw JQL', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({ issues: [], total: 0 });
+      const testDate = new Date('2025-02-12T10:00:00Z');
+
+      // Act
+      await issueSearch.search({
+        jql: 'project = PROJ AND status = Done',
+        createdSince: testDate
+      });
+
+      // Assert
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: expect.stringMatching(/\(project = PROJ AND status = Done\) AND created >= "2025-02-12/)
+        })
+      );
+    });
+
+    it('should apply orderBy to raw JQL', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({ issues: [], total: 0 });
+
+      // Act
+      await issueSearch.search({
+        jql: 'project = PROJ',
+        orderBy: 'created DESC'
+      });
+
+      // Assert
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: 'project = PROJ ORDER BY created DESC'
+        })
+      );
+    });
+
+    it('should combine createdSince and orderBy with raw JQL', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({ issues: [], total: 0 });
+
+      // Act
+      await issueSearch.search({
+        jql: 'project = PROJ',
+        createdSince: '2025-02-12',
+        orderBy: 'priority DESC'
+      });
+
+      // Assert
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: expect.stringMatching(/\(project = PROJ\) AND created >= "2025-02-12" ORDER BY priority DESC/)
+        })
+      );
+    });
+
+    it('should respect maxResults with raw JQL', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({ issues: [], total: 0 });
+
+      // Act
+      await issueSearch.search({
+        jql: 'project = PROJ',
+        maxResults: 25
+      });
+
+      // Assert
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: 'project = PROJ',
+          maxResults: 25
+        })
+      );
+    });
+
+    it('should handle complex raw JQL with custom fields and operators', async () => {
+      // Arrange
+      mockClient.get.mockResolvedValue({ issues: [], total: 0 });
+
+      const complexJql = 'project = PROJ AND (status = "In Progress" OR status = Done) ' +
+                        'AND cf[10306] != empty AND priority >= High ' +
+                        'AND assignee in (jsmith, jdoe) ' +
+                        'AND labels in (backend, urgent)';
+
+      // Act
+      await issueSearch.search({ jql: complexJql });
+
+      // Assert
+      expect(mockClient.get).toHaveBeenCalledWith(
+        '/rest/api/2/search',
+        expect.objectContaining({
+          jql: complexJql
+        })
+      );
+    });
+  });
 });

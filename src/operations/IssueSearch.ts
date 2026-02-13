@@ -16,7 +16,11 @@ import type { Issue } from '../types/index.js';
  * Search options for issue queries
  */
 export interface IssuesSearchOptions {
-  // Common search fields
+  // Raw JQL query (power user option)
+  // If provided, all other search fields are ignored
+  jql?: string;
+
+  // Common search fields (object-based convenience API)
   project?: string;
   assignee?: string;
   status?: string;
@@ -26,7 +30,7 @@ export interface IssuesSearchOptions {
   // Custom fields (using human-readable names)
   [fieldName: string]: unknown;
 
-  // Search options
+  // Search options (apply to both raw JQL and object-based)
   maxResults?: number;
   orderBy?: string;
   createdSince?: Date | string;
@@ -60,60 +64,96 @@ export class IssueSearch {
   /**
    * Search for issues using human-readable criteria
    *
-   * @param criteria - Search criteria with human-readable field names
+   * Supports two modes:
+   * 1. Raw JQL: Pass `jql` option for full control
+   * 2. Object-based: Pass field names/values for simple queries
+   *
+   * @param criteria - Search criteria with human-readable field names or raw JQL
    * @returns Array of matching issues
+   *
+   * @example
+   * // Raw JQL (power user)
+   * const issues = await search({
+   *   jql: "project = PROJ AND cf[10306] = mp_proj_newsroom AND status = Done"
+   * });
+   *
+   * @example
+   * // Object-based (convenience)
+   * const issues = await search({
+   *   project: "PROJ",
+   *   status: "Done",
+   *   labels: ["backend"]
+   * });
    */
   async search(criteria: IssuesSearchOptions): Promise<Issue[]> {
     // Extract search options
-    const { maxResults = 100, orderBy, createdSince, ...searchFields } = criteria;
+    const { maxResults = 100, orderBy, createdSince, jql: rawJql, ...searchFields } = criteria;
 
-    // Build JQL clauses
-    const jqlClauses: string[] = [];
+    let jql: string;
 
-    // Process each search field
-    for (const [fieldName, value] of Object.entries(searchFields)) {
-      // Skip undefined and null values
-      if (value === undefined || value === null) {
-        continue;
+    // Mode 1: Raw JQL provided (power user)
+    if (rawJql) {
+      jql = rawJql;
+
+      // Add createdSince filter if provided
+      if (createdSince) {
+        const dateStr = this.formatDate(createdSince);
+        jql = `(${jql}) AND created >= "${dateStr}"`;
       }
 
-      // For MVP, use field names directly (no resolution)
-      // Future enhancement: add field resolution via schema
-      const jqlFieldName = fieldName;
+      // Add ORDER BY clause if specified
+      if (orderBy) {
+        jql = `${jql} ORDER BY ${orderBy}`;
+      }
+    } else {
+      // Mode 2: Object-based search (build JQL from fields)
+      const jqlClauses: string[] = [];
 
-      // Handle arrays (e.g., labels)
-      if (Array.isArray(value)) {
-        const escapedValues = value.map((v) => this.escapeJqlValue(String(v)));
-        jqlClauses.push(`${jqlFieldName} IN (${escapedValues.join(', ')})`);
-        continue;
+      // Process each search field
+      for (const [fieldName, value] of Object.entries(searchFields)) {
+        // Skip undefined and null values
+        if (value === undefined || value === null) {
+          continue;
+        }
+
+        // For MVP, use field names directly (no resolution)
+        // Future enhancement: add field resolution via schema
+        const jqlFieldName = fieldName;
+
+        // Handle arrays (e.g., labels)
+        if (Array.isArray(value)) {
+          const escapedValues = value.map((v) => this.escapeJqlValue(String(v)));
+          jqlClauses.push(`${jqlFieldName} IN (${escapedValues.join(', ')})`);
+          continue;
+        }
+
+        // For MVP, use values directly (no conversion)
+        // Future enhancement: use ConverterRegistry for value conversion
+        const jqlValue = String(value);
+
+        // Build JQL clause
+        const jqlClause = `${jqlFieldName} ~ "${this.escapeJqlString(jqlValue)}"`;
+        jqlClauses.push(jqlClause);
       }
 
-      // For MVP, use values directly (no conversion)
-      // Future enhancement: use ConverterRegistry for value conversion
-      const jqlValue = String(value);
+      // Add createdSince filter if provided
+      if (createdSince) {
+        const dateStr = this.formatDate(createdSince);
+        jqlClauses.push(`created >= "${dateStr}"`);
+      }
 
-      // Build JQL clause
-      const jqlClause = `${jqlFieldName} ~ "${this.escapeJqlString(jqlValue)}"`;
-      jqlClauses.push(jqlClause);
-    }
+      // Combine all clauses with AND
+      jql = jqlClauses.join(' AND ');
 
-    // Add createdSince filter if provided
-    if (createdSince) {
-      const dateStr = this.formatDate(createdSince);
-      jqlClauses.push(`created >= "${dateStr}"`);
-    }
+      // Add empty clause if no filters
+      if (jqlClauses.length === 0) {
+        jql = '';
+      }
 
-    // Combine all clauses with AND
-    let jql = jqlClauses.join(' AND ');
-
-    // Add empty clause if no filters
-    if (jqlClauses.length === 0) {
-      jql = '';
-    }
-
-    // Add ORDER BY clause if specified
-    if (orderBy) {
-      jql = jql ? `${jql} ORDER BY ${orderBy}` : `ORDER BY ${orderBy}`;
+      // Add ORDER BY clause if specified
+      if (orderBy) {
+        jql = jql ? `${jql} ORDER BY ${orderBy}` : `ORDER BY ${orderBy}`;
+      }
     }
 
     // Execute search
