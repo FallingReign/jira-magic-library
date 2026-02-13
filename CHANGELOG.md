@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
-## [Unreleased]
+## [1.7.0] - 2026-02-13
 
 ### Added
 - **Progress Tracking for Bulk Operations** - Real-time progress monitoring during long-running bulk operations
