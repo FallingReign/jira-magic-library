@@ -14,6 +14,8 @@ import { UidReplacer } from './bulk/UidReplacer.js';
 import type { HierarchyLevel } from './bulk/HierarchyLevels.js';
 import { preprocessHierarchyRecords } from './bulk/HierarchyPreprocessor.js';
 import { IssueSearch } from './IssueSearch.js';
+import { MarkerInjector } from './bulk/MarkerInjector.js';
+import { BulkProgressTracker, type ProgressUpdate } from './bulk/BulkProgressTracker.js';
 
 /**
  * Input supported by {@link JML.issues | `jml.issues.create`}.
@@ -52,6 +54,19 @@ export interface IssuesCreateOptions {
    * @example { user: { enabled: true, threshold: 0.3 } }
    */
   fuzzyMatch?: FuzzyMatchConfig;
+  /**
+   * Progress tracking callback for bulk operations.
+   * Receives progress updates during long-running bulk operations.
+   * @example
+   * ```typescript
+   * await jml.issues.create(rows, {
+   *   onProgress: (progress) => {
+   *     console.log(`${progress.completed}/${progress.total} issues created`);
+   *   }
+   * });
+   * ```
+   */
+  onProgress?: (progress: ProgressUpdate) => void;
 }
 
 /**
@@ -342,7 +357,8 @@ export class IssueOperations implements IssuesAPI {
       return this.retryWithHierarchy(
         filteredInput,
         failedRowIndices,
-        manifest
+        manifest,
+        _options // Pass options for progress tracking
       );
     }
 
@@ -652,7 +668,9 @@ export class IssueOperations implements IssuesAPI {
       // Route to hierarchy-based creation
       return this.createBulkHierarchy(
         preprocessResult.levels,
-        preprocessResult.uidMap
+        preprocessResult.uidMap,
+        undefined, // existingMappings
+        _options // options for progress tracking
       );
     }
     
@@ -712,6 +730,43 @@ export class IssueOperations implements IssuesAPI {
       throw firstError || new Error('All records failed validation');
     }
 
+    // Progress tracking setup (Phase 2.2)
+    let markerInjector: MarkerInjector | undefined;
+    let progressTracker: BulkProgressTracker | undefined;
+    const createdIssueKeys: string[] = [];
+
+    // Check if progress tracking is enabled
+    const progressEnabled = this.config?.timeout?.cleanupMarkers !== false;
+
+    if (progressEnabled) {
+      // Create unique job ID for this operation
+      const jobId = `bulk-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      markerInjector = new MarkerInjector(jobId, this.client);
+
+      // Inject markers into all valid payloads
+      validPayloads.forEach(vp => {
+        vp.payload = markerInjector!.injectMarker(vp.payload);
+      });
+
+      // Start progress tracker if callback provided
+      if (_options?.onProgress) {
+        progressTracker = new BulkProgressTracker(
+          this.issueSearch,
+          markerInjector,
+          {
+            totalIssues: validPayloads.length,
+            progressTimeout: this.config?.timeout?.progressTimeout,
+            pollingInterval: this.config?.timeout?.progressPolling
+          }
+        );
+
+        // Start tracking (non-blocking)
+        progressTracker.startTracking(_options.onProgress).catch(err => {
+          console.warn('Progress tracking error:', err);
+        });
+      }
+    }
+
     // Call bulk API with valid payloads only (E4-S03)
     // istanbul ignore next - defensive: validPayloads.length already checked above
     const apiResult = validPayloads.length > 0 
@@ -732,6 +787,16 @@ export class IssueOperations implements IssuesAPI {
       ...item,
       index: indexMapping.get(item.index) ?? item.index
     }));
+
+    // Stop progress tracking after API call (Phase 2.2)
+    if (progressTracker) {
+      progressTracker.stopTracking();
+    }
+
+    // Collect created issue keys for marker cleanup
+    if (progressEnabled && remappedCreated.length > 0) {
+      remappedCreated.forEach(item => createdIssueKeys.push(item.key));
+    }
 
     // Build manifest (E4-S02)
     const manifestId = `bulk-${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -769,6 +834,14 @@ export class IssueOperations implements IssuesAPI {
     // Store manifest (E4-S02)
     await this.manifestStorage.storeManifest(manifest);
 
+    // Clean up markers from created issues (Phase 2.2)
+    // Run in background - don't block return
+    if (markerInjector && createdIssueKeys.length > 0) {
+      markerInjector.removeMarkersFromIssues(createdIssueKeys).catch(err => {
+        console.warn('Marker cleanup failed (non-fatal):', err);
+      });
+    }
+
     // Return unified result
     return {
       manifest,
@@ -800,26 +873,28 @@ export class IssueOperations implements IssuesAPI {
 
   /**
    * Retry hierarchy operation with UID mappings
-   * 
+   *
    * Story: E4-S13 - AC8: Retry Hierarchy Awareness
-   * 
+   *
    * When retrying a failed hierarchy operation:
    * 1. Load existing UID→Key mappings from manifest
    * 2. Preprocess failed records to rebuild hierarchy levels
    * 3. Replace UIDs with keys from previous successful creations
    * 4. Create remaining issues level by level
-   * 
+   *
    * @param filteredInput - Failed records to retry
    * @param failedRowIndices - Original indices of failed records
    * @param manifest - Original manifest with uidMap
+   * @param options - Options including progress callback
    * @returns Combined BulkResult
-   * 
+   *
    * @private
    */
   private async retryWithHierarchy(
     filteredInput: Array<Record<string, unknown>>,
     failedRowIndices: number[],
-    manifest: BulkManifest
+    manifest: BulkManifest,
+    options?: IssuesCreateOptions
   ): Promise<BulkResult> {
     // Preprocess failed records to rebuild hierarchy
     const preprocessResult = await preprocessHierarchyRecords(filteredInput);
@@ -898,7 +973,8 @@ export class IssueOperations implements IssuesAPI {
     const hierarchyResult = await this.createBulkHierarchy(
       preprocessResult.levels,
       preprocessResult.uidMap,
-      manifest.uidMap // Pass existing UID→Key mappings
+      manifest.uidMap, // Pass existing UID→Key mappings
+      options // options for progress tracking
     );
 
     // Merge hierarchy results into original manifest
@@ -1082,29 +1158,31 @@ export class IssueOperations implements IssuesAPI {
 
   /**
    * Create issues with hierarchy using level-based batching
-   * 
+   *
    * Story: E4-S13 - AC2: Level-Based Handler Method
-   * 
+   *
    * Processes hierarchy levels sequentially:
    * 1. Create Level 0 issues (roots/epics)
    * 2. Replace Parent UIDs with actual keys
    * 3. Create Level 1 issues (children of roots)
    * 4. Continue for all levels...
-   * 
+   *
    * This enables efficient parallel creation within each level
    * while maintaining parent-before-child dependencies.
-   * 
+   *
    * @param levels - Hierarchy levels from preprocessHierarchyRecords()
    * @param uidMap - Initial UID to index mapping (for tracking)
    * @param existingMappings - Existing UID→Key mappings (for retry)
+   * @param options - Options including progress callback (Phase 2.2)
    * @returns BulkResult with all created issues and UID mappings
-   * 
+   *
    * @private
    */
   async createBulkHierarchy(
     levels: HierarchyLevel[],
     _uidMap?: Record<string, number>, // Preserved for future retry index mapping
-    existingMappings?: Record<string, string>
+    existingMappings?: Record<string, string>,
+    options?: IssuesCreateOptions // Added for progress tracking
   ): Promise<BulkResult> {
     // Ensure bulk dependencies are available
     if (!this.manifestStorage || !this.bulkApiWrapper) {
@@ -1112,10 +1190,26 @@ export class IssueOperations implements IssuesAPI {
     }
 
     const uidReplacer = new UidReplacer();
-    
+
     // Load existing mappings for retry scenarios
     if (existingMappings) {
       uidReplacer.loadExistingMappings(existingMappings);
+    }
+
+    // Progress tracking setup for hierarchy (Phase 2.2)
+    let markerInjector: MarkerInjector | undefined;
+    let progressTracker: BulkProgressTracker | undefined;
+    const createdIssueKeys: string[] = [];
+
+    // Check if progress tracking is enabled
+    const progressEnabled = this.config?.timeout?.cleanupMarkers !== false;
+
+    if (progressEnabled) {
+      // Create unique job ID for this hierarchy operation
+      const jobId = `hier-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      markerInjector = new MarkerInjector(jobId, this.client);
+
+      // Note: Progress tracker will be started after calculating total issues
     }
 
     // Track all results across levels
@@ -1186,6 +1280,35 @@ export class IssueOperations implements IssuesAPI {
         continue;
       }
 
+      // Inject markers into payloads for this level (Phase 2.2)
+      if (markerInjector) {
+        validPayloads.forEach(vp => {
+          vp.payload = markerInjector!.injectMarker(vp.payload);
+        });
+      }
+
+      // Start progress tracker on first level (if callback provided)
+      // Note: We track across ALL levels with a single tracker
+      if (!progressTracker && markerInjector && options?.onProgress) {
+        // Calculate total issues across all levels
+        const calculatedTotal = levels.reduce((sum, lvl) => sum + lvl.issues.length, 0);
+
+        progressTracker = new BulkProgressTracker(
+          this.issueSearch,
+          markerInjector,
+          {
+            totalIssues: calculatedTotal,
+            progressTimeout: this.config?.timeout?.progressTimeout,
+            pollingInterval: this.config?.timeout?.progressPolling
+          }
+        );
+
+        // Start tracking (non-blocking)
+        progressTracker.startTracking(options.onProgress).catch(err => {
+          console.warn('Progress tracking error:', err);
+        });
+      }
+
       // Call bulk API for this level
       const apiResult = await this.bulkApiWrapper.createBulk(
         validPayloads.map(vp => vp.payload)
@@ -1196,11 +1319,16 @@ export class IssueOperations implements IssuesAPI {
         const validPayload = validPayloads[item.index];
         if (validPayload) {
           // Remap to original index
-          allCreated.push({ 
-            index: validPayload.index, 
-            key: item.key 
+          allCreated.push({
+            index: validPayload.index,
+            key: item.key
           });
-          
+
+          // Collect for marker cleanup (Phase 2.2)
+          if (progressEnabled) {
+            createdIssueKeys.push(item.key);
+          }
+
           // Record UID→Key mapping for next level
           if (validPayload.uid) {
             uidReplacer.recordCreation(validPayload.uid, item.key);
@@ -1219,6 +1347,11 @@ export class IssueOperations implements IssuesAPI {
           });
         }
       });
+    }
+
+    // Stop progress tracking after all levels complete (Phase 2.2)
+    if (progressTracker) {
+      progressTracker.stopTracking();
     }
 
     // Build manifest with UID mappings
@@ -1251,6 +1384,14 @@ export class IssueOperations implements IssuesAPI {
 
     // Store manifest
     await this.manifestStorage.storeManifest(manifest);
+
+    // Clean up markers from created issues (Phase 2.2)
+    // Run in background - don't block return
+    if (markerInjector && createdIssueKeys.length > 0) {
+      markerInjector.removeMarkersFromIssues(createdIssueKeys).catch(err => {
+        console.warn('Marker cleanup failed (non-fatal):', err);
+      });
+    }
 
     return {
       manifest,

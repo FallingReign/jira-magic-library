@@ -74,7 +74,10 @@ export interface FuzzyMatchConfig {
  *   timeout: {
  *     default: 15000,  // 15s default
  *     bulk: 60000,     // 60s for bulk operations
- *     single: 10000    // 10s for single issues
+ *     single: 10000,   // 10s for single issues
+ *     progressTimeout: 120000,  // 2 minutes since last progress
+ *     progressPolling: 2000,    // Poll every 2 seconds
+ *     cleanupMarkers: true      // Clean up tracking labels
  *   }
  * }
  * ```
@@ -99,6 +102,28 @@ export interface TimeoutConfig {
    * @default 10000 (10 seconds)
    */
   single?: number;
+
+  /**
+   * Progress-based timeout for bulk operations in milliseconds.
+   * Timeout triggers if no new issues are created for this duration.
+   * Uses time since last progress (not total operation time).
+   * @default 120000 (120 seconds / 2 minutes)
+   */
+  progressTimeout?: number;
+
+  /**
+   * Polling interval for progress tracking in milliseconds.
+   * How often to check JIRA for newly created issues.
+   * @default 2000 (2 seconds)
+   */
+  progressPolling?: number;
+
+  /**
+   * Whether to clean up tracking markers after bulk operations.
+   * When enabled, temporary labels are removed from created issues.
+   * @default true
+   */
+  cleanupMarkers?: boolean;
 }
 
 /**

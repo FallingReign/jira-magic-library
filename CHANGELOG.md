@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [Unreleased]
+
+### Added
+- **Progress Tracking for Bulk Operations (Phase 2.2)** - Real-time progress monitoring during long-running bulk operations
+  - New `onProgress` callback option in `jml.issues.create()` receives progress updates during bulk operations
+  - Progress-based timeout monitoring - tracks time since last issue created rather than total operation time
+  - Automatic label marker injection for progress detection via JIRA search API
+  - Configurable progress tracking:
+    - `timeout.progressTimeout` - Time with no new issues before timeout (default: 120s)
+    - `timeout.progressPolling` - Polling interval for progress checks (default: 2s)
+    - `timeout.cleanupMarkers` - Enable/disable automatic cleanup of tracking labels (default: true)
+  - Automatic cleanup of tracking markers after successful completion (non-blocking background operation)
+  - Works with both flat bulk operations and hierarchical bulk operations
+  - 14 comprehensive unit tests for progress tracking integration
+- **Issue Search API Foundation (Phase 2.1)** - Public search API with human-readable criteria
+  - New `jml.issues.search()` method for searching issues with friendly field names
+  - Automatic JQL generation from human-readable criteria
+  - Support for common fields (project, assignee, status, issueType, labels)
+  - Date filtering with `createdSince` option
+  - Customizable result limits and ordering
+  - Foundation for future field resolution and value conversion enhancements
+
+### Changed
+- `IssueOperations.createBulkHierarchy` now accepts optional `options` parameter for progress tracking support
+- Progress tracking is enabled by default but can be disabled via `timeout.cleanupMarkers: false`
+
 ## [1.6.0] - 2025-02-12
 
 ### Added
