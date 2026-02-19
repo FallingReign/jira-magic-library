@@ -49,8 +49,10 @@ import { convertProjectType } from './types/ProjectConverter.js';
  */
 export class ConverterRegistry {
   private converters: Map<string, FieldConverter> = new Map();
+  private readonly debug: boolean;
 
-  constructor() {
+  constructor(debug: boolean = false) {
+    this.debug = debug;
     // Register built-in converters
     this.register('string', this.convertString.bind(this));
     this.register('text', this.convertText.bind(this));
@@ -145,8 +147,12 @@ export class ConverterRegistry {
     const converter = this.converters.get(fieldSchema.type);
 
     if (!converter) {
-      // eslint-disable-next-line no-console
-      console.warn(`No converter for type '${fieldSchema.type}', passing value through`);
+      // Only warn about missing converters when debug enabled
+      // This is expected for unsupported JIRA field types like 'any'
+      if (this.debug) {
+        // eslint-disable-next-line no-console
+        console.warn(`No converter for type '${fieldSchema.type}', passing value through`);
+      }
       return value;
     }
 

@@ -174,17 +174,7 @@ export const convertUserType: FieldConverter = async (value, fieldSchema, contex
     }
   }
 
-  // Log cache status
-  if (cacheStatus === 'hit') {
-    // eslint-disable-next-line no-console
-    console.log(`📦 [UserCache] HIT - Using cached user directory (${users?.length || 0} users)`);
-  } else if (cacheStatus === 'stale') {
-    // eslint-disable-next-line no-console
-    console.log(`📦 [UserCache] STALE - Using stale data, refreshing in background...`);
-  } else {
-    // eslint-disable-next-line no-console
-    console.log(`📦 [UserCache] MISS - Fetching user directory from API...`);
-  }
+  // Cache status logs removed - cache layer handles logging when debug enabled
 
   // If stale, trigger background refresh (fire-and-forget with deduplication)
   if (cacheStatus === 'stale' && context.client && context.cache) {

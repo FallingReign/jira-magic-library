@@ -177,6 +177,9 @@ describe('ConverterRegistry', () => {
     });
 
     it('should pass through unknown types with warning', async () => {
+      // Create registry with debug enabled to test warning
+      const debugRegistry = new ConverterRegistry(true);
+
       // Add a custom field type that has no converter
       const schemaWithCustom: ProjectSchema = {
         ...schema,
@@ -197,7 +200,7 @@ describe('ConverterRegistry', () => {
         customfield_10001: { value: 'custom' },
       };
 
-      const result = await registry.convertFields(schemaWithCustom, resolvedFields, context);
+      const result = await debugRegistry.convertFields(schemaWithCustom, resolvedFields, context);
 
       expect(result).toEqual({
         summary: 'Test Issue',

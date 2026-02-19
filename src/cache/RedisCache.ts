@@ -112,6 +112,7 @@ export class RedisCache implements CacheClient, LookupCache {
   private readonly keyPrefix = 'jml:';
   private isAvailable = false;
   private readonly logger: Logger;
+  private readonly debug: boolean;
   
   /**
    * Tracks in-flight refresh operations to prevent duplicate API calls.
@@ -122,13 +123,20 @@ export class RedisCache implements CacheClient, LookupCache {
 
   /**
    * Creates a new Redis cache instance
-   * 
+   *
    * @param config Redis connection configuration
    * @param redisInstance Optional Redis instance for testing (uses ioredis if not provided)
    * @param logger Optional logger for dependency injection (defaults to console)
+   * @param debug Optional debug flag to enable verbose cache logging (defaults to false)
    */
-  constructor(config: RedisConfig, redisInstance?: RedisClientInstance, logger: Logger = defaultLogger) {
+  constructor(
+    config: RedisConfig,
+    redisInstance?: RedisClientInstance,
+    logger: Logger = defaultLogger,
+    debug: boolean = false
+  ) {
     this.logger = logger;
+    this.debug = debug;
     
     if (redisInstance) {
       // Use provided instance (for testing)
@@ -540,15 +548,21 @@ export class RedisCache implements CacheClient, LookupCache {
     // Check if refresh already in progress for this key
     const existing = this.refreshInFlight.get(key);
     if (existing) {
-      this.logger.log(`[CACHE] Refresh already in progress for: ${key}`);
+      if (this.debug) {
+        this.logger.log(`[CACHE] Refresh already in progress for: ${key}`);
+      }
       return existing;
     }
 
     // Start new refresh and track it
-    this.logger.log(`[CACHE] Starting refresh for: ${key}`);
+    if (this.debug) {
+      this.logger.log(`[CACHE] Starting refresh for: ${key}`);
+    }
     const refreshPromise = refreshFn()
       .then(() => {
-        this.logger.log(`[CACHE] Refresh complete for: ${key}`);
+        if (this.debug) {
+          this.logger.log(`[CACHE] Refresh complete for: ${key}`);
+        }
       })
       .catch((err) => {
         this.logger.warn(`[CACHE] Refresh failed for: ${key}`, err);

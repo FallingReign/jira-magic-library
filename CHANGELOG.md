@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.2] - 2026-02-19
+
+### Fixed
+- **Excessive console logging during bulk operations** - Reduced terminal spam from hundreds of log lines to silent operation (unless errors occur)
+  - Cache refresh logs (`[CACHE] Starting refresh`, `Refresh complete`) now only output when `debug: true`
+  - Converter warnings (`No converter for type 'any'`) now only output when `debug: true`
+  - User cache status logs (`📦 [UserCache] HIT`) removed entirely (redundant with cache layer logging)
+  - Cache refresh failures still always log warnings (error visibility preserved)
+  - 88-issue bulk operation: Hundreds of repetitive logs → Clean console output
+
+### Changed
+- `RedisCache` constructor now accepts optional `debug` parameter (defaults to `false`)
+- `ConverterRegistry` constructor now accepts optional `debug` parameter (defaults to `false`)
+- Cache and converter logging behavior now respects `config.debug` setting
+
 ## [1.7.1] - 2026-02-19
 
 ### Fixed

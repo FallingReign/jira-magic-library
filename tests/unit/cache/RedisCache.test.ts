@@ -938,21 +938,26 @@ describe('RedisCache', () => {
     });
 
     it('should log refresh start and completion', async () => {
-      // Arrange
+      // Arrange - Create cache with debug enabled for logging tests
+      const debugCache = new RedisCache(config, mockRedis, undefined, true);
       const refreshFn = async () => {
         await new Promise(resolve => setTimeout(resolve, 5));
       };
 
       // Act
-      await cache.refreshOnce('log-key', refreshFn);
+      await debugCache.refreshOnce('log-key', refreshFn);
 
       // Assert - Should log start and completion
       expect(consoleLogSpy).toHaveBeenCalledWith('[CACHE] Starting refresh for: log-key');
       expect(consoleLogSpy).toHaveBeenCalledWith('[CACHE] Refresh complete for: log-key');
+
+      // Cleanup
+      await debugCache.disconnect();
     });
 
     it('should log when joining existing refresh', async () => {
-      // Arrange
+      // Arrange - Create cache with debug enabled for logging tests
+      const debugCache = new RedisCache(config, mockRedis, undefined, true);
       let resolveRefresh: () => void;
       const refreshFn = async () => {
         await new Promise<void>(resolve => {
@@ -961,10 +966,10 @@ describe('RedisCache', () => {
       };
 
       // Act - Start first refresh
-      const firstPromise = cache.refreshOnce('join-key', refreshFn);
+      const firstPromise = debugCache.refreshOnce('join-key', refreshFn);
 
       // Second call should join existing
-      const secondPromise = cache.refreshOnce('join-key', async () => {
+      const secondPromise = debugCache.refreshOnce('join-key', async () => {
         // This should NOT execute
       });
 
@@ -974,6 +979,9 @@ describe('RedisCache', () => {
       // Complete
       resolveRefresh!();
       await Promise.all([firstPromise, secondPromise]);
+
+      // Cleanup
+      await debugCache.disconnect();
     });
   });
 

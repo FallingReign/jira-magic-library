@@ -79,10 +79,15 @@ describe('JML', () => {
 
       new JML(config);
 
-      expect(RedisCache).toHaveBeenCalledWith({
-        host: 'localhost',
-        port: 6379,
-      });
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'localhost',
+          port: 6379,
+        },
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
     it('should use custom Redis config if provided', () => {
@@ -98,10 +103,15 @@ describe('JML', () => {
 
       new JML(config);
 
-      expect(RedisCache).toHaveBeenCalledWith({
-        host: 'redis.example.com',
-        port: 6380,
-      });
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'redis.example.com',
+          port: 6380,
+        },
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
     it('should use partial Redis config with defaults', () => {
@@ -116,10 +126,15 @@ describe('JML', () => {
 
       new JML(config);
 
-      expect(RedisCache).toHaveBeenCalledWith({
-        host: 'redis.example.com',
-        port: 6379,
-      });
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'redis.example.com',
+          port: 6379,
+        },
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
     it('should initialize all required components', () => {
@@ -329,10 +344,15 @@ describe('JML', () => {
 
       new JML(config);
 
-      expect(RedisCache).toHaveBeenCalledWith({
-        host: 'localhost',
-        port: 6379,
-      });
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'localhost',
+          port: 6379,
+        },
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
     it('should handle Redis port as number', () => {
@@ -347,10 +367,15 @@ describe('JML', () => {
 
       new JML(config);
 
-      expect(RedisCache).toHaveBeenCalledWith({
-        host: 'localhost',
-        port: 9000,
-      });
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'localhost',
+          port: 9000,
+        },
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
     it('should handle various baseUrl formats', () => {

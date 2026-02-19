@@ -93,7 +93,7 @@ export class JML {
     });
 
     // Initialize cache
-    this.cache = new RedisCache(redisConfig);
+    this.cache = new RedisCache(redisConfig, undefined, undefined, config.debug);
 
     // Initialize schema discovery
     this.schemaDiscovery = new SchemaDiscovery(
@@ -124,7 +124,7 @@ export class JML {
     );
 
     // Initialize converter registry
-    const converterRegistry = new ConverterRegistry();
+    const converterRegistry = new ConverterRegistry(config.debug);
 
     // Initialize issue operations
     this.issues = new IssueOperations(
