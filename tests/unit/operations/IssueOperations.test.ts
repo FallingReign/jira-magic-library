@@ -1878,5 +1878,97 @@ describe('IssueOperations', () => {
       });
     });
   });
+
+  describe('Progress Tracking HTTP Timeout Behavior', () => {
+    it('should disable HTTP timeout when onProgress callback provided', async () => {
+      // Arrange
+      const mockBulkApiWrapper = {
+        createBulk: jest.fn().mockResolvedValue({ created: [], failed: [] })
+      };
+
+      const issueOps = new IssueOperations(
+        mockClient,
+        mockSchema,
+        mockResolver,
+        mockConverter,
+        { timeout: { bulk: 30000 } }  // 30s configured
+      );
+
+      // Inject mock
+      (issueOps as any).bulkApiWrapper = mockBulkApiWrapper;
+
+      // Setup mocks for field resolution
+      mockResolver.resolveFieldsWithExtraction.mockResolvedValue({
+        projectKey: 'TEST',
+        issueType: 'Task',
+        fields: {
+          project: { key: 'TEST' },
+          issuetype: { name: 'Task' },
+          summary: 'Test'
+        }
+      });
+
+      mockConverter.convertFields.mockResolvedValue({
+        project: { key: 'TEST' },
+        issuetype: { name: 'Task' },
+        summary: 'Test'
+      });
+
+      // Act
+      await issueOps.create([{ Project: 'TEST', 'Issue Type': 'Task', Summary: 'Test' }], {
+        onProgress: jest.fn()  // Progress callback provided
+      });
+
+      // Assert: createBulk was called with Infinity timeout
+      expect(mockBulkApiWrapper.createBulk).toHaveBeenCalledWith(
+        expect.anything(),
+        Infinity  // HTTP timeout should be disabled
+      );
+    });
+
+    it('should use configured bulk timeout when NO onProgress callback', async () => {
+      // Arrange
+      const mockBulkApiWrapper = {
+        createBulk: jest.fn().mockResolvedValue({ created: [], failed: [] })
+      };
+
+      const issueOps = new IssueOperations(
+        mockClient,
+        mockSchema,
+        mockResolver,
+        mockConverter,
+        { timeout: { bulk: 30000 } }  // 30s configured
+      );
+
+      (issueOps as any).bulkApiWrapper = mockBulkApiWrapper;
+
+      // Setup mocks
+      mockResolver.resolveFieldsWithExtraction.mockResolvedValue({
+        projectKey: 'TEST',
+        issueType: 'Task',
+        fields: {
+          project: { key: 'TEST' },
+          issuetype: { name: 'Task' },
+          summary: 'Test'
+        }
+      });
+
+      mockConverter.convertFields.mockResolvedValue({
+        project: { key: 'TEST' },
+        issuetype: { name: 'Task' },
+        summary: 'Test'
+      });
+
+      // Act
+      await issueOps.create([{ Project: 'TEST', 'Issue Type': 'Task', Summary: 'Test' }]);
+      // NO onProgress callback
+
+      // Assert: createBulk was called with configured timeout (or undefined, which uses default)
+      expect(mockBulkApiWrapper.createBulk).toHaveBeenCalledWith(
+        expect.anything(),
+        undefined  // Should not pass Infinity, let it use default
+      );
+    });
+  });
 });
 

@@ -148,7 +148,12 @@ export class JiraClientImpl implements JiraClient {
         try {
           // Create abort controller for timeout
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+          // Only set timeout if not Infinity (Phase 2.2 Hotfix)
+          // When timeout is Infinity, we rely on progress-based timeout instead
+          const timeoutId = timeout !== Infinity
+            ? setTimeout(() => controller.abort(), timeout)
+            : undefined;
 
           // Make request
           const response = await fetch(url, {
@@ -162,7 +167,10 @@ export class JiraClientImpl implements JiraClient {
             signal: controller.signal,
           });
 
-          clearTimeout(timeoutId);
+          // Only clear timeout if it was set
+          if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+          }
 
           // Handle successful response
           if (response.ok) {

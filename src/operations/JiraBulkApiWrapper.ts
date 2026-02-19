@@ -102,13 +102,19 @@ export class JiraBulkApiWrapper {
    * });
    * ```
    */
-  async createBulk(payloads: BulkIssuePayload[]): Promise<BulkApiResult> {
+  async createBulk(
+    payloads: BulkIssuePayload[],
+    timeoutOverride?: number  // Optional timeout override
+  ): Promise<BulkApiResult> {
     try {
-      // Call JIRA bulk API with bulk-specific timeout
+      // Use override if provided, else use configured bulkTimeout
+      const effectiveTimeout = timeoutOverride ?? this.bulkTimeout;
+
+      // Call JIRA bulk API with effective timeout
       const response = await this.client.post<JiraBulkApiResponse>(
         '/rest/api/2/issue/bulk',
         { issueUpdates: payloads },
-        this.bulkTimeout // Pass bulk timeout to client
+        effectiveTimeout // Pass effective timeout to client
       );
 
       // Normalize response to BulkApiResult

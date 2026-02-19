@@ -92,6 +92,12 @@ export interface TimeoutConfig {
   /**
    * Timeout for bulk operations in milliseconds.
    * Takes precedence over `default` for bulk API calls.
+   *
+   * **IMPORTANT:** When `onProgress` callback is provided, this timeout is
+   * automatically disabled (set to Infinity) to allow operations to run
+   * indefinitely as long as progress is being made. The `progressTimeout`
+   * becomes the effective timeout mechanism in this case.
+   *
    * @default 30000 (30 seconds)
    */
   bulk?: number;
@@ -105,9 +111,19 @@ export interface TimeoutConfig {
 
   /**
    * Progress-based timeout for bulk operations in milliseconds.
-   * Timeout triggers if no new issues are created for this duration.
-   * Uses time since last progress (not total operation time).
-   * @default 120000 (120 seconds / 2 minutes)
+   *
+   * Operation times out only if NO new issues are created for this duration.
+   * The timer RESETS every time progress is detected (at least one new issue).
+   *
+   * This allows operations to run indefinitely (hours or days) as long as
+   * progress continues. For example, creating 10,000 issues where each issue
+   * takes 30 seconds will run for 83+ hours without timing out, as long as
+   * at least one issue is created every 120 seconds.
+   *
+   * When `onProgress` callback is provided, this becomes the ONLY timeout
+   * mechanism (HTTP timeout is disabled automatically).
+   *
+   * @default 120000 (120 seconds / 2 minutes since last progress)
    */
   progressTimeout?: number;
 

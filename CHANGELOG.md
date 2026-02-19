@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.1] - 2026-02-19
+
+### Fixed
+- **HTTP timeout conflict with progress tracking** - Bulk operations now complete successfully even when progress is slow
+  - HTTP timeout automatically disabled when `onProgress` callback is provided
+  - Operations can run indefinitely (hours/days) as long as progress continues
+  - Progress-based timeout (120s since last issue) remains as safety mechanism
+  - Fixes issue where large bulk operations timed out despite making continuous progress
+
+### Changed
+- HTTP timeout behavior for progress-tracked operations uses `Infinity` internally
+- Enhanced `TimeoutConfig` documentation to clarify automatic timeout behavior
+
 ## [1.7.0] - 2026-02-13
 
 ### Added

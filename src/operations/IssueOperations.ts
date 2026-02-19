@@ -767,10 +767,20 @@ export class IssueOperations implements IssuesAPI {
       }
     }
 
+    // Determine HTTP timeout based on progress tracking (Phase 2.2 Hotfix)
+    // When onProgress callback is provided, disable HTTP timeout (set to Infinity)
+    // and rely entirely on progress-based timeout instead
+    const httpTimeout = _options?.onProgress
+      ? Infinity  // Disable HTTP timeout, rely on progress-based timeout
+      : undefined; // Use default bulk timeout
+
     // Call bulk API with valid payloads only (E4-S03)
     // istanbul ignore next - defensive: validPayloads.length already checked above
-    const apiResult = validPayloads.length > 0 
-      ? await this.bulkApiWrapper.createBulk(validPayloads.map(vp => vp.payload))
+    const apiResult = validPayloads.length > 0
+      ? await this.bulkApiWrapper.createBulk(
+          validPayloads.map(vp => vp.payload),
+          httpTimeout  // Pass Infinity or undefined
+        )
       : { created: [], failed: [] };
 
     // Remap API results back to original indices
@@ -1309,9 +1319,15 @@ export class IssueOperations implements IssuesAPI {
         });
       }
 
+      // Determine HTTP timeout based on progress tracking (Phase 2.2 Hotfix)
+      const httpTimeout = options?.onProgress
+        ? Infinity  // Disable HTTP timeout for progress-tracked hierarchy
+        : undefined;
+
       // Call bulk API for this level
       const apiResult = await this.bulkApiWrapper.createBulk(
-        validPayloads.map(vp => vp.payload)
+        validPayloads.map(vp => vp.payload),
+        httpTimeout  // Pass conditional timeout
       );
 
       // Process results and record UID→Key mappings
