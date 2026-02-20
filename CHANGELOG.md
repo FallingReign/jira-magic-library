@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.3] - 2026-02-20
+
+### Fixed
+- **Redis authentication support** - Added `redis.url` parsing and `password` field support for authenticated Redis connections
+  - New `redis.url` config option accepts connection strings like `redis://:password@host:6379`
+  - URL parsing automatically extracts host, port, and password
+  - Explicit `redis.host`, `redis.port`, `redis.password` fields override URL values when both are set
+  - Fixes issue where `password` field was silently ignored
+- **Custom block preprocessor closing delimiter** - Fixed premature block closure when content contains `>>>>+` patterns
+  - Lines starting with `>>>>` (4+ angle brackets) no longer prematurely close `<<<`/`>>>` blocks
+  - Regex now requires exactly `>>>` (not followed by another `>`) to close blocks
+  - Fixes parsing errors in content with patterns like `>>>>>> some text`
+
+### Changed
+- Updated README configuration table to document actual `redis.*` fields (removed non-existent `redis.tls`)
+
 ## [1.7.2] - 2026-02-19
 
 ### Fixed
