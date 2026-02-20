@@ -546,8 +546,8 @@ With "quotes" and special: chars
         const input = 'description: <<<\n[*+?^${}()|[]\\]\n>>>';
         const output = preprocessCustomBlocks(input, 'yaml');
         expect(output).toContain('"');
-        // The backslash is preserved but not doubled (it's in the quoted string)
-        expect(output).toContain('[*+?^${}()|[]\\]');
+        // Backslash is doubled because block content is raw/literal
+        expect(output).toContain('[*+?^${}()|[]\\\\]');
       });
 
       it('should handle single-line block without newlines', () => {
@@ -584,6 +584,45 @@ With "quotes" and special: chars
         // Both empty lines trimmed
         expect(output).toBe('description: "Middle content"');
       });
+    });
+  });
+
+  // =========================================================================
+  // BACKSLASH HANDLING IN BLOCKS
+  // =========================================================================
+  describe('backslash handling in YAML/JSON blocks', () => {
+    it('should double all backslashes so raw content survives double-quoting (YAML)', () => {
+      const input = 'description: <<<\nC:\\Users\\name\n>>>';
+      const output = preprocessCustomBlocks(input, 'yaml');
+      // Each \ becomes \\ so the YAML parser sees a literal backslash
+      expect(output).toBe('description: "C:\\\\Users\\\\name"');
+    });
+
+    it('should double all backslashes for JSON blocks', () => {
+      const input = '{"path": <<<\nC:\\temp\\file\n>>>}';
+      const output = preprocessCustomBlocks(input, 'json');
+      expect(output).toBe('{"path": "C:\\\\temp\\\\file"}');
+    });
+
+    it('should preserve valid escape sequences as literal text (\\n typed = \\\\n in output)', () => {
+      // User types backslash+n as two literal chars inside a block
+      // Block content is raw — the \ gets doubled, preserving it as literal text
+      const input = 'description: <<<\nfoo\\nbar\n>>>';
+      const output = preprocessCustomBlocks(input, 'yaml');
+      expect(output).toBe('description: "foo\\\\nbar"');
+    });
+
+    it('should not double backslashes in CSV blocks (no escape rules in CSV)', () => {
+      const input = 'Project,Description\nPROJ,<<<\nC:\\path\\file\n>>>';
+      const output = preprocessCustomBlocks(input, 'csv');
+      // CSV has no backslash escape rules, backslash is literal and unchanged
+      expect(output).toBe('Project,Description\nPROJ,"C:\\path\\file"');
+    });
+
+    it('should handle mixed backslashes and quotes in YAML block', () => {
+      const input = 'description: <<<\nPath is "C:\\Users\\name" ok\n>>>';
+      const output = preprocessCustomBlocks(input, 'yaml');
+      expect(output).toBe('description: "Path is \\"C:\\\\Users\\\\name\\" ok"');
     });
   });
 });

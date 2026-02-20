@@ -816,14 +816,22 @@ function findJsonClosingQuote(content: string, startIndex: number): { closeIndex
 }
 
 /**
- * Escape internal quotes in JSON content.
- * Note: backslash sanitisation is intentionally NOT done here — it is handled
- * as a separate retry pass in InputParser.parseJSONContent() via
- * fixInvalidJsonEscapes(), so that already-valid JSON is never corrupted.
+ * Escape invalid backslash sequences and internal quotes in JSON content.
+ *
+ * Step 1: Fix any `\X` where X is not a valid JSON escape character.
+ *         Uses the pair-aware {@link escapeInvalidBackslashes} so an existing
+ *         `\\` (valid escaped backslash) is never corrupted.
+ * Step 2: Escape unescaped `"` as `\"`.
+ *
+ * This mirrors the YAML path exactly — both formats now get backslash fixing
+ * at the quote-preprocessor stage (Step 2 of the pipeline), keeping the
+ * retry fallback in InputParser as a genuine last resort only.
  */
 function escapeQuotesJson(content: string): string {
-  // Escape " as \" (but not already escaped \")
-  return content.replace(/(?<!\\)"/g, '\\"');
+  // Step 1: fix invalid JSON escape sequences (e.g. \i, \s, \U from Windows paths)
+  const backslashFixed = escapeInvalidBackslashes(content, 'json');
+  // Step 2: Escape " as \" (but not already escaped \")
+  return backslashFixed.replace(/(?<!\\)"/g, '\\"');
 }
 
 // =============================================================================

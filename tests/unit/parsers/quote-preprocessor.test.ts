@@ -1405,13 +1405,13 @@ nextKey: value`;
   });
 
   describe('backslash handling in JSON values via preprocessQuotes', () => {
-    it('should NOT modify backslashes in JSON values (handled by parser retry)', () => {
-      // escapeQuotesJson only fixes unescaped quotes, not backslashes.
-      // Backslash sanitisation is deferred to fixInvalidJsonEscapes in InputParser.
+    it('should fix invalid backslashes in JSON values (same treatment as YAML)', () => {
+      // escapeQuotesJson now calls escapeInvalidBackslashes -- consistent with YAML path.
+      // \s is not a valid JSON escape sequence, so it gets doubled.
       const input = '{"path": "C:\\server\\share"}';
       const output = preprocessQuotes(input, 'json');
-      // Backslashes should be unchanged (content already has single backslashes)
-      expect(output).toContain('C:\\server\\share');
+      // \s is invalid → doubled to \\s
+      expect(output).toContain('C:\\\\server\\\\share');
     });
 
     it('should preserve valid JSON escape sequences in values', () => {

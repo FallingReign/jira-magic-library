@@ -441,11 +441,14 @@ function parseCSVFromArray(data: unknown[][]): ParsedInput {
 /**
  * Parse JSON content.
  *
- * Two-pass strategy (mirrors parseYAMLContent):
- * 1. Attempt normal parse (quote preprocessor handles most backslash issues).
- * 2. If JSON.parse throws, run a more aggressive backslash fix across all
- *    double-quoted strings and retry once. This is a safety net for content
- *    that the quote preprocessor may not have already caught.
+ * Single-pass in the common case: the quote preprocessor (Step 2 of the
+ * pipeline) now fixes invalid backslash sequences and unescaped quotes before
+ * we reach JSON.parse, so valid content parses first time.
+ *
+ * Two-pass fallback: if JSON.parse still throws (e.g. the preprocessor
+ * could not parse the JSON structure to identify values), we run a more
+ * aggressive backslash fix across all double-quoted strings and retry once.
+ * This is a genuine last-resort safety net, not the primary path.
  */
 function parseJSONContent(content: string): Record<string, unknown>[] {
   const tryParse = (src: string): Record<string, unknown>[] => {

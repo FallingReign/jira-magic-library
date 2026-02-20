@@ -7,7 +7,7 @@
  *
  * **Key behaviors:**
  * - Detects both bare `<<<` and quoted `"<<<` patterns
- * - YAML/JSON: Escapes internal `"` as `\"`
+ * - YAML/JSON: Escapes all backslashes (raw content), `"` as `\"`, newlines as `\n`
  * - CSV: Escapes internal `"` as `""` (RFC 4180)
  * - Preserves content exactly (no dedent)
  * - Preserves line ending style (CRLF/LF/CR)
@@ -140,8 +140,13 @@ function convertBlockToQuotedString(content: string, format: Format, lineEnding:
   switch (format) {
     case 'yaml':
     case 'json': {
+      // Block content is raw/literal text — double ALL backslashes first so they
+      // survive being placed inside a double-quoted YAML/JSON string.
+      // (Actual newlines are handled separately below; \n escape sequences
+      // typed literally by the user will also be preserved as-is.)
+      const withEscapedBackslashes = trimmed.replace(/\\/g, '\\\\');
       // YAML/JSON parsers require \n escape sequences (not real newlines)
-      const withEscapedNewlines = trimmed.replace(new RegExp(escapeRegex(lineEnding), 'g'), '\\n');
+      const withEscapedNewlines = withEscapedBackslashes.replace(new RegExp(escapeRegex(lineEnding), 'g'), '\\n');
       // Escape " as \"
       escaped = withEscapedNewlines.replace(/"/g, '\\"');
       break;
