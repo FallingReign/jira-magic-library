@@ -1251,6 +1251,15 @@ Second block
         await expect(parseInput({ data: yaml, format: 'yaml' })).resolves.toBeDefined();
       });
 
+      it('should preserve literal backslashes even when they look like valid YAML escapes', async () => {
+        // User types Description: "c:\this\that" and wants literal backslashes
+        // \t looks like a valid tab escape in YAML, but preprocessor doubles ALL backslashes
+        // so the YAML parser sees c:\\this\\that and outputs literal backslashes
+        const yaml = 'Description: "c:\\this\\that"';
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+        expect(result.data[0].Description).toBe('c:\\this\\that');  // literal backslashes preserved
+      });
+
       it('should parse the exact reported user payload with Windows path in description', async () => {
         // Reproduces: InputParseError: Invalid YAML format: unknown escape sequence
         const payload = [

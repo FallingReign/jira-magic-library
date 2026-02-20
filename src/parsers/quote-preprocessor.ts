@@ -475,57 +475,52 @@ function findUnescapedQuotes(content: string, quoteType: '"' | "'"): number[] {
 }
 
 /**
- * Escape backslashes that introduce invalid escape sequences for `format`.
+ * Escape ALL backslashes in content to preserve user intent as literal text.
  *
- * In both YAML double-quoted strings and JSON strings, `\X` is an escape
- * sequence. Only specific values of `X` are valid — anything else is rejected
- * by the parser. This is the most common failure when users paste Windows paths
- * (`c:\this\is\a\test`) into quoted fields, where `\i` and `\s` are invalid.
+ * Users typing content like `c:\this\that` always want the literal string,
+ * never escape sequences like tabs or newlines. By doubling all backslashes
+ * before YAML/JSON parsing, we ensure the parsers see `\\` which they interpret
+ * as a single literal backslash.
  *
- * - **YAML** (1.2 §5.7) valid single-char escapes: `0 a b t n v f r e " / \ N _ L P x u U <space>`
- * - **JSON** (RFC 8259) valid single-char escapes: `" / \ b f n r t u`
- * - **CSV** — backslashes carry no special meaning, so no fix is needed.
+ * This is simpler and more correct than the previous approach of only escaping
+ * "invalid" sequences — there's no ambiguity about user intent. If they type
+ * a backslash, they want a backslash in the output.
  *
- * Converts invalid `\X` → `\\X` while leaving valid sequences (`\n`, `\t`,
- * `\\`, `\"`, etc.) unchanged.
+ * - **YAML/JSON**: All `\` → `\\` (so parser sees literal backslash)
+ * - **CSV**: Backslashes carry no special meaning, so no fix is needed
  *
  * @param content - The string content to sanitize (NOT including surrounding quotes)
- * @param format - The format whose escape rules should be applied
+ * @param format - The format being processed (only 'yaml' and 'json' need escaping)
  */
-export function escapeInvalidBackslashes(content: string, format: 'yaml' | 'json'): string {
-  if (format === 'yaml') {
-    // YAML 1.2 §5.7: valid single-char escapes after \
-    // Note: the space char in the class is the ns-esc-space sequence.
-    // The pattern alternation handles \\ (already-escaped backslash) as a unit
-    // so its second \ is never re-evaluated as a new escape start.
-    return content.replace(/\\(\\)|\\(?![0abtnvfre "/\\N_LPxuU])/g,
-      (_m, escaped) => escaped !== undefined ? `\\${escaped}` : '\\\\');
-  } else {
-    // JSON RFC 8259: valid single-char escapes after \
-    // (u covers \uXXXX unicode sequences)
-    return content.replace(/\\(\\)|\\(?!["\\/bfnrtu])/g,
-      (_m, escaped) => escaped !== undefined ? `\\${escaped}` : '\\\\');
+export function escapeAllBackslashes(content: string, format: 'yaml' | 'json' | 'csv'): string {
+  if (format === 'csv') {
+    // CSV has no backslash escape sequences — backslash is always literal
+    return content;
   }
+  // YAML and JSON both use \ as escape prefix — double all backslashes
+  // so the parser interprets them as literal characters
+  return content.replace(/\\/g, '\\\\');
 }
 
 /**
- * Escape internal quotes (and invalid backslash sequences) in YAML content.
+ * Escape internal quotes and backslashes in YAML content to preserve literal text.
  *
- * For double-quoted YAML scalars, `\X` is an escape sequence. Valid single-char
- * escapes are defined by YAML 1.2 §5.7:
- *   `0 a b t n v f r e (space) " / \ N _ L P x u U`
+ * Users never want to input escape sequences themselves — when they type `c:\temp`,
+ * they want that literal string, not a tab character. So we double ALL backslashes
+ * before the YAML parser sees them.
  *
- * Any other `\X` (e.g. `\i`, `\s`, `\c`, `\p`) is rejected by js-yaml with
- * "unknown escape sequence". This is the common failure mode when users paste
- * Windows paths (e.g. `c:\this\is\a\test`) into double-quoted fields.
+ * For double-quoted strings:
+ * - Step 1: Double all backslashes (user text is always literal)
+ * - Step 2: Escape unescaped quotes
  *
- * We fix those using {@link escapeInvalidBackslashes}. Valid sequences such
- * as `\n`, `\t`, `\\`, `\"` are preserved unchanged.
+ * For single-quoted strings:
+ * - No backslash escaping (single quotes don't interpret backslashes in YAML)
+ * - Escape ' as ''
  */
 function escapeQuotesYaml(content: string, quoteType: '"' | "'"): string {
   if (quoteType === '"') {
-    // Step 1: Escape backslashes that form invalid YAML escape sequences.
-    const backslashFixed = escapeInvalidBackslashes(content, 'yaml');
+    // Step 1: Double ALL backslashes — user content is literal, never escape sequences
+    const backslashFixed = escapeAllBackslashes(content, 'yaml');
     // Step 2: Escape " as \" (but not already escaped \")
     return backslashFixed.replace(/(?<!\\)"/g, '\\"');
   } else {
@@ -816,20 +811,21 @@ function findJsonClosingQuote(content: string, startIndex: number): { closeIndex
 }
 
 /**
- * Escape invalid backslash sequences and internal quotes in JSON content.
+ * Escape all backslashes and internal quotes in JSON content to preserve literal text.
  *
- * Step 1: Fix any `\X` where X is not a valid JSON escape character.
- *         Uses the pair-aware {@link escapeInvalidBackslashes} so an existing
- *         `\\` (valid escaped backslash) is never corrupted.
- * Step 2: Escape unescaped `"` as `\"`.
+ * Users typing content like `c:\this\that` always want the literal string preserved,
+ * never escape sequences. We double ALL backslashes before the JSON parser sees them.
+ *
+ * Step 1: Double all backslashes (user text is always literal)
+ * Step 2: Escape unescaped `"` as `\"`
  *
  * This mirrors the YAML path exactly — both formats now get backslash fixing
  * at the quote-preprocessor stage (Step 2 of the pipeline), keeping the
  * retry fallback in InputParser as a genuine last resort only.
  */
 function escapeQuotesJson(content: string): string {
-  // Step 1: fix invalid JSON escape sequences (e.g. \i, \s, \U from Windows paths)
-  const backslashFixed = escapeInvalidBackslashes(content, 'json');
+  // Step 1: Double ALL backslashes — user content is literal, never escape sequences
+  const backslashFixed = escapeAllBackslashes(content, 'json');
   // Step 2: Escape " as \" (but not already escaped \")
   return backslashFixed.replace(/(?<!\\)"/g, '\\"');
 }

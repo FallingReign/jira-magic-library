@@ -40,7 +40,7 @@ import * as path from 'path';
 import { parse as parseCSV } from 'csv-parse/sync';
 import * as yaml from 'js-yaml';
 import { InputParseError, FileNotFoundError } from '../errors/index.js';
-import { preprocessQuotes, escapeInvalidBackslashes } from './quote-preprocessor.js';
+import { preprocessQuotes, escapeAllBackslashes } from './quote-preprocessor.js';
 import { preprocessCustomBlocks } from './custom-block-preprocessor.js';
 
 /**
@@ -550,36 +550,32 @@ function parseYAMLContent(content: string): Record<string, unknown>[] {
 }
 
 /**
- * Aggressive fallback: escape all backslashes inside double-quoted YAML strings
- * that are not already part of a `\\` or `\"` sequence.
+ * Aggressive fallback: double all backslashes inside double-quoted YAML strings.
  *
  * Called only when the initial `yaml.loadAll` throws an "escape" error and the
  * quote preprocessor was not able to fix the content before it reached us.
  *
- * Strategy: match each `"..."` (including multiline) and replace any `\X` where
- * X is not `\` or `"` with `\\X`. This is intentionally more aggressive than the
- * preprocessor because by the time we reach this fallback we know the content is
- * unparseable as-is.
+ * Strategy: match each `"..."` (including multiline) and double all backslashes
+ * so the YAML parser interprets them as literal characters.
  */
 function fixInvalidYamlEscapes(content: string): string {
   // (?:[^"\\]|\\.)* — any non-quote, non-backslash OR any escape sequence
   // 's' flag — dotAll so matches across newlines (handles multiline quoted values)
   return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
-    const fixed = escapeInvalidBackslashes(inner, 'yaml');
+    const fixed = escapeAllBackslashes(inner, 'yaml');
     return `"${fixed}"`;
   });
 }
 
 /**
- * Aggressive fallback: escape all backslashes inside double-quoted JSON strings
- * that are not already part of a valid JSON escape sequence.
+ * Aggressive fallback: double all backslashes inside double-quoted JSON strings.
  *
  * Called only when the initial JSON.parse throws and the quote preprocessor was
  * not able to fix the content before it reached us.
  */
 function fixInvalidJsonEscapes(content: string): string {
   return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
-    const fixed = escapeInvalidBackslashes(inner, 'json');
+    const fixed = escapeAllBackslashes(inner, 'json');
     return `"${fixed}"`;
   });
 }

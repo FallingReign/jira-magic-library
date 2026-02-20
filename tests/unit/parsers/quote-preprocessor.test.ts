@@ -5,7 +5,7 @@
  * Tests all acceptance criteria for preprocessing broken quotes in YAML/JSON/CSV input
  */
 
-import { preprocessQuotes, preprocessQuotesWithDetails, escapeInvalidBackslashes } from '../../../src/parsers/quote-preprocessor.js';
+import { preprocessQuotes, preprocessQuotesWithDetails, escapeAllBackslashes } from '../../../src/parsers/quote-preprocessor.js';
 
 describe('QuotePreprocessor', () => {
   describe('preprocessQuotes()', () => {
@@ -1363,62 +1363,67 @@ nextKey: value`;
   });
 
   // ===========================================================================
-  // escapeInvalidBackslashes() unit tests
+  // escapeAllBackslashes() unit tests
   // ===========================================================================
-  describe('escapeInvalidBackslashes()', () => {
+  describe('escapeAllBackslashes()', () => {
     describe('yaml mode', () => {
-      it('should escape invalid YAML backslash sequences', () => {
-        expect(escapeInvalidBackslashes('\\iron \\groove', 'yaml')).toBe('\\\\iron \\\\groove');
+      it('should double all backslashes to preserve literal user text', () => {
+        expect(escapeAllBackslashes('C:\\Users\\name', 'yaml')).toBe('C:\\\\Users\\\\name');
       });
 
-      it('should preserve valid YAML single-char escapes', () => {
-        // \n \t \\ \" are all valid YAML escapes
-        const input = 'line1\nline2\ttab\\\\end\"quote';
-        expect(escapeInvalidBackslashes(input, 'yaml')).toBe(input);
+      it('should double backslashes even if they form what looks like valid escapes', () => {
+        // User typing \n or \t wants literal backslash-n, backslash-t, not newline/tab
+        expect(escapeAllBackslashes('line\\nbreak\\ttab', 'yaml')).toBe('line\\\\nbreak\\\\ttab');
+      });
+
+      it('should handle already-doubled backslashes by doubling them again', () => {
+        // If input already has \\\\ (e.g. from prior processing), still double it
+        expect(escapeAllBackslashes('C:\\\\already', 'yaml')).toBe('C:\\\\\\\\already');
       });
     });
 
     describe('json mode', () => {
-      it('should escape invalid JSON backslash sequences', () => {
-        // \i is not a valid JSON escape
-        expect(escapeInvalidBackslashes('C:\\invalid\\path', 'json')).toBe('C:\\\\invalid\\\\path');
+      it('should double all backslashes', () => {
+        expect(escapeAllBackslashes('C:\\invalid\\path', 'json')).toBe('C:\\\\invalid\\\\path');
       });
 
-      it('should preserve valid JSON single-char escapes', () => {
-        // \" \/ \\ \b \f \n \r \t \u are all valid JSON escapes
-        expect(escapeInvalidBackslashes('"', 'json')).toBe('"');     // bare " (no backslash)
-        expect(escapeInvalidBackslashes('\n', 'json')).toBe('\n');   // actual newline (no backslash)
-        expect(escapeInvalidBackslashes('\t', 'json')).toBe('\t');   // actual tab (no backslash)
-        expect(escapeInvalidBackslashes('\\\\', 'json')).toBe('\\\\'); // \\ is a valid escape pair
-        expect(escapeInvalidBackslashes('\\n', 'json')).toBe('\\n'); // \n is a valid escape
-        expect(escapeInvalidBackslashes('\\t', 'json')).toBe('\\t'); // \t is a valid escape
+      it('should double what looks like valid JSON escapes (user wants literal text)', () => {
+        expect(escapeAllBackslashes('\\n', 'json')).toBe('\\\\n');   // not a newline, literal \\n
+        expect(escapeAllBackslashes('\\t', 'json')).toBe('\\\\t');   // not a tab, literal \\t
       });
 
-      it('should escape \\v which is valid in YAML but not JSON', () => {
-        // \v is a valid YAML escape but NOT a valid JSON escape
-        const input = 'value\\vtab';
-        expect(escapeInvalidBackslashes(input, 'json')).toBe('value\\\\vtab');
-        // But yaml mode should leave it alone
-        expect(escapeInvalidBackslashes(input, 'yaml')).toBe(input);
+      it('should handle mixed backslashes', () => {
+        const input = 'Path: C:\\temp\\file.txt with \\n and \\t';
+        const output = escapeAllBackslashes(input, 'json');
+        expect(output).toBe('Path: C:\\\\temp\\\\file.txt with \\\\n and \\\\t');
+      });
+    });
+
+    describe('csv mode', () => {
+      it('should not modify content (CSV has no backslash escape rules)', () => {
+        const input = 'C:\\path\\file';
+        expect(escapeAllBackslashes(input, 'csv')).toBe(input);
       });
     });
   });
 
   describe('backslash handling in JSON values via preprocessQuotes', () => {
-    it('should fix invalid backslashes in JSON values (same treatment as YAML)', () => {
-      // escapeQuotesJson now calls escapeInvalidBackslashes -- consistent with YAML path.
-      // \s is not a valid JSON escape sequence, so it gets doubled.
+    it('should double ALL backslashes in JSON values (user always wants literal text)', () => {
+      // escapeQuotesJson now calls escapeAllBackslashes - consistent with YAML path.
+      // All backslashes are doubled, including \\s \\h \\a \\r \\e (and even \\n, \\t).
       const input = '{"path": "C:\\server\\share"}';
       const output = preprocessQuotes(input, 'json');
-      // \s is invalid → doubled to \\s
+      // All backslashes doubled
       expect(output).toContain('C:\\\\server\\\\share');
     });
 
-    it('should preserve valid JSON escape sequences in values', () => {
-      // \n \t are valid JSON escapes - must not be touched
+    it('should double what looks like valid JSON escape sequences (user wants literal)', () => {
+      // Previously we preserved \n and \t as "valid" escapes.
+      // Now we double them too - user typing c:\\temp wants literal backslash-t, not tab.
       const input = '{"msg": "line1\\nline2\\ttab"}';
       const output = preprocessQuotes(input, 'json');
-      expect(output).toContain('line1\\nline2\\ttab');
+      // All backslashes doubled, even \\n and \\t
+      expect(output).toContain('line1\\\\nline2\\\\ttab');
     });
 
     it('should still escape unescaped quotes inside JSON values', () => {
