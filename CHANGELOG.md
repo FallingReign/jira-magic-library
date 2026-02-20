@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.5] - 2026-02-20
+
+### Fixed
+- **Unified canonicalization pipeline for backslash escaping** - All input paths now get consistent treatment
+  - Custom blocks (`<<< >>>`) now double all backslashes before wrapping content in quotes. Block content is raw/literal, so `C:\Users\name` correctly becomes `C:\\Users\\name` in the quoted output, surviving YAML/JSON parsing as the intended literal string
+  - JSON inline values now call `escapeInvalidBackslashes` at the quote-preprocessor stage (Step 2), matching the YAML path. Previously JSON relied solely on the Step 4 retry fallback
+  - The retry fallback in `parseJSONContent` has been demoted to a genuine last resort rather than the primary path
+  - Previously: YAML fixed backslashes at Step 2, JSON fixed them only at Step 4, custom blocks fixed nothing. Now all three paths follow the same rule: *escape invalid backslashes at the point of quoting*
+
 ## [1.7.4] - 2026-02-20
 
 ### Fixed
