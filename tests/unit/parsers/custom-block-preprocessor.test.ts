@@ -126,6 +126,24 @@ Line 3
         const output = preprocessCustomBlocks(input, 'yaml');
         expect(output).toBe('description: "Line 1\\n\\nLine 3"');
       });
+
+      it('should not treat lines starting with >>>>>> as block closer', () => {
+        const input = `description: <<<
+Content here
+>>>>>> this is NOT a closer
+>>>`;
+        const output = preprocessCustomBlocks(input, 'yaml');
+        expect(output).toBe('description: "Content here\\n>>>>>> this is NOT a closer"');
+      });
+
+      it('should not treat >>>> as block closer', () => {
+        const input = `description: <<<
+Line one
+>>>> still content
+>>>`;
+        const output = preprocessCustomBlocks(input, 'yaml');
+        expect(output).toBe('description: "Line one\\n>>>> still content"');
+      });
     });
 
     // =========================================================================

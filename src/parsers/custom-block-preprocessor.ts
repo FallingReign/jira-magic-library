@@ -96,13 +96,15 @@ function detectLineEnding(content: string): string {
 function processBareBlocks(content: string, format: Format, lineEnding: string): string {
   // Match bare blocks: <<< followed by newline, content, newline, >>>
   // Special case: handle empty blocks (<<< followed immediately by >>>)
-  const emptyBlockPattern = new RegExp(`<<<\\s*${escapeRegex(lineEnding)}\\s*>>>`, 'g');
+  // (?!>) ensures we only match exactly >>> and not >>>>+ (e.g. >>>>>> some text)
+  const emptyBlockPattern = new RegExp(`<<<\\s*${escapeRegex(lineEnding)}\\s*>>>(?!>)`, 'g');
   let processed = content.replace(emptyBlockPattern, '""');
 
   // Match non-empty bare blocks
   // Use [\s\S] to match any character including newlines
   // Non-greedy match to handle multiple blocks
-  const bareBlockPattern = new RegExp(`<<<\\s*${escapeRegex(lineEnding)}([\\s\\S]*?)${escapeRegex(lineEnding)}\\s*>>>`, 'g');
+  // (?!>) ensures we only match exactly >>> and not >>>>+ (e.g. >>>>>> some text)
+  const bareBlockPattern = new RegExp(`<<<\\s*${escapeRegex(lineEnding)}([\\s\\S]*?)${escapeRegex(lineEnding)}\\s*>>>(?!>)`, 'g');
 
   processed = processed.replace(bareBlockPattern, (_match, blockContent: string) => {
     return convertBlockToQuotedString(blockContent, format, lineEnding);
@@ -117,7 +119,8 @@ function processBareBlocks(content: string, format: Format, lineEnding: string):
 function processQuotedBlocks(content: string, format: Format, lineEnding: string): string {
   // Match quoted blocks: " or ' followed by <<<, content, >>>, closing quote
   // We need to capture and replace the entire quoted block including the outer quotes
-  const quotedBlockPattern = new RegExp(`["']<<<\\s*${escapeRegex(lineEnding)}([\\s\\S]*?)${escapeRegex(lineEnding)}\\s*>>>["']`, 'g');
+  // (?!>) ensures we only match exactly >>> and not >>>>+ (e.g. >>>>>> some text)
+  const quotedBlockPattern = new RegExp(`["']<<<\\s*${escapeRegex(lineEnding)}([\\s\\S]*?)${escapeRegex(lineEnding)}\\s*>>>(?!>)["']`, 'g');
 
   return content.replace(quotedBlockPattern, (_match, blockContent: string) => {
     // Return just the converted quoted string (outer quotes are removed and replaced)
