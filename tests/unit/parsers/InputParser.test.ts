@@ -1276,6 +1276,30 @@ Second block
       });
     });
 
+    describe('JSON with Windows paths and invalid backslash sequences', () => {
+      it('should parse JSON where a value contains already-escaped Windows path', async () => {
+        // \\\\server is two levels of escaping: JS string → JSON value
+        // Result in JSON: "\\server" which is valid JSON
+        const json = '{"path": "C:\\\\\\\\server\\\\\\\\share\\\\\\\\file"}';
+        const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].path).toBe('C:\\\\server\\\\share\\\\file');
+      });
+
+      it('should parse JSON with bare invalid escape sequences via retry fallback', async () => {
+        // \i and \p are not valid JSON escape sequences; retry should recover
+        const json = '{"description": "C:\\invalid\\path"}';
+        await expect(parseInput({ data: json, format: 'json' })).resolves.toBeDefined();
+      });
+
+      it('should parse JSON object with Windows path in description field', async () => {
+        const json = JSON.stringify({ project: 'HELP', description: 'C:\\Users\\project' })
+          // Simulate raw user input where backslashes aren't doubled:
+          .replace(/\\\\/g, '\\');
+        // If the preprocessor or retry fixes the escaping, this should resolve cleanly
+        await expect(parseInput({ data: json, format: 'json' })).resolves.toBeDefined();
+      });
+    });
+
     describe('JSON with custom blocks end-to-end', () => {
       it('should parse JSON with custom block', async () => {
         const json = `{

@@ -40,7 +40,7 @@ import * as path from 'path';
 import { parse as parseCSV } from 'csv-parse/sync';
 import * as yaml from 'js-yaml';
 import { InputParseError, FileNotFoundError } from '../errors/index.js';
-import { preprocessQuotes } from './quote-preprocessor.js';
+import { preprocessQuotes, escapeInvalidBackslashes } from './quote-preprocessor.js';
 import { preprocessCustomBlocks } from './custom-block-preprocessor.js';
 
 /**
@@ -438,11 +438,18 @@ function parseCSVFromArray(data: unknown[][]): ParsedInput {
 /**
  * Parse JSON content
  */
+/**
+ * Parse JSON content.
+ *
+ * Two-pass strategy (mirrors parseYAMLContent):
+ * 1. Attempt normal parse (quote preprocessor handles most backslash issues).
+ * 2. If JSON.parse throws, run a more aggressive backslash fix across all
+ *    double-quoted strings and retry once. This is a safety net for content
+ *    that the quote preprocessor may not have already caught.
+ */
 function parseJSONContent(content: string): Record<string, unknown>[] {
-  try {
-    const parsed: unknown = JSON.parse(content);
-
-    // Normalize to array and sanitize string values
+  const tryParse = (src: string): Record<string, unknown>[] => {
+    const parsed: unknown = JSON.parse(src);
     if (Array.isArray(parsed)) {
       return sanitizeValues(parsed as Record<string, unknown>[]);
     } else if (typeof parsed === 'object' && parsed !== null) {
@@ -450,10 +457,29 @@ function parseJSONContent(content: string): Record<string, unknown>[] {
     } else {
       throw new Error('JSON must be an object or array of objects');
     }
+  };
+
+  try {
+    return tryParse(content);
   } catch (error) {
+    const msg = (error as Error).message ?? '';
+
+    // Retry: if the failure looks like a bad escape sequence, aggressively escape
+    // all backslashes inside double-quoted strings and try once more.
+    if (msg.toLowerCase().includes('escape') || msg.includes('Unexpected token')) {
+      try {
+        const fixed = fixInvalidJsonEscapes(content);
+        if (fixed !== content) {
+          return tryParse(fixed);
+        }
+      } catch {
+        // Fall through to the original error
+      }
+    }
+
     throw new InputParseError(
-      `Invalid JSON format: ${(error as Error).message}`,
-      { format: 'json', originalError: (error as Error).message }
+      `Invalid JSON format: ${msg}`,
+      { format: 'json', originalError: msg }
     );
   }
 }
@@ -534,10 +560,23 @@ function parseYAMLContent(content: string): Record<string, unknown>[] {
  */
 function fixInvalidYamlEscapes(content: string): string {
   // (?:[^"\\]|\\.)* — any non-quote, non-backslash OR any escape sequence
-  // 's' flag — dotAll so \\ matches across newlines (handles multiline quoted values)
+  // 's' flag — dotAll so matches across newlines (handles multiline quoted values)
   return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
-    // Preserve \\ (escaped backslash) and \" (escaped quote); fix everything else
-    const fixed = inner.replace(/\\(?![\\"])/g, '\\\\');
+    const fixed = escapeInvalidBackslashes(inner, 'yaml');
+    return `"${fixed}"`;
+  });
+}
+
+/**
+ * Aggressive fallback: escape all backslashes inside double-quoted JSON strings
+ * that are not already part of a valid JSON escape sequence.
+ *
+ * Called only when the initial JSON.parse throws and the quote preprocessor was
+ * not able to fix the content before it reached us.
+ */
+function fixInvalidJsonEscapes(content: string): string {
+  return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
+    const fixed = escapeInvalidBackslashes(inner, 'json');
     return `"${fixed}"`;
   });
 }

@@ -475,6 +475,40 @@ function findUnescapedQuotes(content: string, quoteType: '"' | "'"): number[] {
 }
 
 /**
+ * Escape backslashes that introduce invalid escape sequences for `format`.
+ *
+ * In both YAML double-quoted strings and JSON strings, `\X` is an escape
+ * sequence. Only specific values of `X` are valid — anything else is rejected
+ * by the parser. This is the most common failure when users paste Windows paths
+ * (`c:\this\is\a\test`) into quoted fields, where `\i` and `\s` are invalid.
+ *
+ * - **YAML** (1.2 §5.7) valid single-char escapes: `0 a b t n v f r e " / \ N _ L P x u U <space>`
+ * - **JSON** (RFC 8259) valid single-char escapes: `" / \ b f n r t u`
+ * - **CSV** — backslashes carry no special meaning, so no fix is needed.
+ *
+ * Converts invalid `\X` → `\\X` while leaving valid sequences (`\n`, `\t`,
+ * `\\`, `\"`, etc.) unchanged.
+ *
+ * @param content - The string content to sanitize (NOT including surrounding quotes)
+ * @param format - The format whose escape rules should be applied
+ */
+export function escapeInvalidBackslashes(content: string, format: 'yaml' | 'json'): string {
+  if (format === 'yaml') {
+    // YAML 1.2 §5.7: valid single-char escapes after \
+    // Note: the space char in the class is the ns-esc-space sequence.
+    // The pattern alternation handles \\ (already-escaped backslash) as a unit
+    // so its second \ is never re-evaluated as a new escape start.
+    return content.replace(/\\(\\)|\\(?![0abtnvfre "/\\N_LPxuU])/g,
+      (_m, escaped) => escaped !== undefined ? `\\${escaped}` : '\\\\');
+  } else {
+    // JSON RFC 8259: valid single-char escapes after \
+    // (u covers \uXXXX unicode sequences)
+    return content.replace(/\\(\\)|\\(?!["\\/bfnrtu])/g,
+      (_m, escaped) => escaped !== undefined ? `\\${escaped}` : '\\\\');
+  }
+}
+
+/**
  * Escape internal quotes (and invalid backslash sequences) in YAML content.
  *
  * For double-quoted YAML scalars, `\X` is an escape sequence. Valid single-char
@@ -485,15 +519,13 @@ function findUnescapedQuotes(content: string, quoteType: '"' | "'"): number[] {
  * "unknown escape sequence". This is the common failure mode when users paste
  * Windows paths (e.g. `c:\this\is\a\test`) into double-quoted fields.
  *
- * We fix those by doubling the backslash: `\i` → `\\i`. Valid sequences such
+ * We fix those using {@link escapeInvalidBackslashes}. Valid sequences such
  * as `\n`, `\t`, `\\`, `\"` are preserved unchanged.
  */
 function escapeQuotesYaml(content: string, quoteType: '"' | "'"): string {
   if (quoteType === '"') {
-    // Step 1: Escape backslashes that form invalid YAML single-char escape sequences.
-    // The negative lookahead lists every valid char that may follow a backslash.
-    // Note: the space in the character class represents \<space> (ns-esc-space).
-    const backslashFixed = content.replace(/\\(?![0abtnvfre "/\\N_LPxuU])/g, '\\\\');
+    // Step 1: Escape backslashes that form invalid YAML escape sequences.
+    const backslashFixed = escapeInvalidBackslashes(content, 'yaml');
     // Step 2: Escape " as \" (but not already escaped \")
     return backslashFixed.replace(/(?<!\\)"/g, '\\"');
   } else {
@@ -784,7 +816,10 @@ function findJsonClosingQuote(content: string, startIndex: number): { closeIndex
 }
 
 /**
- * Escape internal quotes in JSON content
+ * Escape internal quotes in JSON content.
+ * Note: backslash sanitisation is intentionally NOT done here — it is handled
+ * as a separate retry pass in InputParser.parseJSONContent() via
+ * fixInvalidJsonEscapes(), so that already-valid JSON is never corrupted.
  */
 function escapeQuotesJson(content: string): string {
   // Escape " as \" (but not already escaped \")

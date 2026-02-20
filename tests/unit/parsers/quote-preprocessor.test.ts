@@ -5,7 +5,7 @@
  * Tests all acceptance criteria for preprocessing broken quotes in YAML/JSON/CSV input
  */
 
-import { preprocessQuotes, preprocessQuotesWithDetails } from '../../../src/parsers/quote-preprocessor.js';
+import { preprocessQuotes, preprocessQuotesWithDetails, escapeInvalidBackslashes } from '../../../src/parsers/quote-preprocessor.js';
 
 describe('QuotePreprocessor', () => {
   describe('preprocessQuotes()', () => {
@@ -1361,4 +1361,72 @@ nextKey: value`;
       });
     });
   });
+
+  // ===========================================================================
+  // escapeInvalidBackslashes() unit tests
+  // ===========================================================================
+  describe('escapeInvalidBackslashes()', () => {
+    describe('yaml mode', () => {
+      it('should escape invalid YAML backslash sequences', () => {
+        expect(escapeInvalidBackslashes('\\iron \\groove', 'yaml')).toBe('\\\\iron \\\\groove');
+      });
+
+      it('should preserve valid YAML single-char escapes', () => {
+        // \n \t \\ \" are all valid YAML escapes
+        const input = 'line1\nline2\ttab\\\\end\"quote';
+        expect(escapeInvalidBackslashes(input, 'yaml')).toBe(input);
+      });
+    });
+
+    describe('json mode', () => {
+      it('should escape invalid JSON backslash sequences', () => {
+        // \i is not a valid JSON escape
+        expect(escapeInvalidBackslashes('C:\\invalid\\path', 'json')).toBe('C:\\\\invalid\\\\path');
+      });
+
+      it('should preserve valid JSON single-char escapes', () => {
+        // \" \/ \\ \b \f \n \r \t \u are all valid JSON escapes
+        expect(escapeInvalidBackslashes('"', 'json')).toBe('"');     // bare " (no backslash)
+        expect(escapeInvalidBackslashes('\n', 'json')).toBe('\n');   // actual newline (no backslash)
+        expect(escapeInvalidBackslashes('\t', 'json')).toBe('\t');   // actual tab (no backslash)
+        expect(escapeInvalidBackslashes('\\\\', 'json')).toBe('\\\\'); // \\ is a valid escape pair
+        expect(escapeInvalidBackslashes('\\n', 'json')).toBe('\\n'); // \n is a valid escape
+        expect(escapeInvalidBackslashes('\\t', 'json')).toBe('\\t'); // \t is a valid escape
+      });
+
+      it('should escape \\v which is valid in YAML but not JSON', () => {
+        // \v is a valid YAML escape but NOT a valid JSON escape
+        const input = 'value\\vtab';
+        expect(escapeInvalidBackslashes(input, 'json')).toBe('value\\\\vtab');
+        // But yaml mode should leave it alone
+        expect(escapeInvalidBackslashes(input, 'yaml')).toBe(input);
+      });
+    });
+  });
+
+  describe('backslash handling in JSON values via preprocessQuotes', () => {
+    it('should NOT modify backslashes in JSON values (handled by parser retry)', () => {
+      // escapeQuotesJson only fixes unescaped quotes, not backslashes.
+      // Backslash sanitisation is deferred to fixInvalidJsonEscapes in InputParser.
+      const input = '{"path": "C:\\server\\share"}';
+      const output = preprocessQuotes(input, 'json');
+      // Backslashes should be unchanged (content already has single backslashes)
+      expect(output).toContain('C:\\server\\share');
+    });
+
+    it('should preserve valid JSON escape sequences in values', () => {
+      // \n \t are valid JSON escapes - must not be touched
+      const input = '{"msg": "line1\\nline2\\ttab"}';
+      const output = preprocessQuotes(input, 'json');
+      expect(output).toContain('line1\\nline2\\ttab');
+    });
+
+    it('should still escape unescaped quotes inside JSON values', () => {
+      // The primary job of escapeQuotesJson is quote fixing, not backslash fixing
+      const input = '{"summary": "fix "bug" now"}';
+      const output = preprocessQuotes(input, 'json');
+      expect(output).toContain('\\"bug\\"');
+    });
+  });
 });
+
