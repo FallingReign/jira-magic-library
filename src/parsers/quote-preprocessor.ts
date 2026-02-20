@@ -475,12 +475,27 @@ function findUnescapedQuotes(content: string, quoteType: '"' | "'"): number[] {
 }
 
 /**
- * Escape internal quotes in YAML content
+ * Escape internal quotes (and invalid backslash sequences) in YAML content.
+ *
+ * For double-quoted YAML scalars, `\X` is an escape sequence. Valid single-char
+ * escapes are defined by YAML 1.2 §5.7:
+ *   `0 a b t n v f r e (space) " / \ N _ L P x u U`
+ *
+ * Any other `\X` (e.g. `\i`, `\s`, `\c`, `\p`) is rejected by js-yaml with
+ * "unknown escape sequence". This is the common failure mode when users paste
+ * Windows paths (e.g. `c:\this\is\a\test`) into double-quoted fields.
+ *
+ * We fix those by doubling the backslash: `\i` → `\\i`. Valid sequences such
+ * as `\n`, `\t`, `\\`, `\"` are preserved unchanged.
  */
 function escapeQuotesYaml(content: string, quoteType: '"' | "'"): string {
   if (quoteType === '"') {
-    // Escape " as \" (but not already escaped \")
-    return content.replace(/(?<!\\)"/g, '\\"');
+    // Step 1: Escape backslashes that form invalid YAML single-char escape sequences.
+    // The negative lookahead lists every valid char that may follow a backslash.
+    // Note: the space in the character class represents \<space> (ns-esc-space).
+    const backslashFixed = content.replace(/\\(?![0abtnvfre "/\\N_LPxuU])/g, '\\\\');
+    // Step 2: Escape " as \" (but not already escaped \")
+    return backslashFixed.replace(/(?<!\\)"/g, '\\"');
   } else {
     // Escape ' as '' (but not already escaped '')
     return content.replace(/(?<!')'(?!')/g, "''");

@@ -100,6 +100,53 @@ end"`;
         });
       });
 
+      describe('backslash handling in double-quoted values', () => {
+        it('should escape invalid YAML backslash sequences', () => {
+          // \i and \g are not valid YAML escapes - they crash js-yaml
+          const input = 'description: "\\iron \\groove"';
+          const output = preprocessQuotes(input, 'yaml');
+          // Each invalid \X becomes \\X in the string
+          expect(output).toBe('description: "\\\\iron \\\\groove"');
+        });
+
+        it('should preserve valid YAML single-char escapes', () => {
+          // \n (newline), \t (tab), \\ (backslash) are all valid YAML escapes
+          const input = 'description: "line1\\nline2\\ttabbed\\\\end"';
+          const output = preprocessQuotes(input, 'yaml');
+          expect(output).toBe(input); // unchanged
+        });
+
+        it('should preserve already-escaped backslash (\\\\)', () => {
+          const input = 'path: "C:\\\\Users\\\\name"';
+          const output = preprocessQuotes(input, 'yaml');
+          expect(output).toBe(input); // unchanged - \\ is valid
+        });
+
+        it('should escape invalid sequences in multiline double-quoted values', () => {
+          // Exact reproduction of the user bug: multiline with Windows path
+          const input = 'Description: ">>>>> something! <<<<<<\nc:\\this\\is\\a\\test"';
+          const output = preprocessQuotes(input, 'yaml');
+          // \i appears in \this (after fixing \t which is valid) and \is → \\i
+          expect(output).toContain('\\\\i');
+        });
+
+        it('should handle the exact reported user payload without throwing', () => {
+          const input = [
+            'Project: "HELP"',
+            'Issue Type: "Help Request"',
+            'Summary: "<@USLACKID> needs assistance!"',
+            'Description: ">>>>> something! <<<<<<',
+            'c:\\this\\is\\a\\test"',
+            'Priority: P1 - High Priority',
+          ].join('\n');
+          expect(() => preprocessQuotes(input, 'yaml')).not.toThrow();
+          const output = preprocessQuotes(input, 'yaml');
+          expect(output).toContain('Priority: P1 - High Priority');
+          // The invalid \i should have been escaped
+          expect(output).toContain('\\\\i');
+        });
+      });
+
       describe('mixed scenarios', () => {
         it('should handle document with multiple fields', () => {
           const input = `project: ENG

@@ -466,15 +466,18 @@ function parseJSONContent(content: string): Record<string, unknown>[] {
  * 2. Document stream format: `key: value\n---\nkey: value` (multiple YAML documents)
  * 
  * Document stream is more user-friendly as it doesn't require indentation.
+ *
+ * Two-pass strategy:
+ * 1. Attempt normal parse (quote preprocessor should handle most backslash issues).
+ * 2. If js-yaml reports an "escape sequence" error, run a more aggressive backslash
+ *    fix across all double-quoted strings and retry once. This is a safety net for
+ *    content that the quote preprocessor may not have caught (e.g., edge-case quoting).
  */
 function parseYAMLContent(content: string): Record<string, unknown>[] {
-  try {
-    // Try to load all documents (supports document stream with --- separators)
-    const documents: unknown[] = yaml.loadAll(content);
-
-    // Flatten and normalize all documents
+  /** Load, flatten, and sanitize all YAML documents in `src`. */
+  const tryLoad = (src: string): Record<string, unknown>[] => {
+    const documents: unknown[] = yaml.loadAll(src);
     const result: Record<string, unknown>[] = [];
-
     for (const doc of documents) {
       if (doc === null || doc === undefined) {
         // Empty document, skip
@@ -489,15 +492,54 @@ function parseYAMLContent(content: string): Record<string, unknown>[] {
         throw new Error('YAML documents must be objects or arrays of objects');
       }
     }
-
-    // Sanitize all string values (trim whitespace from keys and values)
     return sanitizeValues(result);
+  };
+
+  try {
+    return tryLoad(content);
   } catch (error) {
+    const msg = (error as Error).message ?? '';
+
+    // Retry: if the failure was an invalid escape sequence, aggressively escape
+    // all backslashes inside double-quoted strings and try once more.
+    if (msg.includes('escape')) {
+      try {
+        const fixed = fixInvalidYamlEscapes(content);
+        if (fixed !== content) {
+          return tryLoad(fixed);
+        }
+      } catch {
+        // Fall through to the original error
+      }
+    }
+
     throw new InputParseError(
-      `Invalid YAML format: ${(error as Error).message}`,
-      { format: 'yaml', originalError: (error as Error).message }
+      `Invalid YAML format: ${msg}`,
+      { format: 'yaml', originalError: msg }
     );
   }
+}
+
+/**
+ * Aggressive fallback: escape all backslashes inside double-quoted YAML strings
+ * that are not already part of a `\\` or `\"` sequence.
+ *
+ * Called only when the initial `yaml.loadAll` throws an "escape" error and the
+ * quote preprocessor was not able to fix the content before it reached us.
+ *
+ * Strategy: match each `"..."` (including multiline) and replace any `\X` where
+ * X is not `\` or `"` with `\\X`. This is intentionally more aggressive than the
+ * preprocessor because by the time we reach this fallback we know the content is
+ * unparseable as-is.
+ */
+function fixInvalidYamlEscapes(content: string): string {
+  // (?:[^"\\]|\\.)* — any non-quote, non-backslash OR any escape sequence
+  // 's' flag — dotAll so \\ matches across newlines (handles multiline quoted values)
+  return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
+    // Preserve \\ (escaped backslash) and \" (escaped quote); fix everything else
+    const fixed = inner.replace(/\\(?![\\"])/g, '\\\\');
+    return `"${fixed}"`;
+  });
 }
 
 /**

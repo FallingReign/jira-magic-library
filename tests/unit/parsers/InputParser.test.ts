@@ -1233,6 +1233,49 @@ Second block
       });
     });
 
+    describe('YAML with Windows paths and invalid backslash sequences', () => {
+      it('should parse YAML where a double-quoted value contains a Windows path', async () => {
+        // \i and \s are invalid YAML escape sequences - without the fix this throws
+        const yaml = 'Project: HELP\nDescription: "c:\\\\server\\\\share\\\\file"';
+        // Note: in memory that is c:\\server\\share\\file (already escaped backslashes)
+        // This is valid because \\ is a valid YAML escape.
+        const result = await parseInput({ data: yaml, format: 'yaml' });
+        expect(result.data[0].Project).toBe('HELP');
+      });
+
+      it('should parse YAML with bare invalid escape sequences via retry fallback', async () => {
+        // These escape sequences bypass the quote preprocessor detection
+        // and the retry in parseYAMLContent should catch them
+        const yaml = 'Description: "c:\\invalid\\path"';
+        // \i and \p are invalid - should be recovered by retry
+        await expect(parseInput({ data: yaml, format: 'yaml' })).resolves.toBeDefined();
+      });
+
+      it('should parse the exact reported user payload with Windows path in description', async () => {
+        // Reproduces: InputParseError: Invalid YAML format: unknown escape sequence
+        const payload = [
+          'Project: "HELP"',
+          'Issue Type: "Help Request"',
+          'Summary: "<@USLACKID> needs assistance!"',
+          'Description: ">>>>> something! <<<<<<',
+          'c:\\this\\is\\a\\test"',
+          'Assignee: +Help_OnCall',
+          'Reporter: reporter@example.com',
+          'Priority: P1 - High Priority',
+          'customfield_10395: "Raven"',
+          'customfield_12300: "C030SKZCJ15"',
+        ].join('\n');
+
+        const result = await parseInput({ data: payload, format: 'yaml' });
+
+        expect(result.data).toHaveLength(1);
+        expect(result.data[0].Project).toBe('HELP');
+        expect(result.data[0]['Issue Type']).toBe('Help Request');
+        expect(result.data[0].Priority).toBe('P1 - High Priority');
+        expect(result.data[0].customfield_10395).toBe('Raven');
+      });
+    });
+
     describe('JSON with custom blocks end-to-end', () => {
       it('should parse JSON with custom block', async () => {
         const json = `{
