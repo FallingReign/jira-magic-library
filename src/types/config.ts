@@ -247,10 +247,16 @@ export interface JMLConfig {
  * Redis connection configuration
  */
 export interface RedisConfig {
-  /** Redis server hostname */
+  /**
+   * Redis connection URL (e.g. `redis://:password@host:6379`).
+   * When provided, `host`, `port`, and `password` are parsed from the URL.
+   * Explicit `host`, `port`, or `password` fields override the URL values.
+   */
+  url?: string;
+  /** Redis server hostname (overrides URL if both are set) */
   host?: string;
-  /** Redis server port */
+  /** Redis server port (overrides URL if both are set) */
   port?: number;
-  /** Optional Redis password */
+  /** Optional Redis password (overrides URL if both are set) */
   password?: string;
 }

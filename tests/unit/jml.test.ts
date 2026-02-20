@@ -137,6 +137,102 @@ describe('JML', () => {
       );
     });
 
+    it('should pass password through when provided as explicit field', () => {
+      const config = {
+        baseUrl: 'https://jira.example.com',
+        auth: { token: 'test-token' },
+        redis: {
+          host: 'redis.example.com',
+          port: 6380,
+          password: 'secret',
+        },
+      };
+
+      new JML(config);
+
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'redis.example.com',
+          port: 6380,
+          password: 'secret',
+        },
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
+    it('should parse redis.url and extract host, port and password', () => {
+      const config = {
+        baseUrl: 'https://jira.example.com',
+        auth: { token: 'test-token' },
+        redis: {
+          url: 'redis://:mysecret@redis:6379',
+        },
+      };
+
+      new JML(config);
+
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'redis',
+          port: 6379,
+          password: 'mysecret',
+        },
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
+    it('should parse redis.url without password', () => {
+      const config = {
+        baseUrl: 'https://jira.example.com',
+        auth: { token: 'test-token' },
+        redis: {
+          url: 'redis://localhost:6379',
+        },
+      };
+
+      new JML(config);
+
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'localhost',
+          port: 6379,
+          password: undefined,
+        },
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
+    it('should allow explicit fields to override redis.url values', () => {
+      const config = {
+        baseUrl: 'https://jira.example.com',
+        auth: { token: 'test-token' },
+        redis: {
+          url: 'redis://:urlpassword@redis-from-url:6379',
+          host: 'override-host',
+          password: 'override-password',
+        },
+      };
+
+      new JML(config);
+
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
+          host: 'override-host',
+          port: 6379,
+          password: 'override-password',
+        },
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
     it('should initialize all required components', () => {
       const config = {
         baseUrl: 'https://jira.example.com',

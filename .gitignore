@@ -55,3 +55,6 @@ temp/
 
 # Generated Docs
 docs/api/
+
+# Claude agent temp files
+tmpclaude*

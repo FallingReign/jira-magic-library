@@ -74,16 +74,45 @@ export class JML {
   private readonly config: JMLConfig;
 
   /**
+   * Builds a resolved RedisConfig from optional user input.
+   *
+   * If `redis.url` is provided it is parsed to extract host, port and password.
+   * Explicit `host`, `port`, and `password` fields always override URL-derived values.
+   *
+   * @param redis - Optional redis config from JMLConfig
+   * @returns Resolved config with host, port and optional password
+   */
+  private static buildRedisConfig(redis?: { url?: string; host?: string; port?: number; password?: string }): { host: string; port: number; password?: string } {
+    let host = 'localhost';
+    let port = 6379;
+    let password: string | undefined;
+
+    if (redis?.url) {
+      try {
+        const parsed = new URL(redis.url);
+        host = parsed.hostname || host;
+        port = parsed.port ? parseInt(parsed.port, 10) : port;
+        password = parsed.password ? decodeURIComponent(parsed.password) : undefined;
+      } catch {
+        // Invalid URL - fall through to defaults / explicit fields below
+      }
+    }
+
+    return {
+      host: redis?.host ?? host,
+      port: redis?.port ?? port,
+      password: redis?.password ?? password,
+    };
+  }
+
+  /**
    * Create a new JML instance
    * 
    * @param config - Configuration options
    */
   constructor(config: JMLConfig) {
     this.config = config;
-    const redisConfig = {
-      host: config.redis?.host || 'localhost',
-      port: config.redis?.port || 6379,
-    };
+    const redisConfig = JML.buildRedisConfig(config.redis);
 
     // Initialize client
     this.client = new JiraClientImpl({

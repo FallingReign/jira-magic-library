@@ -176,8 +176,10 @@ All configuration flows through the `JML` constructor. Required fields are marke
 | `baseUrl` **\*** | Base URL of your JIRA/DC instance (e.g. `https://jira.example.com`). |
 | `auth.token` **\*** | PAT or session token with permissions to read schema and create issues. |
 | `apiVersion` | `v2` (default) – configurable for future support. |
-| `redis.url` **\*** | Redis connection string (`redis://user:pass@host:port/db`). |
-| `redis.tls` | Set to `true` with certificate options for TLS-enabled Redis. |
+| `redis.url` | Redis connection string (e.g. `redis://:password@host:6379`). Host, port and password are extracted automatically. |
+| `redis.host` | Redis server hostname (default `localhost`). Overrides `redis.url` when both are set. |
+| `redis.port` | Redis server port (default `6379`). Overrides `redis.url` when both are set. |
+| `redis.password` | Redis password for authenticated connections. Overrides `redis.url` when both are set. |
 | `cache.ttlSeconds` | Override schema cache TTL (default 900s). |
 | `manifest.ttlSeconds` | TTL for bulk manifest entries (default 86,400s). |
 | `ambiguityPolicy.user` | Handling for ambiguous user lookups (`first` default, `error`, `score`). |
