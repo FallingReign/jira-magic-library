@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.4] - 2026-02-20
+
+### Fixed
+- **Invalid backslash sequences in JSON double-quoted values** - Applied the same backslash-escape fix that was added for YAML (v1.7.3) to the JSON parsing path
+  - `JSON.parse` now retries with `fixInvalidJsonEscapes()` when it encounters an invalid escape sequence
+  - Handles Windows paths (`C:\Users\name`) and other `\X` sequences that are not valid JSON escapes
+  - Backslash fixing is deferred to the retry path only — the quote preprocessor is unchanged, preserving already-valid JSON
+- **Shared `escapeInvalidBackslashes` utility** - Extracted common backslash-sanitisation logic into an exported function
+  - `escapeInvalidBackslashes(content, 'yaml' | 'json')` handles both YAML and JSON escape rule sets
+  - Uses pair-aware regex (`\\(\\)|...`) so `\\` (valid escaped backslash) is never corrupted by re-evaluating its second `\`
+  - Used by `escapeQuotesYaml`, `fixInvalidYamlEscapes`, and the new `fixInvalidJsonEscapes`
+
 ## [1.7.3] - 2026-02-20
 
 ### Fixed
