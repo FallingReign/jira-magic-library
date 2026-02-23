@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.6] - 2026-02-23
+
+### Added
+- **Debug logging for HTTP client** - Set `debug: true` in config to log all HTTP requests and responses to the console
+  - Request log format: `[JML DEBUG] METHOD url`
+  - Response log format: `[JML DEBUG] status METHOD url`
+  - No output when `debug` is omitted or `false` (default)
+
+### Fixed
+- **Preprocessor ordering** - Quote preprocessing now runs before custom block preprocessing, preventing double-escaping of backslashes in custom block content
+- **Backslash literal treatment** - User-typed backslash sequences (`\n`, `\t`, etc.) are now always preserved as literal characters, never interpreted as escape sequences
+  - Input containing `\n` produces a literal backslash-n in the output, not a newline
+  - Real newlines and tabs in input values continue to be preserved as-is
+
 ## [1.7.5] - 2026-02-20
 
 ### Fixed
