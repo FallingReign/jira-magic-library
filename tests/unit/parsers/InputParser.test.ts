@@ -957,19 +957,31 @@ ENG,Issue 2`;
     });
 
     describe('JSON with leading/trailing whitespace', () => {
-      it('should trim whitespace from JSON string values', async () => {
+      it('should trim whitespace from JSON string values (literal \\n)', async () => {
         const json = '[{"Project": "  ENG  ", "Summary": "\\nTest\\n"}]';
         const result = await parseInput({ data: json, format: 'json' });
-
         expect(result.data[0].Project).toBe('ENG');
-        expect(result.data[0].Summary).toBe('Test');
+        expect(result.data[0].Summary).toBe('\\nTest\\n');
       });
 
-      it('should preserve internal newlines in JSON values', async () => {
+      it('should preserve internal newlines in JSON values (literal \\n)', async () => {
         const json = '[{"Description": "  Line 1\\nLine 2  "}]';
         const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].Description).toBe('Line 1\\nLine 2');
+      });
 
+      it('should preserve real newlines in JSON values (via object input)', async () => {
+        // Raw newlines inside JSON text strings are invalid JSON — pass as JS object instead
+        const data = [{ Description: '  Line 1\nLine 2  ' }];
+        const result = await parseInput({ data });
         expect(result.data[0].Description).toBe('Line 1\nLine 2');
+      });
+
+      it('should preserve real tabs in JSON values (via object input)', async () => {
+        // Raw tabs inside JSON text strings are invalid JSON — pass as JS object instead
+        const data = [{ Description: 'Hello\tWorld' }];
+        const result = await parseInput({ data });
+        expect(result.data[0].Description).toBe('Hello\tWorld');
       });
 
       it('should trim whitespace from JSON keys', async () => {
@@ -1046,11 +1058,17 @@ ENG,Issue 2`;
         expect((result.data[0].field as any).deep.key).toBe('deep value');
       });
 
-      it('should sanitize array elements in JSON', async () => {
+      it('should sanitize array elements in JSON (literal \\n)', async () => {
         const json = '[{"labels": ["  tag1  ", "  tag2  ", "\\ntag3\\n"]}]';
         const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].labels).toEqual(['tag1', 'tag2', '\\ntag3\\n']);
+      });
 
-        expect(result.data[0].labels).toEqual(['tag1', 'tag2', 'tag3']);
+      it('should preserve internal real newlines in array elements (via object input)', async () => {
+        // Internal real newlines are preserved; only leading/trailing whitespace is trimmed
+        const data = [{ labels: ['tag1', 'line1\nline2'] }];
+        const result = await parseInput({ data });
+        expect(result.data[0].labels).toEqual(['tag1', 'line1\nline2']);
       });
 
       it('should sanitize YAML array values', async () => {
@@ -1139,11 +1157,12 @@ ENG,Issue 2`;
       });
 
       it('should still work with valid input when preprocessing is enabled', async () => {
-        // Valid YAML that should pass through unchanged
-        const yaml = 'Project: ENG\nSummary: "A proper \\"escaped\\" quote"';
+        // Valid YAML with simple quoted values (no backslash escapes — those are always doubled by preprocessor)
+        const yaml = 'Project: ENG\nSummary: A simple value';
         const result = await parseInput({ data: yaml, format: 'yaml' });
 
         expect(result.data[0].Project).toBe('ENG');
+        expect(result.data[0].Summary).toBe('A simple value');
       });
 
       it('should handle CSV with preprocessQuotes option', async () => {
@@ -1286,12 +1305,12 @@ Second block
     });
 
     describe('JSON with Windows paths and invalid backslash sequences', () => {
-      it('should parse JSON where a value contains already-escaped Windows path', async () => {
-        // \\\\server is two levels of escaping: JS string → JSON value
-        // Result in JSON: "\\server" which is valid JSON
+      it('should double backslashes even in what looks like already-escaped JSON', async () => {
+        // With new approach: ALL backslashes doubled (users never intend escape sequences)
         const json = '{"path": "C:\\\\\\\\server\\\\\\\\share\\\\\\\\file"}';
         const result = await parseInput({ data: json, format: 'json' });
-        expect(result.data[0].path).toBe('C:\\\\server\\\\share\\\\file');
+        // Input had 4 backslashes, we double to 8, after JSON.parse we get 4 backslashes in final value
+        expect(result.data[0].path).toBe('C:\\\\\\\\server\\\\\\\\share\\\\\\\\file');
       });
 
       it('should parse JSON with bare invalid escape sequences via retry fallback', async () => {
@@ -1301,11 +1320,10 @@ Second block
       });
 
       it('should parse JSON object with Windows path in description field', async () => {
-        const json = JSON.stringify({ project: 'HELP', description: 'C:\\Users\\project' })
-          // Simulate raw user input where backslashes aren't doubled:
-          .replace(/\\\\/g, '\\');
-        // If the preprocessor or retry fixes the escaping, this should resolve cleanly
-        await expect(parseInput({ data: json, format: 'json' })).resolves.toBeDefined();
+        // Simulate raw user input where backslashes are single (literal text from user)
+        const json = '{"project": "HELP", "description": "C:\\Users\\project"}';
+        const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].description).toBe('C:\\Users\\project');  // Backslashes preserved
       });
     });
 

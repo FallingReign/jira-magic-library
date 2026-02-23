@@ -307,24 +307,25 @@ function parseContent(
 ): Record<string, unknown>[] {
   let processedContent = content;
 
-  // Step 1: Apply custom block preprocessing if enabled (must run BEFORE quote preprocessing)
-  if (shouldPreprocessCustomBlocks) {
-    const preprocessed = preprocessCustomBlocks(content, format);
+  // Step 1: Escape quotes and backslashes in user-typed values (regular quoted strings).
+  // Custom block markers (<<<) are unquoted content — this step leaves them untouched.
+  if (shouldPreprocessQuotes) {
+    const preprocessed = preprocessQuotes(content, format);
     if (preprocessed !== content) {
-      // Debug logging when preprocessing modifies input
       // eslint-disable-next-line no-console
-      console.debug(`Input required custom block preprocessing for ${format} format`);
+      console.debug(`Input required quote preprocessing for ${format} format`);
     }
     processedContent = preprocessed;
   }
 
-  // Step 2: Apply quote preprocessing if enabled
-  if (shouldPreprocessQuotes) {
-    const preprocessed = preprocessQuotes(processedContent, format);
+  // Step 2: Convert custom blocks (<<< >>>) into fully-escaped quoted strings.
+  // Runs AFTER quote preprocessing so there is no double-escaping:
+  // the output of this step is already payload-ready and won't be touched again.
+  if (shouldPreprocessCustomBlocks) {
+    const preprocessed = preprocessCustomBlocks(processedContent, format);
     if (preprocessed !== processedContent) {
-      // Debug logging when preprocessing modifies input
       // eslint-disable-next-line no-console
-      console.debug(`Input required quote preprocessing for ${format} format`);
+      console.debug(`Input required custom block preprocessing for ${format} format`);
     }
     processedContent = preprocessed;
   }

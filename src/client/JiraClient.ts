@@ -69,6 +69,7 @@ export class JiraClientImpl implements JiraClient {
   private readonly maxRetries = 3;
   private readonly retryDelays = [1000, 2000, 4000]; // 1s, 2s, 4s
   private readonly defaultTimeout: number;
+  private readonly debug: boolean;
 
   constructor(config: JMLConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
@@ -77,6 +78,7 @@ export class JiraClientImpl implements JiraClient {
 
     // Initialize default timeout from config
     this.defaultTimeout = config.timeout?.default ?? 10000;
+    this.debug = config.debug ?? false;
   }
 
   /**
@@ -155,6 +157,11 @@ export class JiraClientImpl implements JiraClient {
             ? setTimeout(() => controller.abort(), timeout)
             : undefined;
 
+          // Debug: log request
+          if (this.debug) {
+            console.log(`[JML DEBUG] ${method} ${url}`);
+          }
+
           // Make request
           const response = await fetch(url, {
             method,
@@ -170,6 +177,11 @@ export class JiraClientImpl implements JiraClient {
           // Only clear timeout if it was set
           if (timeoutId !== undefined) {
             clearTimeout(timeoutId);
+          }
+
+          // Debug: log response
+          if (this.debug) {
+            console.log(`[JML DEBUG] ${response.status} ${method} ${url}`);
           }
 
           // Handle successful response

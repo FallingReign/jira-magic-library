@@ -610,9 +610,28 @@ describe('JiraClient', () => {
   });
 
   describe('Debug mode', () => {
-    it.skip('should log requests and responses when debug=true', async () => {
-      // Debug functionality temporarily removed to simplify linting
-      // TODO: Re-implement debug logging with proper typed interface
+    it('should log requests and responses when debug=true', async () => {
+      // Arrange — create a fresh spy (restoreMocks:true makes module-level spy stale)
+      const debugClient = new JiraClientImpl({ ...mockConfig, debug: true });
+      const debugLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: 'test' }),
+      } as Response);
+
+      // Act
+      await debugClient.get('/rest/api/2/project');
+
+      // Assert - request log and response log both emitted
+      expect(debugLogSpy).toHaveBeenCalledTimes(2);
+      expect(debugLogSpy).toHaveBeenNthCalledWith(1,
+        expect.stringMatching(/\[JML DEBUG\] GET.*\/rest\/api\/2\/project/)
+      );
+      expect(debugLogSpy).toHaveBeenNthCalledWith(2,
+        expect.stringMatching(/\[JML DEBUG\] 200 GET.*\/rest\/api\/2\/project/)
+      );
     });
 
     it('should not log requests when debug=false (default)', async () => {
