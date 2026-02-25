@@ -349,6 +349,15 @@ Field2:
       expect(result.data[0].Field1).toBe('');
       expect(result.data[0].Field2).toBeNull();
     });
+
+    it('should parse single-quoted YAML value with even count of internal apostrophes', async () => {
+      // Regression: even-count heuristic previously caused preprocessor to enter multiline
+      // mode and swallow the next field (e.g. Type: "Task" would disappear).
+      const yaml = "Description: 'is it if i add a ' maybe'\nType: Task";
+      const result = await parseInput({ data: yaml, format: 'yaml' });
+      expect(result.data[0].Description).toBe("is it if i add a ' maybe");
+      expect(result.data[0].Type).toBe('Task');
+    });
   });
 
   // AC4: Detect Format Automatically

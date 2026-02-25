@@ -326,10 +326,13 @@ function findYamlClosingQuote(
   const isEOF = nextLine === undefined;
   const isOddQuotes = quotePositions.length % 2 === 1;
 
-  // Close if: EOF, or odd quotes (unpaired)
-  // For even quotes (like "word" pairs), only close if EOF - otherwise they're likely
-  // internal content and we should continue to multiline mode to find the real closing quote.
-  if (isEOF || isOddQuotes) {
+  // Close if: EOF, odd quotes (unpaired), OR single-quote mode.
+  // For double-quoted values, even quote counts (like "word" pairs) may be internal content;
+  // we fall through to multiline mode to find the real closing quote.
+  // For single-quoted values the even/odd heuristic is wrong: findUnescapedQuotes already
+  // skips '' escape pairs, so every returned position is either an internal bare ' or the
+  // closer. Count is irrelevant — always close at last ' with nothing after it.
+  if (isEOF || isOddQuotes || quoteType === "'") {
     return {
       closed: true,
       content: content.substring(0, lastQuotePos),
@@ -380,7 +383,9 @@ function findYamlClosingQuoteMultiline(
   // Last quote has nothing after it. Is it the closing quote or part of a pair?
   // Heuristic: If there's an ODD number of quotes, last one is unpaired (closing).
   // If EVEN, they're all paired (internal quotes like "word" or "a" and "b").
-  if (quotePositions.length % 2 === 1) {
+  // Exception: for single-quoted values always close here — findUnescapedQuotes already
+  // skips '' pairs, so the even/odd count is not a reliable signal for single quotes.
+  if (quotePositions.length % 2 === 1 || quoteType === "'") {
     // Odd number - last quote is unpaired, this is the closing quote
     return {
       closed: true,

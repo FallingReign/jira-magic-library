@@ -70,6 +70,33 @@ describe('QuotePreprocessor', () => {
           const output = preprocessQuotes(input, 'yaml');
           expect(output).toBe(input);
         });
+
+        it('should close single-quoted value with even count of internal quotes (was swallowing next field)', () => {
+          // 2 unescaped ' chars: the internal one after 'a ' and the closing one.
+          // Even count previously triggered multiline mode, stealing the next field.
+          const input = "description: 'is it if i add a ' maybe'";
+          const output = preprocessQuotes(input, 'yaml');
+          expect(output).toBe("description: 'is it if i add a '' maybe'");
+        });
+
+        it('should not swallow the next field when single-quoted value has even internal quotes', () => {
+          const input = "description: 'is it if i add a ' maybe'\ntype: Task";
+          const output = preprocessQuotes(input, 'yaml');
+          expect(output).toBe("description: 'is it if i add a '' maybe'\ntype: Task");
+        });
+
+        it('should handle single-quoted value where internal quote count is even across multiple fields', () => {
+          const input = [
+            "project: ENG",
+            "description: 'is it if i add a ' maybe'",
+            'type: "Task"',
+            'priority: High',
+          ].join('\n');
+          const output = preprocessQuotes(input, 'yaml');
+          expect(output).toContain("description: 'is it if i add a '' maybe'");
+          expect(output).toContain('type: "Task"');
+          expect(output).toContain('priority: High');
+        });
       });
 
       describe('multiline values', () => {
