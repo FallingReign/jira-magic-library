@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.7] - 2026-02-26
+
+### Fixed
+- **Single-quoted YAML values with even count of internal apostrophes** - The quote preprocessor's even/odd heuristic incorrectly entered multiline mode when a single-quoted value contained an even number of apostrophes (e.g., `Description: 'is it if i add a ' maybe'`), causing the next field to be swallowed into the value. Fixed by always closing single-quoted values at the last apostrophe with nothing after it, regardless of count.
+- **Single-quoted keys/values in JSON-like input** - The JSON preprocessor now handles single-quoted keys and values (e.g., `{'Description': 'value with ' apostrophe'}`), normalising them to standard double-quoted strings while correctly detecting closing apostrophes via structural boundary detection. Mixed `"..."` and `'...'` fields in the same document are fully supported.
 ## [1.7.6] - 2026-02-23
 
 ### Added
