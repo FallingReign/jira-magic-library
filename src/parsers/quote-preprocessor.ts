@@ -659,6 +659,39 @@ function preprocessJsonQuotes(content: string): PreprocessResult {
       continue;
     }
 
+    if (char === "'") {
+      // Single-quoted string (non-standard JSON-like syntax) — normalize to "..."
+      const isValue = expectingValue;
+      const stringStart = i;
+
+      if (isValue) {
+        // For values: find closing ' using structural boundary detection, then output as "..."
+        const closeInfo = findJsonClosingQuote(content, i + 1, "'");
+        const rawContent = content.substring(i + 1, closeInfo.closeIndex);
+        // Escape backslashes and " for JSON string output (single quotes need no escaping in "...")
+        const escaped = escapeQuotesJson(rawContent);
+        changes.push(`Position ${stringStart}: Normalized single-quoted value to double-quoted`);
+        output += '"' + escaped + '"';
+        i = closeInfo.closeIndex + 1;
+      } else {
+        // For property names: find the first ' closer (keys shouldn't have internal quotes)
+        let j = i + 1;
+        while (j < content.length) {
+          if (content[j] === "'") break;
+          j++;
+        }
+        const propName = content.substring(i + 1, j);
+        changes.push(`Position ${stringStart}: Normalized single-quoted key to double-quoted`);
+        output += '"' + propName + '"';
+        i = j + 1;
+      }
+
+      if (isValue) {
+        expectingValue = false;
+      }
+      continue;
+    }
+
     // Handle other values (numbers, true, false, null)
     if (/[0-9tfn-]/.test(char)) {
       // Read until we hit a structural character
@@ -702,13 +735,13 @@ function preprocessJsonQuotes(content: string): PreprocessResult {
  * - : (after property name)
  * - end of content
  */
-function findJsonClosingQuote(content: string, startIndex: number): { closeIndex: number } {
+function findJsonClosingQuote(content: string, startIndex: number, quoteChar: '"' | "'" = '"'): { closeIndex: number } {
   // Find all potential closing quotes (not escaped)
   const quotePositions: number[] = [];
   const boundaryPositions: number[] = [];
 
   for (let i = startIndex; i < content.length; i++) {
-    if (content[i] === '"') {
+    if (content[i] === quoteChar) {
       // Check if escaped
       let backslashCount = 0;
       let j = i - 1;
@@ -780,8 +813,8 @@ function findJsonClosingQuote(content: string, startIndex: number): { closeIndex
     const afterBoundary = content.substring(boundaryPos + 1);
 
     // STRONG signal: comma followed by quote = next property name
-    // This is the most reliable indicator
-    if (/^,\s*"/.test(afterBoundary)) {
+    // This is the most reliable indicator (handles both " and ' quotes)
+    if (/^,\s*["']/.test(afterBoundary)) {
       return { closeIndex: boundaryPos };
     }
 

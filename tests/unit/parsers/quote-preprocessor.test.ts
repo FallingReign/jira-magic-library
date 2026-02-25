@@ -423,6 +423,44 @@ Version: MS8 2026`;
           expect(output).toContain('\\"quoted\\"');
         });
       });
+
+      describe('single quote values (non-standard JSON-like syntax)', () => {
+        it('should normalize a single-quoted value to double-quoted', () => {
+          const input = `{'description': 'hello world'}`;
+          const output = preprocessQuotes(input, 'json');
+          expect(output).toBe(`{"description": "hello world"}`);
+        });
+
+        it('should handle single-quoted value with even count of internal apostrophes (field-swallow bug)', () => {
+          // 'is it if i add a ' maybe' — internal ' and closing ' = 2 (even).
+          // Without the fix, findJsonClosingQuote would not find the boundary and the next field would be swallowed.
+          const input = `{\n  "Description": 'is it if i add a ' maybe',\n  "Type": "Task"\n}`;
+          const output = preprocessQuotes(input, 'json');
+          expect(output).toContain(`"is it if i add a ' maybe"`);
+          expect(output).toContain(`"Type": "Task"`);
+        });
+
+        it('should handle single-quoted value with an odd count of internal apostrophes', () => {
+          const input = `{'text': 'it's broken'}`;
+          const output = preprocessQuotes(input, 'json');
+          expect(output).toBe(`{"text": "it's broken"}`);
+        });
+
+        it('should handle mixed single and double quoted fields in the same document', () => {
+          const input = `{\n  'Description': 'is it if i add a ' maybe',\n  "Type": "Task",\n  'Priority': 'High'\n}`;
+          const output = preprocessQuotes(input, 'json');
+          expect(output).toContain(`"Description"`);
+          expect(output).toContain(`"is it if i add a ' maybe"`);
+          expect(output).toContain(`"Type": "Task"`);
+          expect(output).toContain(`"Priority": "High"`);
+        });
+
+        it('should not modify content of a clean single-quoted value (no internal quotes)', () => {
+          const input = `{'project': 'ENG', 'summary': 'Fix the bug'}`;
+          const output = preprocessQuotes(input, 'json');
+          expect(output).toBe(`{"project": "ENG", "summary": "Fix the bug"}`);
+        });
+      });
     });
 
     // =========================================================================
