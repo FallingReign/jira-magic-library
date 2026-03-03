@@ -468,11 +468,16 @@ function parseJSONContent(content: string): Record<string, unknown>[] {
   } catch (error) {
     const msg = (error as Error).message ?? '';
 
-    // Retry: if the failure looks like a bad escape sequence, aggressively escape
-    // all backslashes inside double-quoted strings and try once more.
-    if (msg.toLowerCase().includes('escape') || msg.includes('Unexpected token')) {
+    // Retry: if the failure looks like a bad escape sequence or literal control
+    // characters (e.g. Slack-injected newlines), fix and try once more.
+    if (
+      msg.toLowerCase().includes('escape') ||
+      msg.includes('Unexpected token') ||
+      msg.toLowerCase().includes('control character')
+    ) {
       try {
-        const fixed = fixInvalidJsonEscapes(content);
+        let fixed = fixInvalidJsonEscapes(content);
+        fixed = fixLiteralControlCharsInJson(fixed);
         if (fixed !== content) {
           return tryParse(fixed);
         }
@@ -577,6 +582,30 @@ function fixInvalidYamlEscapes(content: string): string {
 function fixInvalidJsonEscapes(content: string): string {
   return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
     const fixed = escapeAllBackslashes(inner, 'json');
+    return `"${fixed}"`;
+  });
+}
+
+/**
+ * Pre-processing fix: escape literal control characters inside JSON string values.
+ *
+ * Some sources (e.g. Slack Workflow Builder) inject raw newlines or tabs directly
+ * inside a JSON string literal, producing content like:
+ *
+ *   "assignee": {"name": "\n   username\n   "}
+ *
+ * This is invalid JSON ("Bad control character in string literal"). This function
+ * escapes those control characters so JSON.parse can succeed, after which the
+ * normal sanitizeValues pass trims the resulting leading/trailing whitespace.
+ *
+ * Called as a retry when JSON.parse throws a "control character" error.
+ */
+function fixLiteralControlCharsInJson(content: string): string {
+  return content.replace(/"((?:[^"\\]|\\.)*)"/gs, (_match, inner: string) => {
+    const fixed = inner
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t');
     return `"${fixed}"`;
   });
 }

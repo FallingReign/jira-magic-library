@@ -980,17 +980,59 @@ ENG,Issue 2`;
       });
 
       it('should preserve real newlines in JSON values (via object input)', async () => {
-        // Raw newlines inside JSON text strings are invalid JSON — pass as JS object instead
         const data = [{ Description: '  Line 1\nLine 2  ' }];
         const result = await parseInput({ data });
         expect(result.data[0].Description).toBe('Line 1\nLine 2');
       });
 
       it('should preserve real tabs in JSON values (via object input)', async () => {
-        // Raw tabs inside JSON text strings are invalid JSON — pass as JS object instead
         const data = [{ Description: 'Hello\tWorld' }];
         const result = await parseInput({ data });
         expect(result.data[0].Description).toBe('Hello\tWorld');
+      });
+
+      it('should fix literal newline in JSON string value (Slack bug)', async () => {
+        // Slack Workflow Builder injects a literal newline inside the JSON string,
+        // producing invalid JSON: "Bad control character in string literal in JSON"
+        // JML pre-processes and escapes it so JSON.parse succeeds, then sanitizeValues trims.
+        const json = '{"assignee": {"name": "\nusername\n"}}';
+        const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].assignee).toEqual({ name: 'username' });
+      });
+
+      it('should fix literal newline at start of JSON string value (Slack bug)', async () => {
+        // Variant: newline only at beginning (value on next line)
+        const json = '{"summary": "\nMy issue title"}';
+        const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].summary).toBe('My issue title');
+      });
+
+      it('should fix literal newline at end of JSON string value (Slack bug)', async () => {
+        // Variant: newline only at end
+        const json = '{"summary": "My issue title\n"}';
+        const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].summary).toBe('My issue title');
+      });
+
+      it('should preserve internal newlines when fixing Slack JSON literal newlines', async () => {
+        // Leading/trailing removed, but internal newlines in description should survive
+        const json = '{"description": "\nLine 1\nLine 2\n"}';
+        const result = await parseInput({ data: json, format: 'json' });
+        expect(result.data[0].description).toBe('Line 1\nLine 2');
+      });
+
+      it('should fix literal newlines in nested JSON objects (Slack assignee pattern)', async () => {
+        // The exact Slack pattern: assignee.name with surrounding newlines
+        const json = JSON.stringify({
+          project: { key: 'CHI' },
+          issuetype: { name: 'Bug' },
+          summary: 'Test issue',
+          assignee: { name: '\nsome.username\n' },
+        });
+        // JSON.stringify produces valid JSON (escapes the \n), so swap to literal newlines
+        const withLiteralNewlines = json.replace(/\\n/g, '\n');
+        const result = await parseInput({ data: withLiteralNewlines, format: 'json' });
+        expect((result.data[0].assignee as Record<string, unknown>).name).toBe('some.username');
       });
 
       it('should trim whitespace from JSON keys', async () => {
