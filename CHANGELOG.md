@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.7.8] - 2026-03-03
+
+### Fixed
+- **Literal control characters in JSON strings (Slack Workflow Builder bug)** - Slack Workflow Builder can inject raw newlines directly inside JSON string literals (e.g. `"assignee": {"name": "\n   username\n   "}`), producing an invalid JSON error (`Bad control character in string literal`) before JML could sanitise the value. The JSON pre-processing stage now detects this error and escapes all literal `\n`, `\r`, and `\t` characters inside quoted strings before retrying `JSON.parse`. The existing `sanitizeValues` pass then trims the resulting leading/trailing whitespace as normal.
+
 ## [1.7.7] - 2026-02-26
 
 ### Fixed
