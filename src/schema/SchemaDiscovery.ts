@@ -3,6 +3,7 @@ import { CacheClient } from '../types/cache.js';
 import { NotFoundError } from '../errors/NotFoundError.js';
 import { ProjectSchema, FieldSchema } from '../types/schema.js';
 import { VirtualFieldRegistry } from './VirtualFieldRegistry.js';
+import { resolveSpecialType } from '../converters/specialFields.js';
 import type { 
   JiraFieldMeta,
   JiraIssueType,
@@ -384,7 +385,16 @@ export class SchemaDiscovery {
    */
   private mapFieldType(schema: JiraFieldMeta['schema']): string {
     if (!schema) return 'unknown';
-    
+
+    // Check for special fields identified by schema.custom.
+    // These fields have misleading type information in createmeta (e.g. Sprint
+    // reports as array/string but actually requires a plain integer).
+    // schema.custom is the stable, Atlassian-documented identifier.
+    const specialType = resolveSpecialType(schema.custom);
+    if (specialType) {
+      return specialType;
+    }
+
     // Direct type mapping
     const type = schema.type;
 

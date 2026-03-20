@@ -730,6 +730,37 @@ describe('RedisCache', () => {
       // Cleanup
       await cache.disconnect();
     });
+
+    it('should fast-fail get() silently when permanently disabled (no client call)', async () => {
+      // Arrange
+      const cache = new RedisCache(config, mockRedis);
+      // Simulate retryStrategy giving up (sets isPermanentlyDisabled = true)
+      (cache as unknown as { isPermanentlyDisabled: boolean }).isPermanentlyDisabled = true;
+      jest.spyOn(mockRedis, 'get');
+
+      // Act
+      const result = await cache.get('test-key');
+
+      // Assert — should short-circuit without touching the Redis client
+      expect(result.value).toBeNull();
+      expect(result.isStale).toBe(false);
+      expect(mockRedis.get).not.toHaveBeenCalled();
+
+      await cache.disconnect();
+    });
+
+    it('should fast-fail set() silently when permanently disabled (no client call)', async () => {
+      // Arrange
+      const cache = new RedisCache(config, mockRedis);
+      (cache as unknown as { isPermanentlyDisabled: boolean }).isPermanentlyDisabled = true;
+      jest.spyOn(mockRedis, 'setex');
+
+      // Act & Assert — resolves without error, no Redis call made
+      await expect(cache.set('test-key', 'value', 900)).resolves.toBeUndefined();
+      expect(mockRedis.setex).not.toHaveBeenCalled();
+
+      await cache.disconnect();
+    });
   });
 
   describe('Branch Coverage - Edge Cases', () => {

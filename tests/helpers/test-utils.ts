@@ -19,6 +19,7 @@ export function createMockCache(): {
   set: jest.Mock;
   getLookup: jest.Mock; 
   setLookup: jest.Mock;
+  refreshOnce: jest.Mock;
   del: jest.Mock;
   clear: jest.Mock;
   ping: jest.Mock;
@@ -28,6 +29,7 @@ export function createMockCache(): {
     set: jest.fn().mockResolvedValue(undefined),
     getLookup: jest.fn().mockResolvedValue({ value: null, isStale: false }),
     setLookup: jest.fn().mockResolvedValue(undefined),
+    refreshOnce: jest.fn().mockResolvedValue(undefined),
     del: jest.fn().mockResolvedValue(undefined),
     clear: jest.fn().mockResolvedValue(undefined),
     ping: jest.fn().mockResolvedValue(undefined),

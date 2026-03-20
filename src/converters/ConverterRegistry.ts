@@ -13,6 +13,7 @@ import { convertVersionType } from './types/VersionConverter.js';
 import { convertTimeTrackingType } from './types/TimeTrackingConverter.js';
 import { convertIssueTypeType } from './types/IssueTypeConverter.js';
 import { convertProjectType } from './types/ProjectConverter.js';
+import { convertSprintType } from './types/SprintConverter.js';
 
 /**
  * Registry for field type converters.
@@ -69,6 +70,7 @@ export class ConverterRegistry {
     this.register('timetracking', convertTimeTrackingType);
     this.register('issuetype', convertIssueTypeType); // E3-S07b
     this.register('project', convertProjectType); // E3-S08
+    this.register('sprint', convertSprintType); // Special field: schema.custom = gh-sprint
   }
 
   /**
@@ -256,4 +258,5 @@ export class ConverterRegistry {
     // Trim only leading/trailing whitespace, preserve internal newlines/spaces
     return text.replace(/^\s+|\s+$/g, '');
   }
+
 }

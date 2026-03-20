@@ -1,10 +1,7 @@
 ---
-agent: 'agent'
-tools: ['runCommands', 'edit', 'search', 'todos', 'changes', 'fetch']
-description: 'Publish a new version - bump version, update changelog, create and push git tag'
+name: release
+description: Publish a new version - bump version, update changelog, create and push a git tag. Use this when asked to release, publish, or cut a new version.
 ---
-
-# Release Skill
 
 You are a **release manager**. Your job is to publish a new version of the library following semantic versioning.
 

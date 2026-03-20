@@ -111,6 +111,8 @@ export class RedisCache implements CacheClient, LookupCache {
   private client: RedisClientInstance;
   private readonly keyPrefix = 'jml:';
   private isAvailable = false;
+  /** Set permanently after retryStrategy gives up — skips all subsequent client calls. */
+  private isPermanentlyDisabled = false;
   private readonly logger: Logger;
   private readonly debug: boolean;
   
@@ -153,6 +155,7 @@ export class RedisCache implements CacheClient, LookupCache {
           // Give up after 3 attempts
           // istanbul ignore next - integration test: Redis reconnection behavior
           if (times > 3) {
+            this.isPermanentlyDisabled = true;
             this.logger.warn(`⚠️  Redis unavailable after ${times} attempts - disabling cache`);
             return null; // Stop retrying
           }
@@ -191,6 +194,9 @@ export class RedisCache implements CacheClient, LookupCache {
    * @returns CacheResult with value and isStale flag
    */
   async get(key: string, options?: { rejectStale?: boolean }): Promise<{ value: string | null; isStale: boolean }> {
+    if (this.isPermanentlyDisabled) {
+      return { value: null, isStale: false };
+    }
     try {
       const raw = await this.client.get(this.keyPrefix + key);
       if (!this.isAvailable) {
@@ -240,6 +246,9 @@ export class RedisCache implements CacheClient, LookupCache {
    * @param ttlSeconds Soft TTL - value is "stale" after this but still usable
    */
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {
+    if (this.isPermanentlyDisabled) {
+      return;
+    }
     try {
       // Store as envelope with soft expiry timestamp
       const envelope = {

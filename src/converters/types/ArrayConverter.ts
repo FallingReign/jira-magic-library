@@ -8,6 +8,7 @@
  * Accepts:
  * - Arrays: ["item1", "item2", "item3"]
  * - CSV strings: "item1, item2, item3"
+ * - Single values: 13772, true, { key: "val" } (wrapped in array automatically)
  * 
  * Output:
  * - Array of converted values based on item type
