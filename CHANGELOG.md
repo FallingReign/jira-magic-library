@@ -2,7 +2,28 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
-## [1.7.8] - 2026-03-03
+## [1.8.0] - 2026-03-20
+
+### Added
+- **Sprint field support** - Sprint fields (identified by `schema.custom = com.pyxis.greenhopper.jira:gh-sprint`) are now converted correctly using a dedicated `SprintConverter`
+  - **Numeric ID fast path** - Integer (`Sprint: 13772`) and numeric string (`Sprint: "13772"`) inputs bypass all API calls entirely and are passed through as plain integers
+  - **Sprint name lookup** - Non-numeric strings (e.g. `Sprint: "REX_BX_Zodiac_2026_Sprint_4"`) are resolved to an integer ID via the Agile REST API (`/rest/agile/1.0/board` → `/sprint`)
+  - Lookup searches **active and future sprints only** — closed/historical sprints are intentionally excluded to prevent multi-minute hangs on projects with many historical boards
+  - Full SWR (stale-while-revalidate) caching at project scope — same pattern as user lookup
+  - Object passthrough: `{ id: 13772 }` is accepted directly
+
+### Changed
+- **Sprint board iteration order** - Boards are now sorted before fetching sprints:
+  - MRU (most-recently-used) hint: after each successful sprint name resolution, the matched sprint's board ID is stored in cache and checked first on subsequent cold-miss lookups
+  - Remaining boards sorted by ID descending (newer boards are more likely to have active sprints)
+  - Early exit: the board loop stops as soon as any sprint on the current board matches the target name, then fires a background full-fetch to warm the cache for the next lookup
+- **Kanban boards excluded** - Board API call now passes `type=scrum` to exclude Kanban boards upfront; Kanban boards reject the sprint endpoint with 400 "The board doesn't support sprints"
+- **Graceful per-board error handling** - If any individual board returns 400 or 404 for its sprint endpoint, that board is skipped and iteration continues rather than aborting the entire lookup
+
+### Fixed
+- **Redis permanently disabled spam** - After `retryStrategy` exhausts its retry limit, `get()` and `set()` now short-circuit silently instead of logging a `Connection is closed` error on every subsequent cache operation
+
+
 
 ### Fixed
 - **Literal control characters in JSON strings (Slack Workflow Builder bug)** - Slack Workflow Builder can inject raw newlines directly inside JSON string literals (e.g. `"assignee": {"name": "\n   username\n   "}`), producing an invalid JSON error (`Bad control character in string literal`) before JML could sanitise the value. The JSON pre-processing stage now detects this error and escapes all literal `\n`, `\r`, and `\t` characters inside quoted strings before retrying `JSON.parse`. The existing `sanitizeValues` pass then trims the resulting leading/trailing whitespace as normal.
