@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [1.8.1] - 2026-03-25
+
+### Fixed
+- **Timeout configuration ignored** - `config.timeout.default` and `config.debug` were silently dropped when `JML` constructed its internal `JiraClientImpl`, causing all HTTP requests to always use a hardcoded 10s timeout regardless of what the user configured. The full config is now forwarded correctly.
+
+### Removed
+- **`TimeoutConfig.single`** - Removed unused `single` field from `TimeoutConfig`. Single-issue operations use `timeout.default`; this field was defined but never read.
+
 ## [1.8.0] - 2026-03-20
 
 ### Added
