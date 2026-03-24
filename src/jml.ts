@@ -115,11 +115,7 @@ export class JML {
     const redisConfig = JML.buildRedisConfig(config.redis);
 
     // Initialize client
-    this.client = new JiraClientImpl({
-      baseUrl: config.baseUrl,
-      auth: config.auth,
-      redis: redisConfig,
-    });
+    this.client = new JiraClientImpl(config);
 
     // Initialize cache
     this.cache = new RedisCache(redisConfig, undefined, undefined, config.debug);
