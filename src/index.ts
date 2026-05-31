@@ -10,7 +10,17 @@
 
 // Main JML class
 export { JML } from './jml.js';
-export type { JMLConfig, AmbiguityPolicyConfig, FuzzyMatchConfig } from './types/config.js';
+export type {
+  JMLConfig,
+  AmbiguityPolicyConfig,
+  FuzzyMatchConfig,
+  AuthConfig,
+  PatAuthConfig,
+  BasicAuthConfig,
+  OAuth2AuthConfig,
+  LegacyAuthConfig,
+  DeploymentType,
+} from './types/config.js';
 export type {
   IssuesAPI,
   IssuesCreateInput,
@@ -78,3 +88,28 @@ export type { ValidationWarning } from './validation/types.js';
 export { RedisCache } from './cache/RedisCache.js';
 export type { JiraClient } from './client/JiraClient.js';
 export { JiraClientImpl } from './client/JiraClient.js';
+
+// Auth Strategy (Cloud expansion)
+export {
+  createAuthStrategy,
+  PatAuthStrategy,
+  BasicAuthStrategy,
+  OAuth2AuthStrategy,
+  OAuthTokenManager,
+  isLegacyAuth,
+} from './client/AuthStrategy.js';
+export type { AuthStrategy, AuthHeaders } from './client/AuthStrategy.js';
+
+// Deployment Detection (Cloud expansion)
+export { DeploymentDetector } from './client/DeploymentDetector.js';
+export type { DeploymentInfo } from './client/DeploymentDetector.js';
+
+// Endpoint Resolver (Cloud expansion)
+export { EndpointResolver } from './client/EndpointResolver.js';
+
+// Cache Adapter (pluggable cache interface)
+export type { CacheAdapter, CacheAdapterResult } from './cache/CacheAdapter.js';
+export { InMemoryCache } from './cache/InMemoryCache.js';
+
+// Config migration
+export { migrateConfig } from './config/migrateConfig.js';

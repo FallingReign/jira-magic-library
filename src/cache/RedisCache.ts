@@ -6,6 +6,7 @@
 import { Redis } from 'ioredis';
 import type { RedisConfig } from '../types/config.js';
 import type { CacheClient } from '../types/cache.js';
+import type { CacheAdapter } from './CacheAdapter.js';
 import type { LookupCache } from '../types/converter.js';
 import { CacheError } from '../errors/CacheError.js';
 type RedisClientInstance = InstanceType<typeof Redis>;
@@ -107,7 +108,7 @@ export function attachRedisEventHandlers(
  * Cache operations fail gracefully - errors are logged but don't crash the library.
  * Only the `ping()` method throws errors.
  */
-export class RedisCache implements CacheClient, LookupCache {
+export class RedisCache implements CacheClient, CacheAdapter, LookupCache {
   private client: RedisClientInstance;
   private readonly keyPrefix = 'jml:';
   private isAvailable = false;
@@ -264,6 +265,16 @@ export class RedisCache implements CacheClient, LookupCache {
       this.logger.warn('Cache set failed:', err);
       this.isAvailable = false;
     }
+  }
+
+  /**
+   * Delete a key from the cache (CacheAdapter interface)
+   * Alias for del() to satisfy CacheAdapter interface.
+   *
+   * @param key Cache key (will be prefixed with jml:)
+   */
+  async delete(key: string): Promise<void> {
+    await this.del(key);
   }
 
   /**

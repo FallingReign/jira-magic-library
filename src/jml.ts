@@ -14,7 +14,7 @@ import { ConverterRegistry } from './converters/ConverterRegistry.js';
 import { IssueOperations } from './operations/IssueOperations.js';
 import type { IssuesAPI } from './operations/IssueOperations.js';
 import { ConnectionError } from './errors/index.js';
-import type { JMLConfig } from './types/config.js';
+import type { JMLConfig, DeploymentType } from './types/config.js';
 import { ParentFieldDiscovery } from './hierarchy/ParentFieldDiscovery.js';
 import type { ParentFieldInfo } from './hierarchy/ParentFieldDiscovery.js';
 import { JPOHierarchyDiscovery } from './hierarchy/JPOHierarchyDiscovery.js';
@@ -22,6 +22,9 @@ import type { HierarchyLevel } from './types/hierarchy.js';
 import { ValidationService } from './validation/ValidationService.js';
 import type { ValidationResult } from './validation/types.js';
 import type { ParseInputOptions } from './parsers/InputParser.js';
+import { DeploymentDetector } from './client/DeploymentDetector.js';
+import type { DeploymentInfo } from './client/DeploymentDetector.js';
+import { EndpointResolver } from './client/EndpointResolver.js';
 
 /**
  * Server information returned by JIRA
@@ -72,6 +75,9 @@ export class JML {
   private readonly parentFieldDiscovery: ParentFieldDiscovery;
   private readonly validationService: ValidationService;
   private readonly config: JMLConfig;
+  private readonly deploymentDetector: DeploymentDetector;
+  private endpointResolver: EndpointResolver | null = null;
+  private deploymentDetectionPromise: Promise<DeploymentInfo> | null = null;
 
   /**
    * Builds a resolved RedisConfig from optional user input.
@@ -112,19 +118,29 @@ export class JML {
    */
   constructor(config: JMLConfig) {
     this.config = config;
-    const redisConfig = JML.buildRedisConfig(config.redis);
+    const redisConfig = JML.buildRedisConfig(this.config.redis);
 
-    // Initialize client
-    this.client = new JiraClientImpl(config);
+    // Initialize client (uses AuthStrategy internally based on config.auth)
+    this.client = new JiraClientImpl(this.config);
+
+    // Initialize deployment detector for lazy detection
+    this.deploymentDetector = new DeploymentDetector(this.client);
+
+    // If deployment is explicitly set (not 'auto'), create EndpointResolver immediately
+    const deploymentSetting: DeploymentType = this.config.deployment ?? 'auto';
+    if (deploymentSetting !== 'auto') {
+      const apiVersion = this.config.apiVersion ?? (deploymentSetting === 'cloud' ? 'v3' : 'v2');
+      this.endpointResolver = new EndpointResolver(deploymentSetting, apiVersion);
+    }
 
     // Initialize cache
-    this.cache = new RedisCache(redisConfig, undefined, undefined, config.debug);
+    this.cache = new RedisCache(redisConfig, undefined, undefined, this.config.debug);
 
     // Initialize schema discovery
     this.schemaDiscovery = new SchemaDiscovery(
       this.client,
       this.cache,
-      config.baseUrl
+      this.config.baseUrl
     );
 
     // Initialize validation service (E4-S07)
@@ -136,7 +152,7 @@ export class JML {
       this.schemaDiscovery, 
       this.cache,
       undefined, // logger
-      config.parentFieldSynonyms // AC9: custom parent synonyms
+      this.config.parentFieldSynonyms // AC9: custom parent synonyms
     );
 
     // Initialize field resolver with parent synonym support (E3-S06, AC9)
@@ -145,11 +161,11 @@ export class JML {
       this.parentFieldDiscovery,
       this.client,
       this.cache,
-      config.parentFieldSynonyms // AC9: custom parent synonyms
+      this.config.parentFieldSynonyms // AC9: custom parent synonyms
     );
 
     // Initialize converter registry
-    const converterRegistry = new ConverterRegistry(config.debug);
+    const converterRegistry = new ConverterRegistry(this.config.debug);
 
     // Initialize issue operations
     this.issues = new IssueOperations(
@@ -158,7 +174,7 @@ export class JML {
       fieldResolver,
       converterRegistry,
       this.cache,
-      config.baseUrl,
+      this.config.baseUrl,
       this.config // Pass full config for converter customization
     );
   }
@@ -372,6 +388,46 @@ export class JML {
   // istanbul ignore next - wrapper method, tested via integration tests
   async validate(options: ParseInputOptions): Promise<ValidationResult> {
     return await this.validationService.validate(options);
+  }
+
+  /**
+   * Detect deployment type (Cloud vs Server/DC).
+   *
+   * Lazily called on first API usage when `config.deployment` is 'auto'.
+   * Result is cached for instance lifetime.
+   *
+   * @returns Deployment information including type, version, and build number
+   */
+  async detectDeployment(): Promise<DeploymentInfo> {
+    // If already resolved, return cached
+    if (this.endpointResolver) {
+      const info = await this.deploymentDetector.detect();
+      return info;
+    }
+
+    // Deduplicate concurrent detection calls
+    if (!this.deploymentDetectionPromise) {
+      this.deploymentDetectionPromise = this.deploymentDetector.detect().then((info) => {
+        const apiVersion = this.config.apiVersion ?? (info.deployment === 'cloud' ? 'v3' : 'v2');
+        this.endpointResolver = new EndpointResolver(info.deployment, apiVersion);
+        return info;
+      });
+    }
+
+    return this.deploymentDetectionPromise;
+  }
+
+  /**
+   * Get the EndpointResolver, triggering deployment detection if needed.
+   *
+   * @returns EndpointResolver configured for the detected/configured deployment
+   */
+  async getEndpointResolver(): Promise<EndpointResolver> {
+    if (this.endpointResolver) {
+      return this.endpointResolver;
+    }
+    await this.detectDeployment();
+    return this.endpointResolver!;
   }
 
   /**

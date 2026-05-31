@@ -135,6 +135,55 @@ export interface TimeoutConfig {
 }
 
 /**
+ * Authentication using a Personal Access Token (Server/DC)
+ */
+export interface PatAuthConfig {
+  type: 'pat';
+  token: string;
+}
+
+/**
+ * Authentication using Basic Auth with email + API token (Cloud)
+ */
+export interface BasicAuthConfig {
+  type: 'basic';
+  email: string;
+  apiToken: string;
+}
+
+/**
+ * Authentication using OAuth 2.0 (Cloud)
+ */
+export interface OAuth2AuthConfig {
+  type: 'oauth2';
+  accessToken: string;
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+  /** Token endpoint URL. Defaults to https://auth.atlassian.com/oauth/token */
+  tokenUrl?: string;
+}
+
+/**
+ * Discriminated union of all supported authentication methods
+ */
+export type AuthConfig = PatAuthConfig | BasicAuthConfig | OAuth2AuthConfig;
+
+/**
+ * Legacy authentication format (deprecated, use AuthConfig instead).
+ * Automatically migrated to PatAuthConfig with a deprecation warning.
+ */
+export type LegacyAuthConfig = { token: string };
+
+/**
+ * Deployment type for the JIRA instance
+ * - 'server': JIRA Server or Data Center
+ * - 'cloud': JIRA Cloud (Atlassian-hosted)
+ * - 'auto': Auto-detect from serverInfo response (default)
+ */
+export type DeploymentType = 'server' | 'cloud' | 'auto';
+
+/**
  * Main configuration interface for the JIRA Magic Library
  */
 export interface JMLConfig {
@@ -142,12 +191,17 @@ export interface JMLConfig {
   baseUrl: string;
 
   /** Authentication configuration */
-  auth: {
-    /** Personal Access Token (PAT) for authentication */
-    token: string;
-  };
+  auth: AuthConfig | LegacyAuthConfig;
 
-  /** JIRA API version to use */
+  /**
+   * Deployment type override.
+   * - 'auto' (default): detect from serverInfo endpoint
+   * - 'server': force Server/DC mode (API v2)
+   * - 'cloud': force Cloud mode (API v3)
+   */
+  deployment?: DeploymentType;
+
+  /** JIRA API version to use (overrides deployment-based auto-selection) */
   apiVersion?: 'v2' | 'v3';
 
   /** Redis connection configuration */

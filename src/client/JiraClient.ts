@@ -11,6 +11,8 @@ import { JiraServerError } from '../errors/JiraServerError.js';
 import { NetworkError } from '../errors/NetworkError.js';
 import { ValidationError } from '../errors/ValidationError.js';
 import type { JiraErrorResponse } from '../types/jira-api.js';
+import type { AuthStrategy } from './AuthStrategy.js';
+import { createAuthStrategy } from './AuthStrategy.js';
 
 /**
  * HTTP methods supported by the client
@@ -64,7 +66,7 @@ class Semaphore {
  */
 export class JiraClientImpl implements JiraClient {
   private readonly baseUrl: string;
-  private readonly pat: string;
+  private readonly authStrategy: AuthStrategy;
   private readonly semaphore: Semaphore;
   private readonly maxRetries = 3;
   private readonly retryDelays = [1000, 2000, 4000]; // 1s, 2s, 4s
@@ -73,7 +75,7 @@ export class JiraClientImpl implements JiraClient {
 
   constructor(config: JMLConfig) {
     this.baseUrl = config.baseUrl.replace(/\/$/, ''); // Remove trailing slash
-    this.pat = config.auth.token;
+    this.authStrategy = createAuthStrategy(config.auth);
     this.semaphore = new Semaphore(10); // Max 10 concurrent requests
 
     // Initialize default timeout from config
@@ -163,10 +165,11 @@ export class JiraClientImpl implements JiraClient {
           }
 
           // Make request
+          const authHeaders = await this.authStrategy.getHeaders();
           const response = await fetch(url, {
             method,
             headers: {
-              'Authorization': `Bearer ${this.pat}`,
+              ...authHeaders,
               'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
@@ -218,6 +221,14 @@ export class JiraClientImpl implements JiraClient {
                 errorData.errorMessages?.[0] || 'Service temporarily unavailable',
                 { status: response.status, url, attempt: attempt + 1 }
               );
+            }
+          }
+
+          // On 401, attempt OAuth2 token refresh and retry once
+          if (response.status === 401) {
+            const refreshed = await this.authStrategy.handleUnauthorized();
+            if (refreshed && attempt < this.maxRetries - 1) {
+              continue; // Retry with refreshed token
             }
           }
 
