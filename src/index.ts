@@ -126,4 +126,15 @@ export type {
   FieldInfo,
   FieldListOptions,
 } from './discovery/types.js';
-export type { ProjectsAPI, FieldsAPI, IssueTypesAPI } from './jml.js';
+export type { ProjectsAPI, FieldsAPI, IssueTypesAPI, UsersAPI, ResolveAPI } from './jml.js';
+
+// Resolution APIs (Cloud expansion Phase 3)
+export { UserResolver } from './resolution/UserResolver.js';
+export { FieldOptionResolver } from './resolution/FieldOptionResolver.js';
+export { EntityResolver } from './resolution/EntityResolver.js';
+export type {
+  ResolvedUser,
+  UserResolveOptions,
+  ResolvedOption,
+  ResolvedEntity,
+} from './resolution/types.js';

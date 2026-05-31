@@ -30,6 +30,10 @@ import { IssueTypeDiscovery } from './discovery/IssueTypeDiscovery.js';
 import { FieldMetadataDiscovery } from './discovery/FieldMetadataDiscovery.js';
 import type { ProjectInfo, ProjectListOptions, FieldInfo, FieldListOptions, IssueTypeInfo, IssueTypeSearchOptions } from './discovery/types.js';
 import { InMemoryCache } from './cache/InMemoryCache.js';
+import { UserResolver } from './resolution/UserResolver.js';
+import { FieldOptionResolver } from './resolution/FieldOptionResolver.js';
+import { EntityResolver } from './resolution/EntityResolver.js';
+import type { ResolvedUser, UserResolveOptions, ResolvedOption, ResolvedEntity } from './resolution/types.js';
 
 /**
  * Server information returned by JIRA
@@ -70,6 +74,26 @@ export interface FieldsAPI {
 export interface IssueTypesAPI {
   getForProject(projectKey: string, options?: IssueTypeSearchOptions): Promise<IssueTypeInfo[]>;
   resolve(projectKey: string, query: string): Promise<IssueTypeInfo>;
+}
+
+/**
+ * Users namespace API
+ */
+export interface UsersAPI {
+  resolve(query: string, options?: UserResolveOptions): Promise<ResolvedUser>;
+  search(query: string, options?: UserResolveOptions): Promise<ResolvedUser[]>;
+}
+
+/**
+ * Resolve namespace API — resolves human-friendly text to JIRA IDs
+ */
+export interface ResolveAPI {
+  priority(query: string): Promise<ResolvedEntity>;
+  status(query: string, projectKey: string, issueType?: string): Promise<ResolvedEntity>;
+  component(query: string, projectKey: string): Promise<ResolvedEntity>;
+  version(query: string, projectKey: string): Promise<ResolvedEntity>;
+  fieldOption(fieldId: string, query: string, projectKey: string, issueType: string): Promise<ResolvedOption>;
+  user(query: string): Promise<ResolvedUser>;
 }
 
 /**
@@ -117,6 +141,18 @@ export class JML {
    * Get issue types for a project, resolve fuzzy names.
    */
   public readonly issueTypes: IssueTypesAPI;
+
+  /**
+   * Users namespace.
+   * Resolve and search users by email/display name.
+   */
+  public readonly users: UsersAPI;
+
+  /**
+   * Resolve namespace.
+   * Resolve human-friendly text to JIRA IDs (priority, status, component, version, fieldOption, user).
+   */
+  public readonly resolve: ResolveAPI;
 
   private readonly client: JiraClientImpl;
   private readonly cache: RedisCache;
@@ -252,6 +288,45 @@ export class JML {
     this.issueTypes = {
       getForProject: (projectKey, options) => issueTypeDiscovery.getForProject(projectKey, options),
       resolve: (projectKey, query) => issueTypeDiscovery.resolve(projectKey, query),
+    };
+
+    // Initialize resolution APIs (lazy — resolvers created on first call after deployment detection)
+    this.users = {
+      resolve: async (query, options) => {
+        const resolver = await this.createUserResolver();
+        return resolver.resolve(query, options);
+      },
+      search: async (query, options) => {
+        const resolver = await this.createUserResolver();
+        return resolver.search(query, options);
+      },
+    };
+
+    this.resolve = {
+      priority: async (query) => {
+        const resolver = await this.createEntityResolver();
+        return resolver.resolvePriority(query);
+      },
+      status: async (query, projectKey, issueType?) => {
+        const resolver = await this.createEntityResolver();
+        return resolver.resolveStatus(query, projectKey, issueType);
+      },
+      component: async (query, projectKey) => {
+        const resolver = await this.createEntityResolver();
+        return resolver.resolveComponent(query, projectKey);
+      },
+      version: async (query, projectKey) => {
+        const resolver = await this.createEntityResolver();
+        return resolver.resolveVersion(query, projectKey);
+      },
+      fieldOption: async (fieldId, query, projectKey, issueType) => {
+        const resolver = await this.createFieldOptionResolver();
+        return resolver.resolve(fieldId, query, projectKey, issueType);
+      },
+      user: async (query) => {
+        const resolver = await this.createUserResolver();
+        return resolver.resolve(query);
+      },
     };
   }
 
@@ -504,6 +579,36 @@ export class JML {
     }
     await this.detectDeployment();
     return this.endpointResolver!;
+  }
+
+  /**
+   * Create a UserResolver with lazy deployment detection.
+   */
+  private async createUserResolver(): Promise<UserResolver> {
+    const resolver = await this.getEndpointResolver();
+    const info = await this.detectDeployment();
+    const discoveryCache = new InMemoryCache();
+    return new UserResolver(this.client, discoveryCache, resolver, info.deployment);
+  }
+
+  /**
+   * Create a FieldOptionResolver with lazy deployment detection.
+   */
+  private async createFieldOptionResolver(): Promise<FieldOptionResolver> {
+    const resolver = await this.getEndpointResolver();
+    const info = await this.detectDeployment();
+    const discoveryCache = new InMemoryCache();
+    return new FieldOptionResolver(this.client, discoveryCache, resolver, info.deployment);
+  }
+
+  /**
+   * Create an EntityResolver with lazy deployment detection.
+   */
+  private async createEntityResolver(): Promise<EntityResolver> {
+    const resolver = await this.getEndpointResolver();
+    const info = await this.detectDeployment();
+    const discoveryCache = new InMemoryCache();
+    return new EntityResolver(this.client, discoveryCache, resolver, info.deployment);
   }
 
   /**
