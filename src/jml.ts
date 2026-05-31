@@ -261,7 +261,9 @@ export class JML {
       converterRegistry,
       this.cache,
       this.config.baseUrl,
-      this.config // Pass full config for converter customization
+      this.config, // Pass full config for converter customization
+      deploymentSetting !== 'auto' ? deploymentSetting : undefined,
+      () => this.getEndpointResolver()
     );
 
     // Initialize discovery APIs with in-memory cache (lightweight, no Redis dependency)

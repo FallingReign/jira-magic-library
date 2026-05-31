@@ -5,7 +5,7 @@ import { ConverterRegistry } from '../converters/ConverterRegistry.js';
 import { Issue } from '../types/index.js';
 import { BulkResult, BulkManifest } from '../types/bulk.js';
 import { LookupCache, GenericCache } from '../types/converter.js';
-import type { JMLConfig, AmbiguityPolicyConfig, FuzzyMatchConfig } from '../types/config.js';
+import type { JMLConfig, DeploymentType, AmbiguityPolicyConfig, FuzzyMatchConfig } from '../types/config.js';
 import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
 import { ManifestStorage } from './ManifestStorage.js';
 import { JiraBulkApiWrapper } from './JiraBulkApiWrapper.js';
@@ -16,6 +16,8 @@ import { preprocessHierarchyRecords } from './bulk/HierarchyPreprocessor.js';
 import { IssueSearch } from './IssueSearch.js';
 import { MarkerInjector } from './bulk/MarkerInjector.js';
 import { BulkProgressTracker, type ProgressUpdate } from './bulk/BulkProgressTracker.js';
+import { CloudCreateAdapter } from './CloudCreateAdapter.js';
+import { EndpointResolver } from '../client/EndpointResolver.js';
 
 /**
  * Input supported by {@link JML.issues | `jml.issues.create`}.
@@ -127,6 +129,8 @@ export class IssueOperations implements IssuesAPI {
   private manifestStorage?: ManifestStorage;
   private bulkApiWrapper?: JiraBulkApiWrapper;
   private issueSearch: IssueSearch;
+  private cloudAdapter?: CloudCreateAdapter;
+  private endpointResolverFn?: () => Promise<EndpointResolver>;
 
   constructor(
     private client: JiraClient,
@@ -135,8 +139,15 @@ export class IssueOperations implements IssuesAPI {
     private converter: ConverterRegistry,
     private cache?: LookupCache,
     private baseUrl?: string,
-    private config?: JMLConfig
+    private config?: JMLConfig,
+    deployment?: DeploymentType,
+    endpointResolverFn?: () => Promise<EndpointResolver>
   ) {
+    // Initialize cloud adapter if deployment is known
+    if (deployment && deployment !== 'auto') {
+      this.cloudAdapter = new CloudCreateAdapter(deployment);
+    }
+    this.endpointResolverFn = endpointResolverFn;
     // Initialize bulk operation dependencies if cache available
     // Note: LookupCache is always RedisCache at runtime (from JML constructor)
     if (cache) {
@@ -599,9 +610,12 @@ export class IssueOperations implements IssuesAPI {
     );
 
     // Build JIRA payload
-    const payload = {
+    let payload: Record<string, unknown> = {
       fields: convertedFields,
     };
+
+    // Apply Cloud/Server adaptation before sending
+    payload = this.adaptForDeployment(payload);
 
     // Dry-run mode: return payload without API call
     if (options?.validate) {
@@ -609,13 +623,16 @@ export class IssueOperations implements IssuesAPI {
         key: 'DRY-RUN',
         id: '0',
         self: '',
-        fields: convertedFields,
+        fields: payload.fields as Record<string, unknown>,
       };
     }
 
+    // Resolve endpoint (use EndpointResolver if available, else fallback)
+    const endpoint = await this.resolveIssueCreateEndpoint();
+
     // Create issue via JIRA API
     try {
-      const response = await this.client.post<Issue>('/rest/api/2/issue', payload);
+      const response = await this.client.post<Issue>(endpoint, payload);
       return response;
     } catch (err: unknown) {
       // Wrap JIRA error with context
@@ -1468,6 +1485,55 @@ export class IssueOperations implements IssuesAPI {
    */
   async search(criteria: Record<string, unknown>): Promise<Issue[]> {
     return this.issueSearch.search(criteria);
+  }
+
+  /**
+   * Adapt payload for Cloud/Server deployment differences.
+   * If deployment is 'cloud', converts description to ADF, user fields to accountId, etc.
+   * If deployment is 'server' or unknown, passes through unchanged.
+   * @private
+   */
+  private adaptForDeployment(payload: Record<string, unknown>): Record<string, unknown> {
+    if (!this.cloudAdapter) {
+      return payload;
+    }
+    return this.cloudAdapter.adaptPayload(payload);
+  }
+
+  /**
+   * Resolve the issue creation endpoint URL.
+   * Uses EndpointResolver if available, otherwise falls back to /rest/api/2/issue.
+   * @private
+   */
+  private async resolveIssueCreateEndpoint(): Promise<string> {
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.issueCreate();
+      } catch {
+        // Fallback if detection fails
+      }
+    }
+    return '/rest/api/2/issue';
+  }
+
+  /**
+   * Resolve the bulk issue creation endpoint URL.
+   * Uses EndpointResolver if available, otherwise falls back to /rest/api/2/issue/bulk.
+   * Reserved for use in bulk operations that need dynamic endpoint resolution.
+   * @private
+   */
+  /* istanbul ignore next */
+  async resolveBulkCreateEndpoint(): Promise<string> {
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.issueBulkCreate();
+      } catch {
+        // Fallback if detection fails
+      }
+    }
+    return '/rest/api/2/issue/bulk';
   }
 }
 
