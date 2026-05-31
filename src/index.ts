@@ -27,6 +27,22 @@ export type {
   IssuesCreateOptions,
 } from './operations/IssueOperations.js';
 
+// Payload Preview (Cloud expansion Phase 5)
+export { PayloadPreview } from './operations/PayloadPreview.js';
+export type { PreviewResult, FieldResolution } from './operations/PayloadPreview.js';
+
+// Cache Invalidation (Cloud expansion Phase 5)
+export { CacheInvalidation } from './operations/CacheInvalidation.js';
+export type { InvalidationOptions } from './operations/CacheInvalidation.js';
+
+// Error Normalizer (Cloud expansion Phase 4)
+export { ErrorNormalizer } from './operations/ErrorNormalizer.js';
+export type { NormalizedBulkResult, NormalizedError } from './operations/ErrorNormalizer.js';
+
+// ADF Converter (Cloud expansion Phase 4)
+export { AdfConverter } from './converters/AdfConverter.js';
+export type { AdfDocument } from './converters/AdfConverter.js';
+
 // Issue Search API (Phase 2.1)
 export { IssueSearch } from './operations/IssueSearch.js';
 export type { IssuesSearchOptions } from './operations/IssueSearch.js';

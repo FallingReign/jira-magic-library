@@ -18,6 +18,8 @@ import { MarkerInjector } from './bulk/MarkerInjector.js';
 import { BulkProgressTracker, type ProgressUpdate } from './bulk/BulkProgressTracker.js';
 import { CloudCreateAdapter } from './CloudCreateAdapter.js';
 import { EndpointResolver } from '../client/EndpointResolver.js';
+import { PayloadPreview } from './PayloadPreview.js';
+import type { PreviewResult } from './PayloadPreview.js';
 
 /**
  * Input supported by {@link JML.issues | `jml.issues.create`}.
@@ -118,6 +120,18 @@ export interface IssuesAPI {
    * ```
    */
   search(criteria: Record<string, unknown>): Promise<Issue[]>;
+
+  /**
+   * Preview resolved payload without submitting to Jira.
+   *
+   * Runs the same resolution + conversion + adaptation flow as `create()`,
+   * but returns the final payload with metadata about each field resolution
+   * instead of posting it.
+   *
+   * @param input - Single object or array of objects to preview
+   * @returns PreviewResult for single, PreviewResult[] for array
+   */
+  preview(input: Record<string, unknown> | Array<Record<string, unknown>>): Promise<PreviewResult | PreviewResult[]>;
 }
 
 /**
@@ -1485,6 +1499,45 @@ export class IssueOperations implements IssuesAPI {
    */
   async search(criteria: Record<string, unknown>): Promise<Issue[]> {
     return this.issueSearch.search(criteria);
+  }
+
+  /**
+   * Preview resolved payload without submitting to Jira.
+   *
+   * Runs the same field resolution, conversion, and Cloud adaptation flow
+   * as `create()`, but returns the final payload with resolution metadata
+   * instead of POSTing it to Jira.
+   *
+   * @param input - Single object or array of objects to preview
+   * @returns PreviewResult for single input, PreviewResult[] for array
+   */
+  async preview(
+    input: Record<string, unknown> | Array<Record<string, unknown>>
+  ): Promise<PreviewResult | PreviewResult[]> {
+    const deploymentFn = async (): Promise<DeploymentType> => {
+      if (this.cloudAdapter) {
+        // CloudCreateAdapter was created with a known deployment
+        return (this.cloudAdapter as unknown as { deployment: DeploymentType }).deployment;
+      }
+      return 'server';
+    };
+
+    const previewInstance = new PayloadPreview(
+      this.client,
+      this.schema,
+      this.resolver,
+      this.converter,
+      this.cloudAdapter,
+      this.endpointResolverFn ?? (() => Promise.reject(new Error('No endpoint resolver'))),
+      deploymentFn,
+      this.cache,
+      this.config
+    );
+
+    if (Array.isArray(input)) {
+      return previewInstance.previewBulk(input);
+    }
+    return previewInstance.preview(input);
   }
 
   /**

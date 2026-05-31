@@ -34,6 +34,8 @@ import { UserResolver } from './resolution/UserResolver.js';
 import { FieldOptionResolver } from './resolution/FieldOptionResolver.js';
 import { EntityResolver } from './resolution/EntityResolver.js';
 import type { ResolvedUser, UserResolveOptions, ResolvedOption, ResolvedEntity } from './resolution/types.js';
+import { CacheInvalidation } from './operations/CacheInvalidation.js';
+import type { InvalidationOptions } from './operations/CacheInvalidation.js';
 
 /**
  * Server information returned by JIRA
@@ -611,6 +613,19 @@ export class JML {
     const info = await this.detectDeployment();
     const discoveryCache = new InMemoryCache();
     return new EntityResolver(this.client, discoveryCache, resolver, info.deployment);
+  }
+
+  /**
+   * Invalidate cached metadata.
+   *
+   * Use after configuration changes (e.g., new custom fields, renamed projects)
+   * to force fresh data from Jira on next access.
+   *
+   * @param options - What to invalidate (project, users, fields, or all)
+   */
+  async invalidateCache(options?: InvalidationOptions): Promise<void> {
+    const invalidation = new CacheInvalidation(this.cache);
+    await invalidation.invalidate(options ?? { all: true });
   }
 
   /**
