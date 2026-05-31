@@ -65,10 +65,12 @@ export class JiraBulkApiWrapper {
    *
    * @param client - JIRA API client from E1-S05
    * @param bulkTimeout - Optional timeout for bulk operations in milliseconds (default: 30000)
+   * @param bulkEndpoint - Optional endpoint override (default: /rest/api/2/issue/bulk)
    */
   constructor(
     private readonly client: JiraClient,
-    bulkTimeout?: number
+    bulkTimeout?: number,
+    private readonly bulkEndpoint?: string
   ) {
     this.bulkTimeout = bulkTimeout ?? 30000; // Default 30s for bulk operations
   }
@@ -109,10 +111,11 @@ export class JiraBulkApiWrapper {
     try {
       // Use override if provided, else use configured bulkTimeout
       const effectiveTimeout = timeoutOverride ?? this.bulkTimeout;
+      const endpoint = this.bulkEndpoint ?? '/rest/api/2/issue/bulk';
 
       // Call JIRA bulk API with effective timeout
       const response = await this.client.post<JiraBulkApiResponse>(
-        '/rest/api/2/issue/bulk',
+        endpoint,
         { issueUpdates: payloads },
         effectiveTimeout // Pass effective timeout to client
       );

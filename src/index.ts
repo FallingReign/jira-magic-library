@@ -10,12 +10,38 @@
 
 // Main JML class
 export { JML } from './jml.js';
-export type { JMLConfig, AmbiguityPolicyConfig, FuzzyMatchConfig } from './types/config.js';
+export type {
+  JMLConfig,
+  AmbiguityPolicyConfig,
+  FuzzyMatchConfig,
+  AuthConfig,
+  PatAuthConfig,
+  BasicAuthConfig,
+  OAuth2AuthConfig,
+  LegacyAuthConfig,
+  DeploymentType,
+} from './types/config.js';
 export type {
   IssuesAPI,
   IssuesCreateInput,
   IssuesCreateOptions,
 } from './operations/IssueOperations.js';
+
+// Payload Preview (Cloud expansion Phase 5)
+export { PayloadPreview } from './operations/PayloadPreview.js';
+export type { PreviewResult, FieldResolution } from './operations/PayloadPreview.js';
+
+// Cache Invalidation (Cloud expansion Phase 5)
+export { CacheInvalidation } from './operations/CacheInvalidation.js';
+export type { InvalidationOptions } from './operations/CacheInvalidation.js';
+
+// Error Normalizer (Cloud expansion Phase 4)
+export { ErrorNormalizer } from './operations/ErrorNormalizer.js';
+export type { NormalizedBulkResult, NormalizedError } from './operations/ErrorNormalizer.js';
+
+// ADF Converter (Cloud expansion Phase 4)
+export { AdfConverter } from './converters/AdfConverter.js';
+export type { AdfDocument } from './converters/AdfConverter.js';
 
 // Issue Search API (Phase 2.1)
 export { IssueSearch } from './operations/IssueSearch.js';
@@ -78,3 +104,53 @@ export type { ValidationWarning } from './validation/types.js';
 export { RedisCache } from './cache/RedisCache.js';
 export type { JiraClient } from './client/JiraClient.js';
 export { JiraClientImpl } from './client/JiraClient.js';
+
+// Auth Strategy (Cloud expansion)
+export {
+  createAuthStrategy,
+  PatAuthStrategy,
+  BasicAuthStrategy,
+  OAuth2AuthStrategy,
+  OAuthTokenManager,
+  isLegacyAuth,
+} from './client/AuthStrategy.js';
+export type { AuthStrategy, AuthHeaders } from './client/AuthStrategy.js';
+
+// Deployment Detection (Cloud expansion)
+export { DeploymentDetector } from './client/DeploymentDetector.js';
+export type { DeploymentInfo } from './client/DeploymentDetector.js';
+
+// Endpoint Resolver (Cloud expansion)
+export { EndpointResolver } from './client/EndpointResolver.js';
+
+// Cache Adapter (pluggable cache interface)
+export type { CacheAdapter, CacheAdapterResult } from './cache/CacheAdapter.js';
+export { InMemoryCache } from './cache/InMemoryCache.js';
+
+// Config migration
+export { migrateConfig } from './config/migrateConfig.js';
+
+// Discovery APIs (Cloud expansion Phase 2)
+export { ProjectDiscovery } from './discovery/ProjectDiscovery.js';
+export { IssueTypeDiscovery } from './discovery/IssueTypeDiscovery.js';
+export { FieldMetadataDiscovery } from './discovery/FieldMetadataDiscovery.js';
+export type {
+  ProjectInfo,
+  ProjectListOptions,
+  IssueTypeInfo,
+  IssueTypeSearchOptions,
+  FieldInfo,
+  FieldListOptions,
+} from './discovery/types.js';
+export type { ProjectsAPI, FieldsAPI, IssueTypesAPI, UsersAPI, ResolveAPI } from './jml.js';
+
+// Resolution APIs (Cloud expansion Phase 3)
+export { UserResolver } from './resolution/UserResolver.js';
+export { FieldOptionResolver } from './resolution/FieldOptionResolver.js';
+export { EntityResolver } from './resolution/EntityResolver.js';
+export type {
+  ResolvedUser,
+  UserResolveOptions,
+  ResolvedOption,
+  ResolvedEntity,
+} from './resolution/types.js';
