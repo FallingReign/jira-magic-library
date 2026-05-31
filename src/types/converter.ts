@@ -1,4 +1,5 @@
 import { FieldSchema } from './schema.js';
+import type { EndpointResolver } from '../client/EndpointResolver.js';
 
 // Re-export FieldSchema for converter implementations
 export type { FieldSchema };
@@ -82,6 +83,9 @@ export interface ConversionContext {
   /** JML configuration (for converter customization like abbreviations, synonyms) */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config?: any; // Use 'any' to avoid circular dependency with JMLConfig
+
+  /** Lazy endpoint resolver for deployment-aware API paths */
+  endpointResolverFn?: () => Promise<EndpointResolver>;
 }
 
 /**

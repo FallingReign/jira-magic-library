@@ -106,12 +106,13 @@ export class JiraBulkApiWrapper {
    */
   async createBulk(
     payloads: BulkIssuePayload[],
-    timeoutOverride?: number  // Optional timeout override
+    timeoutOverride?: number,
+    endpointOverride?: string
   ): Promise<BulkApiResult> {
     try {
       // Use override if provided, else use configured bulkTimeout
       const effectiveTimeout = timeoutOverride ?? this.bulkTimeout;
-      const endpoint = this.bulkEndpoint ?? '/rest/api/2/issue/bulk';
+      const endpoint = endpointOverride ?? this.bulkEndpoint ?? '/rest/api/2/issue/bulk';
 
       // Call JIRA bulk API with effective timeout
       const response = await this.client.post<JiraBulkApiResponse>(

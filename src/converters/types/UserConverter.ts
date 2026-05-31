@@ -85,16 +85,30 @@ async function fetchAllUsers(context: ConversionContext): Promise<JiraUser[]> {
     return [];
   }
 
+  let endpoint = '/rest/api/2/user/search';
+  let paramName = 'username';
+  let wildcard = '.';
+
+  if (context.endpointResolverFn) {
+    try {
+      const resolver = await context.endpointResolverFn();
+      endpoint = resolver.userSearch();
+      paramName = resolver.userSearchParam;
+      wildcard = resolver.isCloud ? '' : '.';
+    } catch {
+      // Fall back to Server/DC default when auto-detection is unavailable
+    }
+  }
+
   const allUsers: JiraUser[] = [];
   let startAt = 0;
   const maxResults = 1000; // API max per request
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    // Use "." as wildcard - matches all users in JIRA Server/DC
     // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const batch = (await context.client.get('/rest/api/2/user/search', {
-      username: '.',
+    const batch = (await context.client.get(endpoint, {
+      [paramName]: wildcard,
       startAt,
       maxResults,
     })) as JiraUser[];

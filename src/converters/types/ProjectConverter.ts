@@ -41,7 +41,7 @@
  * ```
  */
 
-import type { FieldConverter } from '../../types/converter.js';
+import type { FieldConverter, ConversionContext } from '../../types/converter.js';
 import type { JiraClient } from '../../client/JiraClient.js';
 import type { CacheClient } from '../../types/cache.js';
 import { ValidationError } from '../../errors/ValidationError.js';
@@ -112,7 +112,7 @@ export const convertProjectType: FieldConverter = async (value, fieldSchema, con
   // Try as key first (faster - single API call)
   if (looksLikeProjectKey(keyOrName)) {
     try {
-      const project = await fetchProjectByKey(context.client as JiraClient, keyOrName);
+      const project = await fetchProjectByKey(context, keyOrName);
       const result = { key: project.key };
       await tryCacheResult(cache, cacheKey, result, 900); // 15 min
       return result;
@@ -129,11 +129,7 @@ export const convertProjectType: FieldConverter = async (value, fieldSchema, con
 
   // Try as name (requires fetching all projects)
   // istanbul ignore next - baseUrl is always provided in practice
-  const projects = await fetchAllProjects(
-    context.client as JiraClient,
-    cache,
-    context.baseUrl || ''
-  );
+  const projects = await fetchAllProjects(context, cache, context.baseUrl || '');
   
   // Use fuzzy matching for project names
   const projectLookup = projects.map(p => ({ id: p.key, name: p.name }));
@@ -154,18 +150,43 @@ function looksLikeProjectKey(value: string): boolean {
   return /^[A-Z][A-Z0-9]{0,10}$/.test(value.trim());
 }
 
+async function resolveProjectGetEndpoint(context: ConversionContext, key: string): Promise<string> {
+  if (context.endpointResolverFn) {
+    try {
+      const resolver = await context.endpointResolverFn();
+      return resolver.projectGet(key);
+    } catch {
+      // Fall back to Server/DC default when auto-detection is unavailable
+    }
+  }
+  return `/rest/api/2/project/${key}`;
+}
+
+async function resolveProjectListEndpoint(context: ConversionContext): Promise<string> {
+  if (context.endpointResolverFn) {
+    try {
+      const resolver = await context.endpointResolverFn();
+      return resolver.projectList();
+    } catch {
+      // Fall back to Server/DC default when auto-detection is unavailable
+    }
+  }
+  return '/rest/api/2/project';
+}
+
 /**
  * Fetches project by key from JIRA API
  */
-async function fetchProjectByKey(client: JiraClient, key: string): Promise<JiraProject> {
-  return await client.get(`/rest/api/2/project/${key}`);
+async function fetchProjectByKey(context: ConversionContext, key: string): Promise<JiraProject> {
+  const endpoint = await resolveProjectGetEndpoint(context, key);
+  return await (context.client as JiraClient).get(endpoint);
 }
 
 /**
  * Fetches all projects from JIRA API, with caching
  */
 async function fetchAllProjects(
-  client: JiraClient,
+  context: ConversionContext,
   cache: CacheClient | undefined,
   baseUrl: string
 ): Promise<JiraProject[]> {
@@ -177,7 +198,9 @@ async function fetchAllProjects(
   }
 
   // Fetch from API
-  const projects = await client.get<JiraProject[]>('/rest/api/2/project');
+  const endpoint = await resolveProjectListEndpoint(context);
+  const response = await (context.client as JiraClient).get<JiraProject[] | { values?: JiraProject[] }>(endpoint);
+  const projects = Array.isArray(response) ? response : (response.values ?? []);
   await tryCacheResult(cache, cacheKey, projects, 900); // 15 min
   return projects;
 }

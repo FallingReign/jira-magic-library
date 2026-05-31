@@ -154,13 +154,9 @@ export class IssueOperations implements IssuesAPI {
     private cache?: LookupCache,
     private baseUrl?: string,
     private config?: JMLConfig,
-    deployment?: DeploymentType,
+    private deployment?: DeploymentType,
     endpointResolverFn?: () => Promise<EndpointResolver>
   ) {
-    // Initialize cloud adapter if deployment is known
-    if (deployment && deployment !== 'auto') {
-      this.cloudAdapter = new CloudCreateAdapter(deployment);
-    }
     this.endpointResolverFn = endpointResolverFn;
     // Initialize bulk operation dependencies if cache available
     // Note: LookupCache is always RedisCache at runtime (from JML constructor)
@@ -429,8 +425,9 @@ export class IssueOperations implements IssuesAPI {
     });
 
     // Call bulk API with valid payloads
+    const bulkEndpoint = await this.resolveBulkCreateEndpoint();
     const apiResult = validPayloads.length > 0
-      ? await this.bulkApiWrapper.createBulk(validPayloads.map(vp => vp.payload))
+      ? await this.bulkApiWrapper.createBulk(validPayloads.map(vp => vp.payload), undefined, bulkEndpoint)
       : { created: [], failed: [] };
 
     // Remap API results back to original row indices
@@ -619,7 +616,8 @@ export class IssueOperations implements IssuesAPI {
         cache: this.cache,
         cacheClient: this.cache as unknown as GenericCache, // RedisCache implements both LookupCache and GenericCache
         client: this.client,
-        config: mergedConfig // Pass merged config for converter customization (AC8, AC9, per-call overrides)
+        config: mergedConfig, // Pass merged config for converter customization (AC8, AC9, per-call overrides)
+        endpointResolverFn: this.endpointResolverFn,
       }
     );
 
@@ -629,7 +627,7 @@ export class IssueOperations implements IssuesAPI {
     };
 
     // Apply Cloud/Server adaptation before sending
-    payload = this.adaptForDeployment(payload);
+    payload = await this.adaptForDeployment(payload);
 
     // Dry-run mode: return payload without API call
     if (options?.validate) {
@@ -806,11 +804,13 @@ export class IssueOperations implements IssuesAPI {
       : undefined; // Use default bulk timeout
 
     // Call bulk API with valid payloads only (E4-S03)
+    const bulkEndpoint = await this.resolveBulkCreateEndpoint();
     // istanbul ignore next - defensive: validPayloads.length already checked above
     const apiResult = validPayloads.length > 0
       ? await this.bulkApiWrapper.createBulk(
           validPayloads.map(vp => vp.payload),
-          httpTimeout  // Pass Infinity or undefined
+          httpTimeout,
+          bulkEndpoint
         )
       : { created: [], failed: [] };
 
@@ -995,8 +995,9 @@ export class IssueOperations implements IssuesAPI {
       });
 
       // Call bulk API
+      const bulkEndpoint = await this.resolveBulkCreateEndpoint();
       const apiResult = validPayloads.length > 0
-        ? await this.bulkApiWrapper!.createBulk(validPayloads.map(vp => vp.payload))
+        ? await this.bulkApiWrapper!.createBulk(validPayloads.map(vp => vp.payload), undefined, bulkEndpoint)
         : { created: [], failed: [] };
 
       // Remap results back to original indices and update manifest
@@ -1356,9 +1357,11 @@ export class IssueOperations implements IssuesAPI {
         : undefined;
 
       // Call bulk API for this level
+      const bulkEndpoint = await this.resolveBulkCreateEndpoint();
       const apiResult = await this.bulkApiWrapper.createBulk(
         validPayloads.map(vp => vp.payload),
-        httpTimeout  // Pass conditional timeout
+        httpTimeout,
+        bulkEndpoint
       );
 
       // Process results and record UID→Key mappings
@@ -1514,20 +1517,15 @@ export class IssueOperations implements IssuesAPI {
   async preview(
     input: Record<string, unknown> | Array<Record<string, unknown>>
   ): Promise<PreviewResult | PreviewResult[]> {
-    const deploymentFn = async (): Promise<DeploymentType> => {
-      if (this.cloudAdapter) {
-        // CloudCreateAdapter was created with a known deployment
-        return (this.cloudAdapter as unknown as { deployment: DeploymentType }).deployment;
-      }
-      return 'server';
-    };
+    const cloudAdapter = await this.getCloudAdapter();
+    const deploymentFn = async (): Promise<DeploymentType> => this.getDeployment();
 
     const previewInstance = new PayloadPreview(
       this.client,
       this.schema,
       this.resolver,
       this.converter,
-      this.cloudAdapter,
+      cloudAdapter,
       this.endpointResolverFn ?? (() => Promise.reject(new Error('No endpoint resolver'))),
       deploymentFn,
       this.cache,
@@ -1540,17 +1538,65 @@ export class IssueOperations implements IssuesAPI {
     return previewInstance.preview(input);
   }
 
+  private async getCloudAdapter(): Promise<CloudCreateAdapter | undefined> {
+    if (this.cloudAdapter) {
+      return this.cloudAdapter;
+    }
+
+    if (this.deployment === 'cloud') {
+      this.cloudAdapter = new CloudCreateAdapter('cloud');
+      return this.cloudAdapter;
+    }
+
+    if (this.deployment === 'server') {
+      return undefined;
+    }
+
+    if (!this.endpointResolverFn) {
+      return undefined;
+    }
+
+    try {
+      const resolver = await this.endpointResolverFn();
+      if (resolver.isCloud) {
+        this.cloudAdapter = new CloudCreateAdapter('cloud');
+      }
+    } catch {
+      return undefined;
+    }
+
+    return this.cloudAdapter;
+  }
+
+  private async getDeployment(): Promise<DeploymentType> {
+    if (this.deployment && this.deployment !== 'auto') {
+      return this.deployment;
+    }
+
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.isCloud ? 'cloud' : 'server';
+      } catch {
+        // Fall back to Server/DC default when auto-detection is unavailable
+      }
+    }
+
+    return 'server';
+  }
+
   /**
    * Adapt payload for Cloud/Server deployment differences.
    * If deployment is 'cloud', converts description to ADF, user fields to accountId, etc.
    * If deployment is 'server' or unknown, passes through unchanged.
    * @private
    */
-  private adaptForDeployment(payload: Record<string, unknown>): Record<string, unknown> {
-    if (!this.cloudAdapter) {
+  private async adaptForDeployment(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const cloudAdapter = await this.getCloudAdapter();
+    if (!cloudAdapter) {
       return payload;
     }
-    return this.cloudAdapter.adaptPayload(payload);
+    return cloudAdapter.adaptPayload(payload);
   }
 
   /**

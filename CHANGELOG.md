@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [2.0.1] - 2026-07-15
+
+### Fixed
+- **Cloud adapter activation** — `CloudCreateAdapter` now activates after auto-detection (previously only worked with explicit `deployment: 'cloud'` config)
+- **Bulk create endpoint** — Bulk issue creation now uses deployment-aware endpoint via `EndpointResolver` instead of hardcoded `/rest/api/2/issue/bulk`
+- **Core converter Cloud compatibility** — All 12 hardcoded `/rest/api/2/` paths in UserConverter, ProjectConverter, IssueTypeConverter, SchemaDiscovery, and FieldResolver now route through `EndpointResolver` for correct Cloud v3 paths
+- **User search Cloud support** — UserConverter uses `query` param (Cloud) vs `username` param (Server) with deployment-appropriate wildcard
+- **`timeout.single` backward compat** — Restored as deprecated optional field in `TimeoutConfig` for downstream type compatibility
+
+### Changed
+- **ConversionContext** — Now carries optional `endpointResolver` so all field converters can access deployment-aware endpoints
+- **SchemaDiscovery** — Accepts optional `EndpointResolver` for deployment-aware createmeta paths
+- **FieldResolver** — Accepts optional `EndpointResolver` for project/issue-type resolution paths
+- **JiraBulkApiWrapper** — `createBulk()` accepts per-call endpoint override parameter
+
 ## [2.0.0] - 2026-07-15
 
 ### Added

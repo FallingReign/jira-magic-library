@@ -228,7 +228,8 @@ export class JML {
     this.schemaDiscovery = new SchemaDiscovery(
       this.client,
       this.cache,
-      this.config.baseUrl
+      this.config.baseUrl,
+      () => this.getEndpointResolver()
     );
 
     // Initialize validation service (E4-S07)
@@ -249,7 +250,8 @@ export class JML {
       this.parentFieldDiscovery,
       this.client,
       this.cache,
-      this.config.parentFieldSynonyms // AC9: custom parent synonyms
+      this.config.parentFieldSynonyms,
+      () => this.getEndpointResolver()
     );
 
     // Initialize converter registry

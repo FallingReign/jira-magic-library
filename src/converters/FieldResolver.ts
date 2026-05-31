@@ -4,6 +4,7 @@ import { VirtualFieldRegistry } from '../schema/VirtualFieldRegistry.js';
 import { ProjectSchema } from '../types/schema.js';
 import type { ParentFieldDiscovery, ParentFieldInfo } from '../hierarchy/ParentFieldDiscovery.js';
 import type { JiraClient } from '../client/JiraClient.js';
+import type { EndpointResolver } from '../client/EndpointResolver.js';
 import type { RedisCache } from '../cache/RedisCache.js';
 import { resolveParentLink } from '../hierarchy/ParentLinkResolver.js';
 import { DEFAULT_PARENT_SYNONYMS } from '../constants/field-constants.js';
@@ -71,10 +72,45 @@ export class FieldResolver {
     private readonly parentFieldDiscovery?: ParentFieldDiscovery,
     private readonly client?: JiraClient,
     private readonly cache?: RedisCache,
-    customParentSynonyms?: string[]
+    customParentSynonyms?: string[],
+    private readonly endpointResolverFn?: () => Promise<EndpointResolver>
   ) {
     // Store custom synonyms for fallback when discovery not configured
     this.customParentSynonyms = customParentSynonyms;
+  }
+
+  private async getApiBase(): Promise<string> {
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.apiBase;
+      } catch {
+        // Fall back to Server/DC default when auto-detection is unavailable
+      }
+    }
+    return '/rest/api/2';
+  }
+
+  private async getProjectEndpoint(projectIdOrKey: string): Promise<string> {
+    const apiBase = await this.getApiBase();
+    return `${apiBase}/project/${projectIdOrKey}`;
+  }
+
+  private async getProjectsEndpoint(): Promise<string> {
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.projectList();
+      } catch {
+        // Fall back to Server/DC default when auto-detection is unavailable
+      }
+    }
+    return '/rest/api/2/project';
+  }
+
+  private async getIssueTypesEndpoint(projectKey: string): Promise<string> {
+    const apiBase = await this.getApiBase();
+    return `${apiBase}/issue/createmeta/${projectKey}/issuetypes`;
   }
 
   /**
@@ -265,7 +301,8 @@ export class FieldResolver {
       if (!this.client) {
         throw new ConfigurationError('Cannot resolve project by ID without JiraClient');
       }
-      const projectData = await this.client.get<{ key: string }>(`/rest/api/2/project/${id}`);
+      const projectEndpoint = await this.getProjectEndpoint(id);
+      const projectData = await this.client.get<{ key: string }>(projectEndpoint);
       projectKey = projectData.key;
     } else if (typeof projectResult.value === 'object' && projectResult.value !== null && 
                'key' in projectResult.value && typeof (projectResult.value as Record<string, unknown>).key === 'string') {
@@ -417,9 +454,11 @@ export class FieldResolver {
    * Fetch projects from JIRA API and cache them
    */
   private async fetchAndCacheProjects(cacheKey: string): Promise<Array<{ id: string; key: string; name: string }>> {
-    const projects = await this.client!.get<Array<{ id: string; key: string; name: string }>>(
-      '/rest/api/2/project'
-    );
+    const endpoint = await this.getProjectsEndpoint();
+    const projectResponse = await this.client!.get<
+      Array<{ id: string; key: string; name: string }> | { values?: Array<{ id: string; key: string; name: string }> }
+    >(endpoint);
+    const projects = Array.isArray(projectResponse) ? projectResponse : (projectResponse.values ?? []);
     
     // Cache for 15 minutes
     if (this.cache) {
@@ -453,8 +492,9 @@ export class FieldResolver {
     }
 
     // Fetch issue types from createmeta (already used by schema discovery)
+    const issueTypesEndpoint = await this.getIssueTypesEndpoint(projectKey);
     const issueTypesData = await this.client.get<{ values?: Array<{ id: string; name: string }> }>(
-      `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`
+      issueTypesEndpoint
     );
 
     const issueTypes = issueTypesData.values || [];

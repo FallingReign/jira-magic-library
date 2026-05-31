@@ -89,6 +89,12 @@ export interface TimeoutConfig {
   default?: number;
 
   /**
+   * @deprecated Use `default` instead. This field is retained for backward compatibility
+   * and is treated as an alias for `default` at runtime.
+   */
+  single?: number;
+
+  /**
    * Timeout for bulk operations in milliseconds.
    * Takes precedence over `default` for bulk API calls.
    *

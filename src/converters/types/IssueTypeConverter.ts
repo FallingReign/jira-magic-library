@@ -41,7 +41,7 @@
  * ```
  */
 
-import type { FieldConverter, GenericCache } from '../../types/converter.js';
+import type { FieldConverter, GenericCache, ConversionContext } from '../../types/converter.js';
 import type { JiraIssueType } from '../../types/jira-api.js';
 import type { JiraClient } from '../../client/JiraClient.js';
 import type { CacheClient } from '../../types/cache.js';
@@ -141,7 +141,7 @@ export const convertIssueTypeType: FieldConverter = async (value, fieldSchema, c
   }
 
   // Fetch available issue types
-  const issueTypes = await fetchIssueTypes(context.client as JiraClient, projectKey);
+  const issueTypes = await fetchIssueTypes(context, projectKey);
 
   // Apply hierarchy filtering if requested
   let candidateTypes = issueTypes;
@@ -222,11 +222,20 @@ export const convertIssueTypeType: FieldConverter = async (value, fieldSchema, c
  * @returns Array of issue types
  * @throws {NotFoundError} if project not found or no issue types
  */
-async function fetchIssueTypes(client: JiraClient, projectKey: string): Promise<JiraIssueType[]> {
+async function fetchIssueTypes(context: ConversionContext, projectKey: string): Promise<JiraIssueType[]> {
+  let endpoint = `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`;
+
+  if (context.endpointResolverFn) {
+    try {
+      const resolver = await context.endpointResolverFn();
+      endpoint = `${resolver.apiBase}/issue/createmeta/${projectKey}/issuetypes`;
+    } catch {
+      // Fall back to Server/DC default when auto-detection is unavailable
+    }
+  }
+
   try {
-    const response: { values?: JiraIssueType[] } = await client.get(
-      `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`
-    );
+    const response: { values?: JiraIssueType[] } = await (context.client as JiraClient).get(endpoint);
 
     const values = response.values;
     if (!values || values.length === 0) {

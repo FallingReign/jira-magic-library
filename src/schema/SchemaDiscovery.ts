@@ -1,4 +1,5 @@
 import { JiraClient } from '../client/JiraClient.js';
+import type { EndpointResolver } from '../client/EndpointResolver.js';
 import { CacheClient } from '../types/cache.js';
 import { NotFoundError } from '../errors/NotFoundError.js';
 import { ProjectSchema, FieldSchema } from '../types/schema.js';
@@ -33,8 +34,21 @@ export class SchemaDiscovery {
   constructor(
     private readonly client: JiraClient,
     private readonly cache: CacheClient,
-    private readonly baseUrl: string
+    private readonly baseUrl: string,
+    private readonly endpointResolverFn?: () => Promise<EndpointResolver>
   ) {}
+
+  private async getApiBase(): Promise<string> {
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.apiBase;
+      } catch {
+        // Fall back to Server/DC default when auto-detection is unavailable
+      }
+    }
+    return '/rest/api/2';
+  }
 
   /**
    * Gets all available issue types for a project.
@@ -51,8 +65,9 @@ export class SchemaDiscovery {
    * ```
    */
   async getIssueTypesForProject(projectKey: string): Promise<Array<{ id: string; name: string }>> {
+    const apiBase = await this.getApiBase();
     const issueTypesData = await this.client.get<JiraApiResponse>(
-      `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`
+      `${apiBase}/issue/createmeta/${projectKey}/issuetypes`
     );
 
     const values = (issueTypesData as { values?: JiraIssueType[] }).values;
@@ -148,9 +163,11 @@ export class SchemaDiscovery {
     issueTypeName: string,
     cacheKey: string
   ): Promise<ProjectSchema> {
+    const apiBase = await this.getApiBase();
+
     // Step 1: Get available issue types for the project to find the ID
     const issueTypesData = await this.client.get<JiraApiResponse>(
-      `/rest/api/2/issue/createmeta/${projectKey}/issuetypes`
+      `${apiBase}/issue/createmeta/${projectKey}/issuetypes`
     );
 
     // Validate project exists (404 would be thrown by client)
@@ -186,7 +203,7 @@ export class SchemaDiscovery {
 
     do {
       const fieldsData = await this.client.get<JiraApiResponse>(
-        `/rest/api/2/issue/createmeta/${projectKey}/issuetypes/${issueType.id}?startAt=${startAt}&maxResults=${maxResults}`
+        `${apiBase}/issue/createmeta/${projectKey}/issuetypes/${issueType.id}?startAt=${startAt}&maxResults=${maxResults}`
       );
 
       const response = fieldsData as { values?: JiraFieldMeta[]; total?: number; maxResults?: number };

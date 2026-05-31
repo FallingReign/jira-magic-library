@@ -116,6 +116,7 @@ export class PayloadPreview {
           cacheClient: this.cache as unknown as GenericCache,
           client: this.client,
           config: this.config,
+          endpointResolverFn: this.endpointResolverFn,
         }
       );
     } catch (err) {
