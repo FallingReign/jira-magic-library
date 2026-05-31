@@ -113,3 +113,17 @@ export { InMemoryCache } from './cache/InMemoryCache.js';
 
 // Config migration
 export { migrateConfig } from './config/migrateConfig.js';
+
+// Discovery APIs (Cloud expansion Phase 2)
+export { ProjectDiscovery } from './discovery/ProjectDiscovery.js';
+export { IssueTypeDiscovery } from './discovery/IssueTypeDiscovery.js';
+export { FieldMetadataDiscovery } from './discovery/FieldMetadataDiscovery.js';
+export type {
+  ProjectInfo,
+  ProjectListOptions,
+  IssueTypeInfo,
+  IssueTypeSearchOptions,
+  FieldInfo,
+  FieldListOptions,
+} from './discovery/types.js';
+export type { ProjectsAPI, FieldsAPI, IssueTypesAPI } from './jml.js';

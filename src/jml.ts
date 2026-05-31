@@ -25,6 +25,11 @@ import type { ParseInputOptions } from './parsers/InputParser.js';
 import { DeploymentDetector } from './client/DeploymentDetector.js';
 import type { DeploymentInfo } from './client/DeploymentDetector.js';
 import { EndpointResolver } from './client/EndpointResolver.js';
+import { ProjectDiscovery } from './discovery/ProjectDiscovery.js';
+import { IssueTypeDiscovery } from './discovery/IssueTypeDiscovery.js';
+import { FieldMetadataDiscovery } from './discovery/FieldMetadataDiscovery.js';
+import type { ProjectInfo, ProjectListOptions, FieldInfo, FieldListOptions, IssueTypeInfo, IssueTypeSearchOptions } from './discovery/types.js';
+import { InMemoryCache } from './cache/InMemoryCache.js';
 
 /**
  * Server information returned by JIRA
@@ -38,6 +43,33 @@ export interface ServerInfo {
   serverTime: string;
   scmInfo: string;
   serverTitle: string;
+}
+
+/**
+ * Projects namespace API
+ */
+export interface ProjectsAPI {
+  list(options?: ProjectListOptions): Promise<ProjectInfo[]>;
+  search(query: string): Promise<ProjectInfo[]>;
+  get(projectKey: string): Promise<ProjectInfo>;
+}
+
+/**
+ * Fields namespace API
+ */
+export interface FieldsAPI {
+  list(options?: FieldListOptions): Promise<FieldInfo[]>;
+  getForContext(projectKey: string, issueType: string): Promise<FieldInfo[]>;
+  get(fieldIdOrName: string, projectKey?: string, issueType?: string): Promise<FieldInfo | null>;
+  getCustomFields(options?: { query?: string }): Promise<FieldInfo[]>;
+}
+
+/**
+ * Issue Types namespace API
+ */
+export interface IssueTypesAPI {
+  getForProject(projectKey: string, options?: IssueTypeSearchOptions): Promise<IssueTypeInfo[]>;
+  resolve(projectKey: string, query: string): Promise<IssueTypeInfo>;
 }
 
 /**
@@ -67,6 +99,24 @@ export class JML {
    * manifest handling, and hierarchy routing flows live behind this property.
    */
   public readonly issues: IssuesAPI;
+
+  /**
+   * Projects discovery namespace.
+   * List, search, and get project metadata.
+   */
+  public readonly projects: ProjectsAPI;
+
+  /**
+   * Fields discovery namespace.
+   * List fields globally or per context, find custom fields.
+   */
+  public readonly fields: FieldsAPI;
+
+  /**
+   * Issue types discovery namespace.
+   * Get issue types for a project, resolve fuzzy names.
+   */
+  public readonly issueTypes: IssueTypesAPI;
 
   private readonly client: JiraClientImpl;
   private readonly cache: RedisCache;
@@ -177,6 +227,32 @@ export class JML {
       this.config.baseUrl,
       this.config // Pass full config for converter customization
     );
+
+    // Initialize discovery APIs with in-memory cache (lightweight, no Redis dependency)
+    const discoveryCache = new InMemoryCache();
+    const resolverFn = () => this.getEndpointResolver();
+
+    const projectDiscovery = new ProjectDiscovery(this.client, discoveryCache, resolverFn);
+    const issueTypeDiscovery = new IssueTypeDiscovery(this.client, discoveryCache, resolverFn);
+    const fieldMetadataDiscovery = new FieldMetadataDiscovery(this.client, discoveryCache, resolverFn);
+
+    this.projects = {
+      list: (options) => projectDiscovery.list(options),
+      search: (query) => projectDiscovery.search(query),
+      get: (projectKey) => projectDiscovery.get(projectKey),
+    };
+
+    this.fields = {
+      list: (options) => fieldMetadataDiscovery.listAll(options),
+      getForContext: (projectKey, issueType) => fieldMetadataDiscovery.getForContext(projectKey, issueType),
+      get: (fieldIdOrName, projectKey?, issueType?) => fieldMetadataDiscovery.get(fieldIdOrName, projectKey, issueType),
+      getCustomFields: (options) => fieldMetadataDiscovery.getCustomFields(options),
+    };
+
+    this.issueTypes = {
+      getForProject: (projectKey, options) => issueTypeDiscovery.getForProject(projectKey, options),
+      resolve: (projectKey, query) => issueTypeDiscovery.resolve(projectKey, query),
+    };
   }
 
   /**
