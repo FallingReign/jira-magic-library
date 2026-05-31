@@ -2,6 +2,34 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [2.0.0] - 2026-07-15
+
+### Added
+- **Jira Cloud support** — JML now supports both Jira Cloud and Server/DC from a single API surface with automatic deployment detection
+- **Auth strategies** — Discriminated union auth config supporting PAT (Server/DC), Basic Auth with API token (Cloud), and OAuth 2.0 with automatic token refresh (Cloud)
+- **Deployment auto-detection** — Automatically detects Cloud vs Server from `/serverInfo` response; manual override available via `deployment` config
+- **Endpoint resolver** — Centralized, deployment-aware URL builder replaces all hardcoded `/rest/api/2/` paths; Cloud defaults to API v3, Server to v2
+- **Pluggable cache interface** — `CacheAdapter` interface with `InMemoryCache` (new) and `RedisCache` (updated) implementations; supports TTL and prefix-based invalidation
+- **Project discovery** — `jml.projects.list()`, `jml.projects.search(query)`, `jml.projects.get(key)` with Cloud pagination support
+- **Issue type discovery** — `jml.issueTypes.list(projectKey)`, `jml.issueTypes.resolve(projectKey, fuzzyName)` with team-managed/company-managed Cloud awareness
+- **Field metadata discovery** — `jml.fields.getForContext(projectKey, issueType)`, `jml.fields.getCustomFields(projectKey)`, `jml.fields.getRequired(projectKey, issueType)` with Cloud field context API support
+- **User resolution** — `jml.users.resolve(query)`, `jml.users.search(query)` converting email/display name to Cloud `accountId` or Server username
+- **Field option resolution** — `jml.resolve.fieldOption(fieldId, fuzzyValue, projectKey, issueType)` resolving text to select/multiselect/cascading option IDs via Cloud contexts
+- **Entity resolution** — `jml.resolve.priority(text)`, `jml.resolve.status(text, projectKey)`, `jml.resolve.component(text, projectKey)`, `jml.resolve.version(text, projectKey)` for all common Jira entities
+- **ADF converter** — Automatic plain text and markdown to Atlassian Document Format conversion for Cloud v3 rich text fields (description, comments, environment)
+- **Cloud create adapter** — Transparently adapts issue payloads for Cloud (accountId for users, ADF for text, correct endpoint routing)
+- **Error normalization** — Jira create errors normalized into structured `NormalizedError[]` with row index, field ID, error code (`REQUIRED_FIELD`, `INVALID_VALUE`, `PERMISSION_DENIED`, etc.), and human-readable messages
+- **Payload preview** — `jml.issues.preview(input)` returns fully resolved payload with per-field resolution details and confidence scores without submitting to Jira
+- **Cache invalidation** — `jml.invalidateCache(options)` with targeted invalidation by project, users, fields, or all
+
+### Changed
+- **Auth config format** — Now uses discriminated union: `{ type: 'pat', token }`, `{ type: 'basic', email, apiToken }`, or `{ type: 'oauth2', accessToken, ... }`. Legacy `{ token: 'x' }` format still accepted with deprecation warning via `migrateConfig()`
+- **JiraClient** — Refactored to use AuthStrategy pattern; supports OAuth2 401-retry with automatic token refresh
+- **IssueOperations** — Integrated CloudCreateAdapter for deployment-aware payload building; uses EndpointResolver for all API paths
+
+### Deprecated
+- **Legacy auth config** — `{ token: 'string' }` format is deprecated; use `{ type: 'pat', token: 'string' }` instead. Migration helper `migrateConfig()` converts automatically with a console warning.
+
 ## [1.8.1] - 2026-03-25
 
 ### Fixed
