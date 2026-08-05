@@ -15,3 +15,4 @@ export * from './issue.js';
 export * from './jira.js';
 export * from './schema.js';
 export * from './hierarchy.js';
+export * from './attachment.js';

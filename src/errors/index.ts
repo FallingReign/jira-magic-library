@@ -15,6 +15,7 @@ export { NotFoundError } from './NotFoundError.js';
 export { RateLimitError } from './RateLimitError.js';
 export { InputParseError } from './InputParseError.js';
 export { FileNotFoundError } from './FileNotFoundError.js';
+export { AttachmentUploadError } from './AttachmentUploadError.js';
 
 // Export ConversionError (from ValidationError for now)
 export { ValidationError as ConversionError } from './ValidationError.js';

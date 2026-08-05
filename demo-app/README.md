@@ -91,6 +91,15 @@ Quickly compare how the **first**, **error**, and **score** ambiguity policies b
 3. Enter the project/issue type for lookups (used only for dry-run validation).
 4. Provide the email/username/display name to test and review each policy’s output.
 
+### Single-Issue Attachments
+
+Create one issue with one or more local file attachments. The demo defaults to
+`demo-app/fixtures/attachment-demo.txt`, and accepts comma-separated paths for
+testing multiple attachments.
+
+The library creates the issue first, then uploads the files through Jira's
+attachment endpoint.
+
 ### Coming Soon
 
 - 📝 Text Field Converter (E1-S08)

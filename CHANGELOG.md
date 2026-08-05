@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [2.1.0] - 2026-08-05
+
+### Added
+- **Single-issue attachments** — Create an issue with one or more local file paths or in-memory byte payloads with filename and MIME metadata.
+- **Multipart Jira uploads** — Upload multiple attachments in one request using the existing authentication, retry, timeout, and error-handling pipeline.
+- **Attachment demo** — Interactive demo flow for uploading local files, including multiple comma-separated paths.
+- **Attachment API types** — Export normalized attachment input and upload-result types for integrations such as Slack workflow adapters.
+
+### Changed
+- **Issue creation** — Attachment uploads run after successful issue creation and return Jira attachment metadata on the created issue.
+- **Bulk behavior** — Bulk and hierarchy creation now reject attachment inputs explicitly because this release supports single-issue attachments only.
+- **Documentation** — Documented the post-create attachment flow and source-agnostic byte contract.
+
 ## [2.0.1] - 2026-07-15
 
 ### Fixed

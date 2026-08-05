@@ -32,7 +32,7 @@ Based on actual JIRA API responses, these are the field types we need to support
 - `option` - Single-select custom field
 - `option-with-child` - Cascading select (parent→child)
 - `timetracking` - Original/Remaining Estimate
-- `attachment` - File attachments
+- `attachment` - File attachments (uploaded through the top-level `attachments` input after issue creation, not converted into `fields`)
 - `checklist-item` - Checklist items
 
 ### Container Type
@@ -135,7 +135,7 @@ More advanced types for specialized workflows:
 14. `issuelink` / `issuelinks`
 15. `issuetype` (usually set via API, not converted)
 16. `project` (usually set via API, not converted)
-17. `attachment`
+17. `attachment` (handled by the post-create attachment upload flow)
 18. `checklist-item`
 
 ---

@@ -53,6 +53,33 @@ if (result.failed > 0) {
 }
 ```
 
+### Create an Issue with Attachments
+
+Attachments are uploaded after the issue is created. Provide local paths or
+source-agnostic file bytes with metadata; Slack integrations should resolve
+Slack file IDs and download the bytes before calling JML.
+
+```ts
+const issue = await jml.issues.create({
+  Project: 'ENG',
+  'Issue Type': 'Task',
+  Summary: 'Investigate uploaded files',
+  attachments: [
+    './screenshots/login.png',
+    {
+      data: downloadedBytes,
+      filename: 'slack-upload.png',
+      contentType: 'image/png',
+    },
+  ],
+});
+
+console.log(issue.attachments);
+```
+
+This feature currently supports attachments for single-issue creation only.
+Bulk and hierarchy creation reject attachment inputs explicitly.
+
 ---
 
 ## Overview
@@ -63,6 +90,7 @@ What you get today:
 - **Human-readable input** – Accept CSV/JSON/YAML with column headers like `Project`, `Issue Type`, `Summary`, etc. The parser normalizes formats and number/date/string representations.
 - **Schema-only validation** – Call `jml.validate()` (story E4-S07) to catch missing required fields, type mismatches, enum violations, and invalid project/issue type combinations without touching the JIRA API.
 - **Bulk create workflow** – Unified `create()` entry point supports single objects, arrays, or files. Manifest storage (Epic 4) tracks successes/failures and enables retries.
+- **Single-issue attachments** – Upload one or more local files or in-memory byte payloads after issue creation.
 - **Demo app** – Interactive CLI under `demo-app/` showcases parsing, validation, bulk create, and manifest retry flows.
 
 ---
@@ -101,7 +129,7 @@ Since the package is not on npm yet, reference the Git repo directly (or via loc
 // your-project/package.json
 {
   "dependencies": {
-    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v2.0.1"
+    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v2.1.0"
   }
 }
 ```
@@ -285,4 +313,3 @@ Each demo reads the main repo’s `.env` / config manager, so ensure those value
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release history.
-

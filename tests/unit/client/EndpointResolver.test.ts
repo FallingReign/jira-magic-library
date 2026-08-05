@@ -45,6 +45,12 @@ describe('EndpointResolver', () => {
       expect(resolver.issueUpdate('PROJ-456')).toBe('/rest/api/2/issue/PROJ-456');
     });
 
+    it('should resolve issueAttachments', () => {
+      expect(resolver.issueAttachments('PROJ-456')).toBe(
+        '/rest/api/2/issue/PROJ-456/attachments'
+      );
+    });
+
     it('should resolve search', () => {
       expect(resolver.search()).toBe('/rest/api/2/search');
     });
@@ -103,6 +109,12 @@ describe('EndpointResolver', () => {
 
     it('should resolve issueCreate', () => {
       expect(resolver.issueCreate()).toBe('/rest/api/3/issue');
+    });
+
+    it('should resolve issueAttachments', () => {
+      expect(resolver.issueAttachments('CLOUD-456')).toBe(
+        '/rest/api/3/issue/CLOUD-456/attachments'
+      );
     });
 
     it('should resolve userSearch for Cloud', () => {

@@ -27,6 +27,7 @@ import { runIntegrationTests } from './features/integration-tests.js';
 import { runHierarchyBulkUidDemo } from './features/hierarchy-bulk-uids.js';
 import { runProgressTrackingDemo } from './features/progress-tracking-demo.js';
 import { runJqlSearchDemo } from './features/jql-search-demo.js';
+import { runAttachmentDemo } from './features/attachment-demo.js';
 
 async function main() {
   clear();
@@ -97,6 +98,12 @@ async function main() {
       case 'multi-field':
         clear();
         await runMultiFieldCreator(config);
+        clear();
+        break;
+
+      case 'attachments':
+        clear();
+        await runAttachmentDemo(config);
         clear();
         break;
 

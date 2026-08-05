@@ -20,6 +20,10 @@ import { CloudCreateAdapter } from './CloudCreateAdapter.js';
 import { EndpointResolver } from '../client/EndpointResolver.js';
 import { PayloadPreview } from './PayloadPreview.js';
 import type { PreviewResult } from './PayloadPreview.js';
+import { AttachmentUploader } from './AttachmentUploader.js';
+import { AttachmentUploadError } from '../errors/AttachmentUploadError.js';
+import { ValidationError } from '../errors/ValidationError.js';
+import { normalizeFieldName } from '../utils/normalizeFieldName.js';
 
 /**
  * Input supported by {@link JML.issues | `jml.issues.create`}.
@@ -145,6 +149,7 @@ export class IssueOperations implements IssuesAPI {
   private issueSearch: IssueSearch;
   private cloudAdapter?: CloudCreateAdapter;
   private endpointResolverFn?: () => Promise<EndpointResolver>;
+  private readonly attachmentUploader: AttachmentUploader;
 
   constructor(
     private client: JiraClient,
@@ -158,6 +163,7 @@ export class IssueOperations implements IssuesAPI {
     endpointResolverFn?: () => Promise<EndpointResolver>
   ) {
     this.endpointResolverFn = endpointResolverFn;
+    this.attachmentUploader = new AttachmentUploader(client);
     // Initialize bulk operation dependencies if cache available
     // Note: LookupCache is always RedisCache at runtime (from JML constructor)
     if (cache) {
@@ -362,6 +368,8 @@ export class IssueOperations implements IssuesAPI {
     } else {
       throw new Error('Retry requires array or parse options input format');
     }
+
+    this.rejectBulkAttachments(inputArray);
 
     // Filter to only include rows that previously failed
     const failedRowIndices = manifest.failed;
@@ -577,7 +585,7 @@ export class IssueOperations implements IssuesAPI {
    * 
    * @param input - Issue data with human-readable field names
    * @param options - Optional settings (validate for dry-run mode, per-call config overrides)
-   * @returns Created issue with key, id, and self URL
+   * @returns Created issue with key, id, self URL, and optional uploaded attachment metadata
    * 
    * @throws {Error} If Project or Issue Type is missing
    * @throws {Error} If JIRA API returns an error
@@ -590,7 +598,15 @@ export class IssueOperations implements IssuesAPI {
   ): Promise<Issue> {
     // Strip library-internal fields that shouldn't go to JIRA
     // uid is used for hierarchy tracking in bulk operations
-    const { uid: _uid, ...cleanInput } = input;
+    const attachmentKey = Object.keys(input).find(
+      (key) => normalizeFieldName(key) === 'attachments'
+    );
+    const attachments = await this.attachmentUploader.validate(
+      attachmentKey ? input[attachmentKey] : undefined
+    );
+    const cleanInput = Object.fromEntries(
+      Object.entries(input).filter(([key]) => key !== 'uid' && key !== attachmentKey)
+    );
     
     // Merge per-call config overrides with instance config
     const mergedConfig = this.mergeConfig(options);
@@ -645,8 +661,32 @@ export class IssueOperations implements IssuesAPI {
     // Create issue via JIRA API
     try {
       const response = await this.client.post<Issue>(endpoint, payload);
-      return response;
+
+      if (attachments.length === 0) {
+        return response;
+      }
+
+      try {
+        const attachmentEndpoint = await this.resolveIssueAttachmentsEndpoint(response.key);
+        const uploadedAttachments = await this.attachmentUploader.upload(
+          attachmentEndpoint,
+          attachments
+        );
+        return {
+          ...response,
+          attachments: uploadedAttachments,
+        };
+      } catch (err: unknown) {
+        throw new AttachmentUploadError(
+          response.key,
+          err instanceof Error ? err.message : String(err),
+          err
+        );
+      }
     } catch (err: unknown) {
+      if (err instanceof AttachmentUploadError) {
+        throw err;
+      }
       // Wrap JIRA error with context
       const message = `Failed to create issue: ${err instanceof Error ? err.message : String(err)}`;
       const error = new Error(message, { cause: err });
@@ -673,11 +713,6 @@ export class IssueOperations implements IssuesAPI {
     input: IssuesCreateInput,
     _options?: IssuesCreateOptions
   ): Promise<BulkResult> {
-    // Ensure bulk dependencies are available
-    if (!this.manifestStorage || !this.bulkApiWrapper) {
-      throw new Error('Bulk operations require cache to be configured');
-    }
-
     // Parse input to array of records
     let records: Array<Record<string, unknown>>;
     
@@ -688,6 +723,13 @@ export class IssueOperations implements IssuesAPI {
       // Parse from file or string data (E4-S01)
       const parseResult = await parseInput(input as ParseInputOptions);
       records = parseResult.data;
+    }
+
+    this.rejectBulkAttachments(records);
+
+    // Ensure bulk dependencies are available
+    if (!this.manifestStorage || !this.bulkApiWrapper) {
+      throw new Error('Bulk operations require cache to be configured');
     }
 
     // E4-S13 AC3: Detect hierarchy and route accordingly
@@ -702,7 +744,7 @@ export class IssueOperations implements IssuesAPI {
         _options // options for progress tracking
       );
     }
-    
+
     // No hierarchy or single level - use existing bulk creation logic
     // If preprocessed, use records from level 0 (uid field already stripped)
     const recordsToProcess = preprocessResult.hasHierarchy && preprocessResult.levels[0]
@@ -1617,6 +1659,33 @@ export class IssueOperations implements IssuesAPI {
   }
 
   /**
+   * Resolve the attachment endpoint for a created issue.
+   */
+  private async resolveIssueAttachmentsEndpoint(issueKey: string): Promise<string> {
+    if (this.endpointResolverFn) {
+      try {
+        const resolver = await this.endpointResolverFn();
+        return resolver.issueAttachments(issueKey);
+      } catch {
+        // Fall back if detection fails
+      }
+    }
+    return `/rest/api/2/issue/${issueKey}/attachments`;
+  }
+
+  private rejectBulkAttachments(records: Array<Record<string, unknown>>): void {
+    const hasAttachments = records.some((record) =>
+      Object.keys(record).some((key) => normalizeFieldName(key) === 'attachments')
+    );
+
+    if (hasAttachments) {
+      throw new ValidationError(
+        'Attachments are supported for single-issue creation only; bulk creation does not support attachments'
+      );
+    }
+  }
+
+  /**
    * Resolve the bulk issue creation endpoint URL.
    * Uses EndpointResolver if available, otherwise falls back to /rest/api/2/issue/bulk.
    * Reserved for use in bulk operations that need dynamic endpoint resolution.
@@ -1635,4 +1704,3 @@ export class IssueOperations implements IssuesAPI {
     return '/rest/api/2/issue/bulk';
   }
 }
-

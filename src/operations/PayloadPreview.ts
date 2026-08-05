@@ -14,6 +14,7 @@ import type { CloudCreateAdapter } from './CloudCreateAdapter.js';
 import type { EndpointResolver } from '../client/EndpointResolver.js';
 import type { DeploymentType, JMLConfig } from '../types/config.js';
 import type { LookupCache, GenericCache } from '../types/converter.js';
+import { normalizeFieldName } from '../utils/normalizeFieldName.js';
 
 /**
  * Details about how a single field was resolved.
@@ -72,8 +73,12 @@ export class PayloadPreview {
     // Capture original input keys for resolution tracking
     const originalInput = { ...input };
 
-    // Strip library-internal fields
-    const { uid: _uid, ...cleanInput } = input;
+    // Strip library-internal fields and post-create attachment inputs
+    const cleanInput = Object.fromEntries(
+      Object.entries(input).filter(
+        ([key]) => key !== 'uid' && normalizeFieldName(key) !== 'attachments'
+      )
+    );
 
     // Step 1: Resolve field names → Jira field IDs
     let projectKey: string;
@@ -170,7 +175,7 @@ export class PayloadPreview {
     // Build a reverse map: original key → final field ID
     // We compare normalized forms to detect matches
     const inputKeys = Object.keys(originalInput).filter(
-      (k) => k !== 'uid'
+      (k) => k !== 'uid' && normalizeFieldName(k) !== 'attachments'
     );
 
     for (const inputKey of inputKeys) {

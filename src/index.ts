@@ -61,10 +61,16 @@ export {
   SchemaError,
   CacheError,
   ConversionError,
+  AttachmentUploadError,
 } from './errors/index.js';
 
 // Types
 export type { Issue } from './types/index.js';
+export type {
+  AttachmentDataInput,
+  AttachmentInput,
+  AttachmentUploadResult,
+} from './types/index.js';
 export type { HierarchyLevel, HierarchyStructure } from './types/hierarchy.js';
 
 // Hierarchy API

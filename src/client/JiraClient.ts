@@ -25,6 +25,7 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 export interface JiraClient {
   get<T = unknown>(endpoint: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<T>;
   post<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T>;
+  postMultipart<T = unknown>(endpoint: string, body: FormData, timeoutMs?: number): Promise<T>;
   put<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T>;
   delete<T = unknown>(endpoint: string, timeoutMs?: number): Promise<T>;
 }
@@ -100,6 +101,20 @@ export class JiraClientImpl implements JiraClient {
   }
 
   /**
+   * Make a multipart POST request without overriding fetch's boundary header.
+   */
+  async postMultipart<T = unknown>(endpoint: string, body: FormData, timeoutMs?: number): Promise<T> {
+    const url = this.buildUrl(endpoint);
+    return this.request<T>(
+      'POST',
+      url,
+      body,
+      timeoutMs,
+      { 'X-Atlassian-Token': 'no-check' }
+    );
+  }
+
+  /**
    * Make a PUT request
    */
   async put<T = unknown>(endpoint: string, body: unknown, timeoutMs?: number): Promise<T> {
@@ -139,7 +154,13 @@ export class JiraClientImpl implements JiraClient {
   /**
    * Make HTTP request with retry logic and concurrency control
    */
-  private async request<T>(method: HttpMethod, url: string, body?: unknown, timeoutOverride?: number): Promise<T> {
+  private async request<T>(
+    method: HttpMethod,
+    url: string,
+    body?: unknown,
+    timeoutOverride?: number,
+    extraHeaders?: Record<string, string>
+  ): Promise<T> {
     // Acquire semaphore slot
     await this.semaphore.acquire();
 
@@ -166,14 +187,16 @@ export class JiraClientImpl implements JiraClient {
 
           // Make request
           const authHeaders = await this.authStrategy.getHeaders();
+          const isMultipart = typeof FormData !== 'undefined' && body instanceof FormData;
           const response = await fetch(url, {
             method,
             headers: {
               ...authHeaders,
-              'Content-Type': 'application/json',
+              ...(isMultipart ? {} : { 'Content-Type': 'application/json' }),
               'Accept': 'application/json',
+              ...extraHeaders,
             },
-            body: body ? JSON.stringify(body) : undefined,
+            body: isMultipart ? body : body !== undefined ? JSON.stringify(body) : undefined,
             signal: controller.signal,
           });
 
