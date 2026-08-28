@@ -69,7 +69,8 @@ const records = await jml.issues.addAttachments('ENG-123', [
   },
 ]);
 
-// Each record: { id: string, filename: string, size: number }
+// Each record is Jira's attachment metadata; id, filename and size are
+// among the available fields (size may be absent on some Jira deployments):
 console.log(records[0].id, records[0].filename, records[0].size);
 ```
 

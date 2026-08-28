@@ -1,7 +1,7 @@
 /**
  * JIRA Issue response from the REST API
  */
-import type { AttachmentRecord } from './attachment.js';
+import type { AttachmentUploadResult } from './attachment.js';
 
 export interface Issue {
   /** Issue key (e.g., "ENG-123") */
@@ -16,8 +16,8 @@ export interface Issue {
   /** Optional fields returned by JIRA (for dry-run mode or expanded responses) */
   fields?: Record<string, unknown>;
 
-  /** Normalized attachment metadata returned after a successful attachment upload. */
-  attachments?: AttachmentRecord[];
+  /** Attachment metadata returned after a successful attachment upload. */
+  attachments?: AttachmentUploadResult[];
 }
 
 /**

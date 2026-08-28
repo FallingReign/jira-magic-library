@@ -3,7 +3,7 @@ import { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
 import { FieldResolver } from '../converters/FieldResolver.js';
 import { ConverterRegistry } from '../converters/ConverterRegistry.js';
 import { Issue } from '../types/index.js';
-import type { AttachmentInput, AttachmentRecord } from '../types/attachment.js';
+import type { AttachmentInput, AttachmentUploadResult } from '../types/attachment.js';
 import { BulkResult, BulkManifest } from '../types/bulk.js';
 import { LookupCache, GenericCache } from '../types/converter.js';
 import type { JMLConfig, DeploymentType, AmbiguityPolicyConfig, FuzzyMatchConfig } from '../types/config.js';
@@ -147,7 +147,9 @@ export interface IssuesAPI {
    *
    * @param issueKey - The issue key to attach files to (e.g. `"ENG-123"`).
    * @param attachments - Local file paths or in-memory byte payloads.
-   * @returns Normalized attachment metadata for every uploaded file.
+   * @returns Jira's attachment metadata for every uploaded file. Common fields
+   *   include `id`, `filename`, and `size` (size may be absent on some Jira
+   *   deployments); the full Jira response is passed through.
    *
    * @throws {ValidationError} When `issueKey` is blank or whitespace.
    * @throws {AttachmentUploadError} When the upload fails (status is carried
@@ -157,12 +159,12 @@ export interface IssuesAPI {
    * ```typescript
    * const records = await jml.issues.addAttachments('ENG-123', [
    *   './screenshots/before.png',
-   *   { data: pngBytes, filename: 'after.png', contentType: 'image/png' },
    * ]);
+   * // id, filename and size (when present) are among the available fields:
    * console.log(records[0].id, records[0].filename, records[0].size);
    * ```
    */
-  addAttachments(issueKey: string, attachments: AttachmentInput[]): Promise<AttachmentRecord[]>;
+  addAttachments(issueKey: string, attachments: AttachmentInput[]): Promise<AttachmentUploadResult[]>;
 }
 
 /**
@@ -1614,7 +1616,7 @@ export class IssueOperations implements IssuesAPI {
   async addAttachments(
     issueKey: string,
     attachments: AttachmentInput[]
-  ): Promise<AttachmentRecord[]> {
+  ): Promise<AttachmentUploadResult[]> {
     if (!issueKey || !issueKey.trim()) {
       throw new ValidationError('issueKey must be a non-empty string');
     }

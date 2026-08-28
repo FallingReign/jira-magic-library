@@ -38,7 +38,7 @@ function buildJml(config) {
 function printAttachmentRecords(attachments) {
   success(`Uploaded ${attachments.length} attachment(s).`);
   for (const a of attachments) {
-    info(`  • ${a.filename} (${a.size} bytes) [id: ${a.id}]`);
+    info(`  • ${a.filename}${a.size != null ? ` (${a.size} bytes)` : ''} [id: ${a.id}]`);
   }
 }
 

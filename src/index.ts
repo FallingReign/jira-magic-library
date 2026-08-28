@@ -72,7 +72,6 @@ export type {
   AttachmentInput,
   AttachmentDataInput,
   AttachmentUploadResult,
-  AttachmentRecord,
 } from './types/index.js';
 export type { HierarchyLevel, HierarchyStructure } from './types/hierarchy.js';
 

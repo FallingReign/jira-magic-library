@@ -41,19 +41,22 @@ That file duplicates logic JML already owns. This story only closes the gaps bel
 ## Acceptance Criteria
 
 ### ✅ AC1: `issues.addAttachments()` public method
-- [x] `IssuesAPI` interface declares `addAttachments(issueKey: string, attachments: AttachmentInput[]): Promise<AttachmentRecord[]>`
+- [x] `IssuesAPI` interface declares `addAttachments(issueKey: string, attachments: AttachmentInput[]): Promise<AttachmentUploadResult[]>`
 - [x] `IssueOperations` implements it by delegating to the existing `AttachmentUploader` (no new multipart code)
 - [x] TSDoc comment with a usage example on the interface method
 - [x] Rejects a blank/whitespace `issueKey` with `ValidationError`
 
 **Evidence**: [interface](../../src/operations/IssueOperations.ts#L127-L165), [implementation](../../src/operations/IssueOperations.ts#L1614-L1636), [test](../../tests/unit/operations/IssueOperations-addAttachments.test.ts#L43-L80)
 
-### ✅ AC2: Normalized return shape
-- [x] Returns `AttachmentRecord[]` where each record is `{ id: string; filename: string; size: number }`
-- [x] Normalization is a single shared helper, reused by both `addAttachments` and the create-time path
-- [x] Missing/absent `size` in the Jira response normalizes to `0` rather than `undefined`
+### ✅ AC2: Pass-through return shape
 
-**Evidence**: [AttachmentRecord type](../../src/types/attachment.ts#L1-L12), [toAttachmentRecords helper](../../src/operations/AttachmentUploader.ts#L117-L123), [uploadForIssue uses it](../../src/operations/AttachmentUploader.ts#L81-L116), [test](../../tests/unit/operations/IssueOperations-addAttachments.test.ts#L62-L70)
+Results are returned as raw `AttachmentUploadResult[]`, matching the library's pass-through convention (see `Issue.fields`). `AttachmentUploadResult` types the common fields (`id`, `filename`, `size?`, `mimeType?`, `content?`, `thumbnail?`, `created?`) while preserving any additional Jira-specific fields via `[key: string]: unknown`.
+
+- [x] Returns `AttachmentUploadResult[]` — Jira's raw attachment metadata for each uploaded file
+- [x] Extra fields in the Jira response are preserved verbatim (pass-through, no narrowing)
+- [x] `uploadForIssue` returns the result of `upload()` directly without any normalization step
+
+**Evidence**: [AttachmentUploadResult type](../../src/types/attachment.ts), [uploadForIssue returns raw result](../../src/operations/AttachmentUploader.ts), [pass-through test](../../tests/unit/operations/IssueOperations-addAttachments.test.ts)
 
 ### ✅ AC3: Empty array short-circuits
 - [x] `addAttachments(key, [])` resolves to `[]`
@@ -79,7 +82,7 @@ That file duplicates logic JML already owns. This story only closes the gaps bel
 
 ### ✅ AC6: Package exports
 - [x] `AttachmentUploader` exported from `src/index.ts`
-- [x] `AttachmentInput`, `AttachmentDataInput`, `AttachmentUploadResult`, `AttachmentRecord` exported as types
+- [x] `AttachmentInput`, `AttachmentDataInput`, `AttachmentUploadResult` exported as types
 - [x] Verified by a test that imports from the package index
 
 **Evidence**: [src/index.ts attachment section](../../src/index.ts)
@@ -130,12 +133,14 @@ That file duplicates logic JML already owns. This story only closes the gaps bel
 ### Implementation Guidance
 
 ```typescript
-// src/types/attachment.ts
-/** Attachment metadata normalized to a stable shape across Jira deployments. */
-export interface AttachmentRecord {
+// src/types/attachment.ts — already exists, no new type needed.
+// AttachmentUploadResult types the common fields and keeps everything
+// else Jira sends via its index signature.
+export interface AttachmentUploadResult {
   id: string;
   filename: string;
-  size: number;
+  size?: number;
+  [key: string]: unknown;
 }
 ```
 
@@ -144,11 +149,11 @@ export interface AttachmentRecord {
 async addAttachments(
   issueKey: string,
   attachments: AttachmentInput[]
-): Promise<AttachmentRecord[]> {
+): Promise<AttachmentUploadResult[]> {
   // 1. validate issueKey is non-blank
   // 2. validate + normalize inputs via this.attachmentUploader.validate()
   // 3. short-circuit on empty BEFORE resolving the endpoint
-  // 4. resolve endpoint, upload, map through toAttachmentRecords()
+  // 4. resolve endpoint, upload, return Jira's records unchanged
 }
 ```
 
@@ -214,3 +219,5 @@ uploader internally rather than duplicating multipart logic" and to "make the
 create-time path use the same code" — both were **already true** as of v2.1.0, so
 no refactor is needed there. The genuine gaps are the public method, the export,
 URL encoding, result normalization, and actionable 403/413 errors.
+
+**AC2 revision (2026-08-28):** AC2 originally specified normalizing to `{ id, filename, size }`. Reverted during review — the library's convention is to pass Jira's response through (see `Issue.fields`), and `AttachmentUploadResult` already types the common fields while preserving everything else. Decision by product owner, 2026-08-28.

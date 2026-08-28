@@ -49,7 +49,7 @@ describe('IssueOperations.addAttachments()', () => {
     (global.fetch as jest.MockedFunction<typeof fetch>).mockReset();
   });
 
-  it('uploads multiple files and returns normalized AttachmentRecord[]', async () => {
+  it('uploads multiple files and returns AttachmentUploadResult[]', async () => {
     const records = await ops.addAttachments('ENG-1', twoAttachments);
 
     expect(records).toEqual([
@@ -114,14 +114,13 @@ describe('IssueOperations.addAttachments()', () => {
     expect(client.postMultipart).not.toHaveBeenCalled();
   });
 
-  it('normalizes absent size to 0', async () => {
-    client.postMultipart.mockResolvedValueOnce([
-      { id: '9', filename: 'no-size.txt' }, // no size field
-    ]);
+  it('passes Jira response through without narrowing (extra fields preserved)', async () => {
+    const richResult = { id: '9', filename: 'rich.txt', size: 42, mimeType: 'text/plain', author: { name: 'x' } };
+    client.postMultipart.mockResolvedValueOnce([richResult]);
 
-    const records = await ops.addAttachments('ENG-1', [{ data: new Uint8Array([1]), filename: 'no-size.txt' }]);
+    const records = await ops.addAttachments('ENG-1', [{ data: new Uint8Array([1]), filename: 'rich.txt' }]);
 
-    expect(records[0]!.size).toBe(0);
+    expect(records[0]).toEqual(richResult);
   });
 
   it('URL-encodes an issue key containing special characters', async () => {

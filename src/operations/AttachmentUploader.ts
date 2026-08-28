@@ -8,7 +8,6 @@ import { JMLError } from '../errors/JMLError.js';
 import type {
   AttachmentDataInput,
   AttachmentInput,
-  AttachmentRecord,
   AttachmentUploadResult,
 } from '../types/attachment.js';
 
@@ -68,7 +67,7 @@ export class AttachmentUploader {
   }
 
   /**
-   * Upload attachments and return normalized {@link AttachmentRecord} objects.
+   * Upload attachments and return raw Jira {@link AttachmentUploadResult} objects.
    *
    * Wraps {@link upload} with attachment-specific error enrichment so callers
    * always receive an {@link AttachmentUploadError} with an actionable message
@@ -82,10 +81,9 @@ export class AttachmentUploader {
     endpoint: string,
     input: AttachmentInput[],
     issueKey: string
-  ): Promise<AttachmentRecord[]> {
+  ): Promise<AttachmentUploadResult[]> {
     try {
-      const results = await this.upload(endpoint, input);
-      return this.toAttachmentRecords(results);
+      return await this.upload(endpoint, input);
     } catch (err) {
       const status =
         err instanceof JMLError
@@ -121,18 +119,6 @@ export class AttachmentUploader {
         err
       );
     }
-  }
-
-  /**
-   * Map raw Jira upload results to the stable {@link AttachmentRecord} shape.
-   * Absent `size` fields default to `0`.
-   */
-  toAttachmentRecords(results: AttachmentUploadResult[]): AttachmentRecord[] {
-    return results.map((r) => ({
-      id: r.id,
-      filename: r.filename,
-      size: r.size ?? 0,
-    }));
   }
 
   private composeMessage(canned: string, cause: unknown): string {

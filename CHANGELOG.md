@@ -5,16 +5,14 @@ All notable changes to this project are documented here. Only tagged releases ar
 ## [2.2.0] - 2026-08-28
 
 ### Added
-- **`issues.addAttachments()`** — Attach files to an existing issue by key. Accepts the same local-path and in-memory byte payloads as the create-time path, returning normalized `AttachmentRecord[]` (id, filename, size).
-- **`AttachmentRecord` type** — Stable, normalized attachment shape with `size` defaulting to `0` when absent from the Jira response. Exported from the package index.
+- **`issues.addAttachments()`** — Attach files to an existing issue by key. Accepts the same local-path and in-memory byte payloads as the create-time path, returning Jira's attachment metadata (`AttachmentUploadResult[]`) for each uploaded file.
 - **`AttachmentUploader` export** — `AttachmentUploader` (value) is now exported from the package index for use in downstream tools that build on JML's multipart pipeline.
 
 ### Fixed
 - **Actionable 403/413 upload errors** — A 403 during attachment upload now names the likely causes (attachments disabled for project, or missing *Create Attachments* permission). A 413 now names the cause (file exceeded the instance attachment size limit). Neither bare HTTP status is surfaced to callers.
-- **URL-encoded issue keys** — `EndpointResolver.issueAttachments()` and the IssueOperations fallback path now apply `encodeURIComponent` to the issue key, preventing malformed URLs for keys containing spaces or slashes.
+- **URL-encoded path parameters** — `EndpointResolver` now applies `encodeURIComponent` to every interpolated issue key, project key, issue type ID, field ID and context ID (plus the `createmeta` query value), as does the IssueOperations attachment fallback path. Previously keys containing spaces or slashes produced malformed URLs.
 
 ### Changed
-- **`Issue.attachments` type** — Now typed as `AttachmentRecord[]` instead of `AttachmentUploadResult[]`, so create-time and post-creation uploads return the same normalized shape. Runtime values are unchanged (`AttachmentRecord` is a subset); TypeScript consumers reading fields beyond `id`/`filename`/`size` off `Issue.attachments` will need to cast.
 - **Attachment demo** — The interactive demo now offers an "Attach Files to Existing Issue" flow alongside the create-time flow.
 
 ## [2.1.0] - 2026-08-05

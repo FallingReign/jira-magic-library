@@ -159,4 +159,32 @@ describe('EndpointResolver', () => {
       expect(resolver.userSearchParam).toBe('query');
     });
   });
+
+  describe('URL encoding', () => {
+    const resolver = new EndpointResolver('server', 'v2');
+
+    it('URL-encodes spaces and slashes in issueGet', () => {
+      expect(resolver.issueGet('PROJ 1/2')).toBe('/rest/api/2/issue/PROJ%201%2F2');
+    });
+
+    it('URL-encodes spaces and slashes in issueUpdate', () => {
+      expect(resolver.issueUpdate('PROJ 1/2')).toBe('/rest/api/2/issue/PROJ%201%2F2');
+    });
+
+    it('URL-encodes spaces and slashes in projectGet', () => {
+      expect(resolver.projectGet('MY PROJ/X')).toBe('/rest/api/2/project/MY%20PROJ%2FX');
+    });
+
+    it('URL-encodes the query value in createMeta without encoding separators', () => {
+      expect(resolver.createMeta('PROJ 1/2')).toBe(
+        '/rest/api/2/issue/createmeta?projectKeys=PROJ%201%2F2&expand=projects.issuetypes.fields'
+      );
+    });
+
+    it('URL-encodes both params in fieldOptions', () => {
+      expect(resolver.fieldOptions('custom field/1', 'ctx 2/3')).toBe(
+        '/rest/api/2/field/custom%20field%2F1/context/ctx%202%2F3/option'
+      );
+    });
+  });
 });

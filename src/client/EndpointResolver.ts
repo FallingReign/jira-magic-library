@@ -34,12 +34,12 @@ export class EndpointResolver {
 
   /** Create metadata endpoint (project-level) */
   createMeta(projectKey: string): string {
-    return `${this._apiBase}/issue/createmeta?projectKeys=${projectKey}&expand=projects.issuetypes.fields`;
+    return `${this._apiBase}/issue/createmeta?projectKeys=${encodeURIComponent(projectKey)}&expand=projects.issuetypes.fields`;
   }
 
   /** Create metadata fields for a specific issue type (Cloud v3 style) */
   createMetaFields(projectKey: string, issueTypeId: string): string {
-    return `${this._apiBase}/issue/createmeta/${projectKey}/issuetypes/${issueTypeId}`;
+    return `${this._apiBase}/issue/createmeta/${encodeURIComponent(projectKey)}/issuetypes/${encodeURIComponent(issueTypeId)}`;
   }
 
   /** Issue creation endpoint */
@@ -54,12 +54,12 @@ export class EndpointResolver {
 
   /** Get/update a single issue */
   issueGet(issueKey: string): string {
-    return `${this._apiBase}/issue/${issueKey}`;
+    return `${this._apiBase}/issue/${encodeURIComponent(issueKey)}`;
   }
 
   /** Update a single issue */
   issueUpdate(issueKey: string): string {
-    return `${this._apiBase}/issue/${issueKey}`;
+    return `${this._apiBase}/issue/${encodeURIComponent(issueKey)}`;
   }
 
   /** Upload attachments for a single issue */
@@ -103,7 +103,7 @@ export class EndpointResolver {
 
   /** Get a single project */
   projectGet(projectKey: string): string {
-    return `${this._apiBase}/project/${projectKey}`;
+    return `${this._apiBase}/project/${encodeURIComponent(projectKey)}`;
   }
 
   /** List all fields */
@@ -113,12 +113,12 @@ export class EndpointResolver {
 
   /** Field contexts (Cloud custom field config) */
   fieldContext(fieldId: string): string {
-    return `${this._apiBase}/field/${fieldId}/context`;
+    return `${this._apiBase}/field/${encodeURIComponent(fieldId)}/context`;
   }
 
   /** Field options for a given context */
   fieldOptions(fieldId: string, contextId: string): string {
-    return `${this._apiBase}/field/${fieldId}/context/${contextId}/option`;
+    return `${this._apiBase}/field/${encodeURIComponent(fieldId)}/context/${encodeURIComponent(contextId)}/option`;
   }
 
   /** Whether this resolver is for a Cloud deployment */
