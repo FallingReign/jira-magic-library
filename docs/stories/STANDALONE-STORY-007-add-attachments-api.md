@@ -5,7 +5,7 @@
 **Priority**: P1  
 **Status**: ✅ Done  
 **Assignee**: GitHub Copilot  
-**PR**: -  
+**PR**: [#1](https://github.com/FallingReign/jira-magic-library/pull/1)  
 **Started**: 2026-08-28  
 **Completed**: 2026-08-28
 
