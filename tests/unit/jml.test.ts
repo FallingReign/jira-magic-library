@@ -63,11 +63,18 @@ describe('JML', () => {
       expect(JiraClientImpl).toHaveBeenCalledWith({
         baseUrl: config.baseUrl,
         auth: config.auth,
-        redis: {
+        apiVersion: 'v2',
+      });
+      // Redis defaults must be applied and passed to the cache (not the HTTP client)
+      expect(RedisCache).toHaveBeenCalledWith(
+        {
           host: 'localhost',
           port: 6379,
         },
-      });
+        undefined,
+        undefined,
+        undefined
+      );
     });
 
     it('should use default Redis config if not provided', () => {
