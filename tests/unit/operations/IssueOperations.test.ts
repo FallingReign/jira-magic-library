@@ -1919,10 +1919,11 @@ describe('IssueOperations', () => {
         onProgress: jest.fn()  // Progress callback provided
       });
 
-      // Assert: createBulk was called with Infinity timeout
+      // Assert: createBulk was called with Infinity timeout and the resolved bulk endpoint
       expect(mockBulkApiWrapper.createBulk).toHaveBeenCalledWith(
         expect.anything(),
-        Infinity  // HTTP timeout should be disabled
+        Infinity,  // HTTP timeout should be disabled
+        '/rest/api/2/issue/bulk'  // Resolved bulk-create endpoint
       );
     });
 
@@ -1964,9 +1965,11 @@ describe('IssueOperations', () => {
       // NO onProgress callback
 
       // Assert: createBulk was called with configured timeout (or undefined, which uses default)
+      // and the resolved bulk-create endpoint
       expect(mockBulkApiWrapper.createBulk).toHaveBeenCalledWith(
         expect.anything(),
-        undefined  // Should not pass Infinity, let it use default
+        undefined,  // Should not pass Infinity, let it use default
+        '/rest/api/2/issue/bulk'  // Resolved bulk-create endpoint
       );
     });
   });
