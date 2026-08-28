@@ -16,7 +16,7 @@ export interface Issue {
   /** Optional fields returned by JIRA (for dry-run mode or expanded responses) */
   fields?: Record<string, unknown>;
 
-  /** Attachment metadata returned after a successful attachment upload */
+  /** Attachment metadata returned after a successful attachment upload. */
   attachments?: AttachmentUploadResult[];
 }
 

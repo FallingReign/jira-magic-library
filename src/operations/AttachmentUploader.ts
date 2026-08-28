@@ -3,6 +3,8 @@ import { basename } from 'node:path';
 import type { JiraClient } from '../client/JiraClient.js';
 import { FileNotFoundError } from '../errors/FileNotFoundError.js';
 import { ValidationError } from '../errors/ValidationError.js';
+import { AttachmentUploadError } from '../errors/AttachmentUploadError.js';
+import { JMLError } from '../errors/JMLError.js';
 import type {
   AttachmentDataInput,
   AttachmentInput,
@@ -62,6 +64,66 @@ export class AttachmentUploader {
     }
 
     return this.client.postMultipart<AttachmentUploadResult[]>(endpoint, form);
+  }
+
+  /**
+   * Upload attachments and return raw Jira {@link AttachmentUploadResult} objects.
+   *
+   * Wraps {@link upload} with attachment-specific error enrichment so callers
+   * always receive an {@link AttachmentUploadError} with an actionable message
+   * rather than a bare HTTP status string.
+   *
+   * @param endpoint - Jira attachment endpoint URL.
+   * @param input - Validated attachment inputs (from {@link validate}).
+   * @param issueKey - Issue the attachments belong to (used in error messages).
+   */
+  async uploadForIssue(
+    endpoint: string,
+    input: AttachmentInput[],
+    issueKey: string
+  ): Promise<AttachmentUploadResult[]> {
+    try {
+      return await this.upload(endpoint, input);
+    } catch (err) {
+      const status =
+        err instanceof JMLError
+          ? (err.details as Record<string, unknown>)?.['status'] as number | undefined
+          : undefined;
+
+      if (status === 403) {
+        throw new AttachmentUploadError(
+          issueKey,
+          this.composeMessage(
+            'Attachments may be disabled for this project, or the token lacks the "Create Attachments" permission',
+            err
+          ),
+          err,
+          403
+        );
+      }
+      if (status === 413) {
+        throw new AttachmentUploadError(
+          issueKey,
+          this.composeMessage(
+            'The uploaded file(s) exceeded the instance attachment size limit',
+            err
+          ),
+          err,
+          413
+        );
+      }
+
+      throw new AttachmentUploadError(
+        issueKey,
+        err instanceof Error ? err.message : String(err),
+        err
+      );
+    }
+  }
+
+  private composeMessage(canned: string, cause: unknown): string {
+    const underlying = cause instanceof Error ? cause.message : undefined;
+    return underlying ? `${canned}. Jira reported: ${underlying}` : canned;
   }
 
   private async validatePath(filePath: string): Promise<void> {

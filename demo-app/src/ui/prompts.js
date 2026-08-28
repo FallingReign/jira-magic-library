@@ -76,6 +76,7 @@ export async function showMainMenu() {
       choices: [
         { name: '🧪 Multi-Field Issue Creator (Full Demo)', value: 'multi-field' },
         { name: '📎 Single-Issue Attachments (local file)', value: 'attachments' },
+        { name: '📎 Attach Files to Existing Issue', value: 'add-attachments' },
         { name: '📥 Bulk Import (interactive)', value: 'bulk-import' },
         { name: '📄 Bulk Import: CSV Example', value: 'bulk-import-csv' },
         { name: '📝 Bulk Import: YAML Example', value: 'bulk-import-yaml' },

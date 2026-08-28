@@ -66,9 +66,11 @@ export {
 
 // Types
 export type { Issue } from './types/index.js';
+// Attachments
+export { AttachmentUploader } from './operations/AttachmentUploader.js';
 export type {
-  AttachmentDataInput,
   AttachmentInput,
+  AttachmentDataInput,
   AttachmentUploadResult,
 } from './types/index.js';
 export type { HierarchyLevel, HierarchyStructure } from './types/hierarchy.js';
