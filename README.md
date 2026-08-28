@@ -152,7 +152,7 @@ Since the package is not on npm yet, reference the Git repo directly (or via loc
 // your-project/package.json
 {
   "dependencies": {
-    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v2.1.0"
+    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v2.2.0"
   }
 }
 ```
