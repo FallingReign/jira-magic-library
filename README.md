@@ -53,6 +53,28 @@ if (result.failed > 0) {
 }
 ```
 
+### Attach Files to an Existing Issue
+
+Use `addAttachments` to upload files to an issue that was created earlier. The
+method reuses the same multipart pipeline (authentication, retry, `X-Atlassian-Token`)
+as the create-time attachment path.
+
+```ts
+const records = await jml.issues.addAttachments('ENG-123', [
+  './screenshots/before.png',
+  {
+    data: downloadedBytes,
+    filename: 'after.png',
+    contentType: 'image/png',
+  },
+]);
+
+// Each record: { id: string, filename: string, size: number }
+console.log(records[0].id, records[0].filename, records[0].size);
+```
+
+An empty array resolves immediately to `[]` with no HTTP calls.
+
 ### Create an Issue with Attachments
 
 Attachments are uploaded after the issue is created. Provide local paths or

@@ -42,6 +42,7 @@ Stories outside the active epics but still tracked for delivery.
 - ✅ [S4: Defer Project/IssueType Extraction to FieldResolver](stories/BACKLOG-STORY-004-defer-project-issuetype-extraction.md) - 3 points
 - 📋 [S5: Unified Debug Logging Infrastructure](stories/STANDALONE-STORY-005-debug-logging.md) - 5 points
 - ⏳ [S6: Custom Block Syntax for Multiline Content](stories/STANDALONE-STORY-006-custom-block-syntax.md) - 5 points *(GitHub Copilot)*
+- ✅ [S7: Post-Creation Attachment API (`issues.addAttachments`)](stories/STANDALONE-STORY-007-add-attachments-api.md) - 5 points *(GitHub Copilot)*
 
 ---
 

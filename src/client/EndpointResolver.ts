@@ -64,7 +64,7 @@ export class EndpointResolver {
 
   /** Upload attachments for a single issue */
   issueAttachments(issueKey: string): string {
-    return `${this._apiBase}/issue/${issueKey}/attachments`;
+    return `${this._apiBase}/issue/${encodeURIComponent(issueKey)}/attachments`;
   }
 
   /** Issue search (JQL) */

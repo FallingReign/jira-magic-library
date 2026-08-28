@@ -51,6 +51,12 @@ describe('EndpointResolver', () => {
       );
     });
 
+    it('should URL-encode the issue key in issueAttachments', () => {
+      expect(resolver.issueAttachments('PROJ 1/2')).toBe(
+        '/rest/api/2/issue/PROJ%201%2F2/attachments'
+      );
+    });
+
     it('should resolve search', () => {
       expect(resolver.search()).toBe('/rest/api/2/search');
     });

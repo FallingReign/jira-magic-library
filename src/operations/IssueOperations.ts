@@ -3,6 +3,7 @@ import { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
 import { FieldResolver } from '../converters/FieldResolver.js';
 import { ConverterRegistry } from '../converters/ConverterRegistry.js';
 import { Issue } from '../types/index.js';
+import type { AttachmentInput, AttachmentRecord } from '../types/attachment.js';
 import { BulkResult, BulkManifest } from '../types/bulk.js';
 import { LookupCache, GenericCache } from '../types/converter.js';
 import type { JMLConfig, DeploymentType, AmbiguityPolicyConfig, FuzzyMatchConfig } from '../types/config.js';
@@ -136,6 +137,32 @@ export interface IssuesAPI {
    * @returns PreviewResult for single, PreviewResult[] for array
    */
   preview(input: Record<string, unknown> | Array<Record<string, unknown>>): Promise<PreviewResult | PreviewResult[]>;
+
+  /**
+   * Attach files to an existing issue.
+   *
+   * Delegates to the existing multipart upload pipeline — no new HTTP wiring
+   * is introduced. Each attachment becomes a separate entry in the returned
+   * array, preserving the order in which Jira reports them.
+   *
+   * @param issueKey - The issue key to attach files to (e.g. `"ENG-123"`).
+   * @param attachments - Local file paths or in-memory byte payloads.
+   * @returns Normalized attachment metadata for every uploaded file.
+   *
+   * @throws {ValidationError} When `issueKey` is blank or whitespace.
+   * @throws {AttachmentUploadError} When the upload fails (status is carried
+   *   on the error; 403 names likely causes, 413 names the size-limit cause).
+   *
+   * @example
+   * ```typescript
+   * const records = await jml.issues.addAttachments('ENG-123', [
+   *   './screenshots/before.png',
+   *   { data: pngBytes, filename: 'after.png', contentType: 'image/png' },
+   * ]);
+   * console.log(records[0].id, records[0].filename, records[0].size);
+   * ```
+   */
+  addAttachments(issueKey: string, attachments: AttachmentInput[]): Promise<AttachmentRecord[]>;
 }
 
 /**
@@ -668,15 +695,19 @@ export class IssueOperations implements IssuesAPI {
 
       try {
         const attachmentEndpoint = await this.resolveIssueAttachmentsEndpoint(response.key);
-        const uploadedAttachments = await this.attachmentUploader.upload(
+        const uploadedAttachments = await this.attachmentUploader.uploadForIssue(
           attachmentEndpoint,
-          attachments
+          attachments,
+          response.key
         );
         return {
           ...response,
           attachments: uploadedAttachments,
         };
       } catch (err: unknown) {
+        if (err instanceof AttachmentUploadError) {
+          throw err;
+        }
         throw new AttachmentUploadError(
           response.key,
           err instanceof Error ? err.message : String(err),
@@ -1580,6 +1611,24 @@ export class IssueOperations implements IssuesAPI {
     return previewInstance.preview(input);
   }
 
+  async addAttachments(
+    issueKey: string,
+    attachments: AttachmentInput[]
+  ): Promise<AttachmentRecord[]> {
+    if (!issueKey || !issueKey.trim()) {
+      throw new ValidationError('issueKey must be a non-empty string');
+    }
+
+    // AC3: short-circuit before validation and endpoint resolution
+    if (attachments.length === 0) {
+      return [];
+    }
+
+    const validated = await this.attachmentUploader.validate(attachments);
+    const endpoint = await this.resolveIssueAttachmentsEndpoint(issueKey);
+    return this.attachmentUploader.uploadForIssue(endpoint, validated, issueKey);
+  }
+
   private async getCloudAdapter(): Promise<CloudCreateAdapter | undefined> {
     if (this.cloudAdapter) {
       return this.cloudAdapter;
@@ -1670,7 +1719,7 @@ export class IssueOperations implements IssuesAPI {
         // Fall back if detection fails
       }
     }
-    return `/rest/api/2/issue/${issueKey}/attachments`;
+    return `/rest/api/2/issue/${encodeURIComponent(issueKey)}/attachments`;
   }
 
   private rejectBulkAttachments(records: Array<Record<string, unknown>>): void {

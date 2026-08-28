@@ -361,6 +361,12 @@ export class JiraClientImpl implements JiraClient {
           context
         );
       
+      case 413:
+        return new JiraServerError(
+          `Payload too large (${status}): ${message}. The uploaded content exceeds the server size limit.`,
+          context
+        );
+      
       default:
         return new JiraServerError(
           `HTTP ${status}: ${message}`,

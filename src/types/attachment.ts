@@ -16,6 +16,19 @@ export interface AttachmentDataInput {
 export type AttachmentInput = string | AttachmentDataInput;
 
 /**
+ * Normalized attachment metadata returned to callers after a successful upload.
+ *
+ * The raw Jira response varies across deployment versions; this stable shape is
+ * always returned regardless of which fields Jira omits.
+ */
+export interface AttachmentRecord {
+  id: string;
+  filename: string;
+  /** File size in bytes. Defaults to `0` when absent from the Jira response. */
+  size: number;
+}
+
+/**
  * Attachment metadata returned by JIRA after upload.
  */
 export interface AttachmentUploadResult {
