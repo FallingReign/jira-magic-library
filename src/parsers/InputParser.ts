@@ -41,7 +41,7 @@ import { parse as parseCSV } from 'csv-parse/sync';
 import * as yaml from 'js-yaml';
 import { InputParseError, FileNotFoundError } from '../errors/index.js';
 import { preprocessQuotes, escapeAllBackslashes } from './quote-preprocessor.js';
-import { preprocessCustomBlocks } from './custom-block-preprocessor.js';
+import { protectCustomBlocks } from './custom-block-preprocessor.js';
 
 /**
  * Parsed input with normalized data array
@@ -104,9 +104,9 @@ export interface ParseInputOptions {
    */
   preprocessCustomBlocks?: boolean;
   /**
-   * Whether to preprocess quotes in the input to fix common copy/paste issues.
-   * When enabled, the parser will automatically escape unescaped quotes in string values.
-   * @default true
+   * Opt in to legacy quote repair for malformed input only.
+   * Valid input and literal blocks are never rewritten. Prefer <<< blocks for pasted text.
+   * @default false
    */
   preprocessQuotes?: boolean;
 }
@@ -153,9 +153,9 @@ export async function parseInput(options: ParseInputOptions): Promise<ParsedInpu
     );
   }
 
-  // Default both preprocessing options to true if not specified
+  // Literal blocks are enabled by default; legacy quote repair is opt-in.
   const shouldPreprocessCustomBlocks = options.preprocessCustomBlocks !== false;
-  const shouldPreprocessQuotes = options.preprocessQuotes !== false;
+  const shouldPreprocessQuotes = options.preprocessQuotes === true;
 
   // Case 1: File path provided
   if (options.from) {
@@ -179,7 +179,7 @@ async function parseFromFile(
   filePath: string,
   explicitFormat?: 'csv' | 'json' | 'yaml',
   shouldPreprocessCustomBlocks = true,
-  shouldPreprocessQuotes = true
+  shouldPreprocessQuotes = false
 ): Promise<ParsedInput> {
   // Check if file exists
   try {
@@ -237,7 +237,7 @@ function parseFromData(
   data: string | unknown[] | Record<string, unknown>,
   explicitFormat?: 'csv' | 'json' | 'yaml',
   shouldPreprocessCustomBlocks = true,
-  shouldPreprocessQuotes = true
+  shouldPreprocessQuotes = false
 ): ParsedInput {
   // Case 1: Array of objects (pass-through)
   if (Array.isArray(data)) {
@@ -251,18 +251,18 @@ function parseFromData(
       return parseCSVFromArray(data as unknown[][]);
     }
 
-    // Array of objects (already parsed JSON) - sanitize in case values have whitespace
+    // Array of objects: normalize field names without editing values.
     return {
-      data: sanitizeValues(data as Record<string, unknown>[]),
+      data: normalizeKeys(data as Record<string, unknown>[]),
       format: 'json',
       source: 'array',
     };
   }
 
-  // Case 2: Single object (normalize to array) - sanitize in case values have whitespace
+  // Case 2: Single object (normalize to array and normalize field names).
   if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
     return {
-      data: [sanitizeValues(data)],
+      data: [normalizeKeys(data)],
       format: 'json',
       source: 'object',
     };
@@ -303,57 +303,27 @@ function parseContent(
   content: string,
   format: 'csv' | 'json' | 'yaml',
   shouldPreprocessCustomBlocks = true,
-  shouldPreprocessQuotes = true
+  shouldPreprocessQuotes = false
 ): Record<string, unknown>[] {
-  let processedContent = content;
-
-  // Step 1: Escape quotes and backslashes in user-typed values (regular quoted strings).
-  // Custom block markers (<<<) are unquoted content — this step leaves them untouched.
-  if (shouldPreprocessQuotes) {
-    const preprocessed = preprocessQuotes(content, format);
-    if (preprocessed !== content) {
-      // eslint-disable-next-line no-console
-      console.debug(`Input required quote preprocessing for ${format} format`);
-    }
-    processedContent = preprocessed;
-  }
-
-  // Step 2: Convert custom blocks (<<< >>>) into fully-escaped quoted strings.
-  // Runs AFTER quote preprocessing so there is no double-escaping:
-  // the output of this step is already payload-ready and won't be touched again.
-  if (shouldPreprocessCustomBlocks) {
-    const preprocessed = preprocessCustomBlocks(processedContent, format);
-    if (preprocessed !== processedContent) {
-      // eslint-disable-next-line no-console
-      console.debug(`Input required custom block preprocessing for ${format} format`);
-    }
-    processedContent = preprocessed;
-  }
-
-  try {
+  const protectedInput = shouldPreprocessCustomBlocks ? protectCustomBlocks(content, format)
+    : { content, restore: (records: Record<string, unknown>[]) => records };
+  const parseFormat = (text: string, compatibility = false): Record<string, unknown>[] => {
     switch (format) {
-      case 'csv':
-        return parseCSVContent(processedContent);
-      case 'json':
-        return parseJSONContent(processedContent);
-      case 'yaml':
-        return parseYAMLContent(processedContent);
-      default: {
-        // Exhaustiveness check
-        const _exhaustive: never = format;
-        throw new InputParseError(`Unsupported format: ${String(_exhaustive)}`, { format });
-      }
+      case 'csv': return parseCSVContent(text);
+      case 'json': return parseJSONContent(text, compatibility);
+      case 'yaml': return parseYAMLContent(text, compatibility);
+      default: throw new InputParseError(`Unsupported format: ${String(format)}`, { format });
     }
+  };
+  let records: Record<string, unknown>[];
+  try {
+    // Valid input always follows the format's normal rules, even in compatibility mode.
+    records = parseFormat(protectedInput.content);
   } catch (error) {
-    if (error instanceof InputParseError) {
-      throw error;
-    }
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    throw new InputParseError(
-      `Failed to parse ${format.toUpperCase()}: ${errorMessage}`,
-      { format, originalError: errorMessage }
-    );
+    if (!shouldPreprocessQuotes) throw error;
+    records = parseFormat(preprocessQuotes(protectedInput.content, format), true);
   }
+  return protectedInput.restore(records);
 }
 
 /**
@@ -390,8 +360,8 @@ function parseCSVContent(content: string): Record<string, unknown>[] {
       return rowRecord;
     });
 
-    // Sanitize all string values (trim whitespace from keys and values)
-    return sanitizeValues(processed);
+    // Normalize field names, preserving values.
+    return normalizeKeys(processed);
   } catch (error) {
     throw new InputParseError(
       `Invalid CSV format: ${(error as Error).message}`,
@@ -428,9 +398,9 @@ function parseCSVFromArray(data: unknown[][]): ParsedInput {
     return obj;
   });
 
-  // Sanitize all string values (trim whitespace from keys and values)
+  // Normalize field names, preserving values.
   return {
-    data: sanitizeValues(parsed),
+    data: normalizeKeys(parsed),
     format: 'csv',
     source: 'array',
   };
@@ -451,13 +421,13 @@ function parseCSVFromArray(data: unknown[][]): ParsedInput {
  * aggressive backslash fix across all double-quoted strings and retry once.
  * This is a genuine last-resort safety net, not the primary path.
  */
-function parseJSONContent(content: string): Record<string, unknown>[] {
+function parseJSONContent(content: string, compatibility = false): Record<string, unknown>[] {
   const tryParse = (src: string): Record<string, unknown>[] => {
     const parsed: unknown = JSON.parse(src);
     if (Array.isArray(parsed)) {
-      return sanitizeValues(parsed as Record<string, unknown>[]);
+      return normalizeKeys(parsed as Record<string, unknown>[]);
     } else if (typeof parsed === 'object' && parsed !== null) {
-      return [sanitizeValues(parsed as Record<string, unknown>)];
+      return [normalizeKeys(parsed as Record<string, unknown>)];
     } else {
       throw new Error('JSON must be an object or array of objects');
     }
@@ -470,11 +440,11 @@ function parseJSONContent(content: string): Record<string, unknown>[] {
 
     // Retry: if the failure looks like a bad escape sequence or literal control
     // characters (e.g. Slack-injected newlines), fix and try once more.
-    if (
+    if (compatibility && (
       msg.toLowerCase().includes('escape') ||
       msg.includes('Unexpected token') ||
       msg.toLowerCase().includes('control character')
-    ) {
+    )) {
       try {
         let fixed = fixInvalidJsonEscapes(content);
         fixed = fixLiteralControlCharsInJson(fixed);
@@ -508,8 +478,8 @@ function parseJSONContent(content: string): Record<string, unknown>[] {
  *    fix across all double-quoted strings and retry once. This is a safety net for
  *    content that the quote preprocessor may not have caught (e.g., edge-case quoting).
  */
-function parseYAMLContent(content: string): Record<string, unknown>[] {
-  /** Load, flatten, and sanitize all YAML documents in `src`. */
+function parseYAMLContent(content: string, compatibility = false): Record<string, unknown>[] {
+  /** Load, flatten, and normalize field names in YAML documents in `src`. */
   const tryLoad = (src: string): Record<string, unknown>[] => {
     const documents: unknown[] = yaml.loadAll(src);
     const result: Record<string, unknown>[] = [];
@@ -527,7 +497,7 @@ function parseYAMLContent(content: string): Record<string, unknown>[] {
         throw new Error('YAML documents must be objects or arrays of objects');
       }
     }
-    return sanitizeValues(result);
+    return normalizeKeys(result);
   };
 
   try {
@@ -537,7 +507,7 @@ function parseYAMLContent(content: string): Record<string, unknown>[] {
 
     // Retry: if the failure was an invalid escape sequence, aggressively escape
     // all backslashes inside double-quoted strings and try once more.
-    if (msg.includes('escape')) {
+    if (compatibility && msg.includes('escape')) {
       try {
         const fixed = fixInvalidYamlEscapes(content);
         if (fixed !== content) {
@@ -596,7 +566,7 @@ function fixInvalidJsonEscapes(content: string): string {
  *
  * This is invalid JSON ("Bad control character in string literal"). This function
  * escapes those control characters so JSON.parse can succeed, after which the
- * normal sanitizeValues pass trims the resulting leading/trailing whitespace.
+ * field-name normalization leaves the resulting string unchanged.
  *
  * Called as a retry when JSON.parse throws a "control character" error.
  */
@@ -647,62 +617,19 @@ function getCsvQuotedFlags(rawRow: string, expectedFieldCount: number): boolean[
   return flags;
 }
 
-/**
- * Recursively sanitize string values in parsed data.
- * 
- * - Trims leading/trailing whitespace from all string values (including array elements)
- * - Trims whitespace from object keys (keys should never be multiline)
- * - Preserves internal newlines in string values (for multiline fields like description)
- * - Handles nested objects and arrays recursively
- * 
- * This fixes issues where input sources (e.g., Slack) insert accidental
- * line breaks in field values like:
- *   issue type: "
- *   Bug"
- * 
- * @param data - Parsed data to sanitize
- * @returns Sanitized data with trimmed string values and keys
- */
-function sanitizeValues<T>(data: T): T {
-  if (data === null || data === undefined) {
-    return data;
-  }
-
-  if (typeof data === 'string') {
-    // Normalize Unicode variations (NFKC handles compatibility forms)
-    // Remove invisible characters that can cause matching failures:
-    // - U+200B: Zero-width space
-    // - U+200C: Zero-width non-joiner
-    // - U+200D: Zero-width joiner
-    // - U+FEFF: Zero-width no-break space (BOM)
-    // - U+00A0: Non-breaking space
-    const normalized = data
-      .normalize('NFKC')
-      .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '');
-    // Trim leading/trailing whitespace but preserve internal newlines
-    return normalized.replace(/^\s+|\s+$/g, '') as T;
-  }
-
+/** Normalize field names while preserving all field values. */
+function normalizeKeys<T>(data: T): T {
   if (Array.isArray(data)) {
-    // Recursively sanitize array elements
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return data.map((item) => sanitizeValues(item)) as T;
+    return (data as unknown[]).map(item => normalizeKeys(item)) as T;
   }
-
-  if (typeof data === 'object') {
-    // Recursively sanitize object values and trim keys
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-      // Sanitize keys the same way as values (remove invisible chars + trim)
-      const sanitizedKey = key
-        .normalize('NFKC')
-        .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '')
-        .trim();
-      result[sanitizedKey] = sanitizeValues(value);
-    }
-    return result as T;
+  if (data !== null && typeof data === 'object' && !(data instanceof Date)) {
+    const seen = new Set<string>();
+    return Object.fromEntries(Object.entries(data).map(([key, value]) => {
+      const normalizedKey = key.normalize('NFKC').replace(/[\u200B-\u200D\uFEFF\u00A0]/g, '').trim();
+      if (seen.has(normalizedKey)) throw new InputParseError(`Duplicate field after name normalization: "${normalizedKey}"`);
+      seen.add(normalizedKey);
+      return [normalizedKey, normalizeKeys(value)];
+    })) as T;
   }
-
-  // Non-string primitives (numbers, booleans) pass through unchanged
   return data;
 }

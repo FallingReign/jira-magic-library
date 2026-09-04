@@ -15,6 +15,7 @@ import type { EndpointResolver } from '../client/EndpointResolver.js';
 import type { DeploymentType, JMLConfig } from '../types/config.js';
 import type { LookupCache, GenericCache } from '../types/converter.js';
 import { normalizeFieldName } from '../utils/normalizeFieldName.js';
+import { prepareIssueFields } from './prepareIssueFields.js';
 
 /**
  * Details about how a single field was resolved.
@@ -36,6 +37,8 @@ export interface FieldResolution {
  * Result of a payload preview.
  */
 export interface PreviewResult {
+  /** False means preparation failed; the payload must not be submitted. */
+  valid: boolean;
   /** The fully resolved payload that would be sent to Jira */
   payload: { fields: Record<string, unknown> };
   /** How each field was resolved */
@@ -58,7 +61,8 @@ export class PayloadPreview {
     private readonly endpointResolverFn: () => Promise<EndpointResolver>,
     private readonly deploymentFn: () => Promise<DeploymentType>,
     private readonly cache?: LookupCache,
-    private readonly config?: JMLConfig
+    private readonly config?: JMLConfig,
+    private readonly baseUrl: string | undefined = config?.baseUrl
   ) {}
 
   /**
@@ -80,57 +84,31 @@ export class PayloadPreview {
       )
     );
 
-    // Step 1: Resolve field names → Jira field IDs
-    let projectKey: string;
-    let issueType: string;
-    let resolvedFields: Record<string, unknown>;
-
+    let convertedFields: Record<string, unknown>;
     try {
-      const result = await this.resolver.resolveFieldsWithExtraction(cleanInput);
-      projectKey = result.projectKey;
-      issueType = result.issueType;
-      resolvedFields = result.fields;
+      convertedFields = await prepareIssueFields(cleanInput, this.schema, this.resolver, this.converter, {
+        baseUrl: this.baseUrl,
+        cache: this.cache,
+        cacheClient: this.cache as unknown as GenericCache,
+        client: this.client,
+        config: this.config,
+        endpointResolverFn: this.endpointResolverFn,
+      });
     } catch (err) {
-      // If resolution fails, return partial result with warning
       const endpoint = await this.resolveEndpoint();
       const deployment = await this.resolveDeployment();
       warnings.push({
-        field: '_resolution',
-        message: `Field resolution failed: ${err instanceof Error ? err.message : String(err)}`,
+        field: '_preparation',
+        message: `Issue preparation failed: ${err instanceof Error ? err.message : String(err)}`,
       });
       return {
+        valid: false,
         payload: { fields: {} },
         resolutions,
         warnings,
         endpoint,
         deployment,
       };
-    }
-
-    // Step 2: Convert values using schema
-    let convertedFields: Record<string, unknown>;
-    try {
-      const projectSchema = await this.schema.getFieldsForIssueType(projectKey, issueType);
-      convertedFields = await this.converter.convertFields(
-        projectSchema,
-        resolvedFields,
-        {
-          projectKey,
-          issueType,
-          cache: this.cache,
-          cacheClient: this.cache as unknown as GenericCache,
-          client: this.client,
-          config: this.config,
-          endpointResolverFn: this.endpointResolverFn,
-        }
-      );
-    } catch (err) {
-      // Conversion failure — use resolved fields as-is
-      convertedFields = resolvedFields;
-      warnings.push({
-        field: '_conversion',
-        message: `Conversion failed: ${err instanceof Error ? err.message : String(err)}`,
-      });
     }
 
     // Step 3: Build payload and adapt for deployment
@@ -148,6 +126,7 @@ export class PayloadPreview {
     const deployment = await this.resolveDeployment();
 
     return {
+      valid: true,
       payload: { fields: finalFields },
       resolutions,
       warnings,
@@ -265,15 +244,15 @@ export class PayloadPreview {
     if (typeof value === 'object') {
       const obj = value as Record<string, unknown>;
       // Common Jira object patterns
-      if (obj.key) return `{key: ${obj.key}}`;
-      if (obj.name) return `{name: ${obj.name}}`;
-      if (obj.id) return `{id: ${obj.id}}`;
-      if (obj.accountId) return `{accountId: ${obj.accountId}}`;
-      if (obj.value) return `{value: ${obj.value}}`;
+      if (typeof obj.key === 'string') return `{key: ${obj.key}}`;
+      if (typeof obj.name === 'string') return `{name: ${obj.name}}`;
+      if (typeof obj.id === 'string' || typeof obj.id === 'number') return `{id: ${obj.id}}`;
+      if (typeof obj.accountId === 'string') return `{accountId: ${obj.accountId}}`;
+      if (typeof obj.value === 'string') return `{value: ${obj.value}}`;
       if (obj.type === 'doc') return '[ADF document]';
       return JSON.stringify(value).slice(0, 80);
     }
-    return String(value);
+    return '[unsupported value]';
   }
 
   private async resolveEndpoint(): Promise<string> {

@@ -14,6 +14,9 @@ import { convertTimeTrackingType } from './types/TimeTrackingConverter.js';
 import { convertIssueTypeType } from './types/IssueTypeConverter.js';
 import { convertProjectType } from './types/ProjectConverter.js';
 import { convertSprintType } from './types/SprintConverter.js';
+import { isBlank } from '../utils/isBlank.js';
+import { normalizeFieldName } from '../utils/normalizeFieldName.js';
+import { ValidationError } from '../errors/ValidationError.js';
 
 /**
  * Registry for field type converters.
@@ -23,8 +26,8 @@ import { convertSprintType } from './types/SprintConverter.js';
  * fields, and allows registration of custom converters.
  * 
  * Features:
- * - Built-in string converter (trims whitespace)
- * - Built-in text converter (preserves newlines, trims edges)
+ * - Built-in string converter (preserves whitespace)
+ * - Built-in text converter (preserves text and newlines)
  * - Extensible via register() method
  * - Graceful degradation (passthrough for unknown types)
  * - Null/undefined handling (skips fields)
@@ -35,7 +38,7 @@ import { convertSprintType } from './types/SprintConverter.js';
  * 
  * // Convert a single field
  * const value = registry.convert('  test  ', stringField, context);
- * // Returns: 'test'
+ * // Returns: '  test  '
  * 
  * // Convert all fields
  * const converted = registry.convertFields(schema, resolvedFields, context);
@@ -142,7 +145,7 @@ export class ConverterRegistry {
    *   type: 'string',
    *   ...
    * }, context);
-   * // Returns: 'test'
+   * // Returns: '  test  '
    * ```
    */
   async convert(value: unknown, fieldSchema: FieldSchema, context: ConversionContext): Promise<unknown> {
@@ -184,8 +187,8 @@ export class ConverterRegistry {
    * 
    * const converted = registry.convertFields(schema, resolvedFields, context);
    * // Returns: {
-   * //   summary: 'Test Issue',
-   * //   description: 'Line 1\nLine 2',
+   * //   summary: '  Test Issue  ',
+   * //   description: '  Line 1\nLine 2  ',
    * //   priority: { id: '1' }
    * // }
    * ```
@@ -203,9 +206,20 @@ export class ConverterRegistry {
       registry: this,
     };
 
+    if (context.operation === 'create') {
+      for (const field of Object.values(schema.fields)) {
+        const deferred = context.deferredRequiredFields?.some(name =>
+          normalizeFieldName(name) === normalizeFieldName(field.name) || normalizeFieldName(name) === normalizeFieldName(field.id));
+        if (field.required && !field.hasDefaultValue && field.schema.custom !== 'virtual' && !deferred &&
+            (isBlank(resolvedFields[field.id]) || (Array.isArray(resolvedFields[field.id]) && (resolvedFields[field.id] as unknown[]).length === 0))) {
+          throw new ValidationError(`Required field "${field.name}" is missing or empty`, { field: field.id });
+        }
+      }
+    }
+
     for (const [fieldId, value] of Object.entries(resolvedFields)) {
       // Skip null/undefined fields
-      if (value === null || value === undefined) {
+      if (value === null || value === undefined || (context.operation === 'create' && isBlank(value))) {
         continue;
       }
 
@@ -218,7 +232,15 @@ export class ConverterRegistry {
       }
 
       // Convert based on field type (await in case converter is async)
-      converted[fieldId] = await this.convert(value, fieldSchema, contextWithRegistry);
+      const result = await this.convert(value, fieldSchema, contextWithRegistry);
+      if (context.operation === 'create' && fieldSchema.type === 'timetracking' &&
+          typeof result === 'object' && result !== null && Object.keys(result).length === 0) {
+        if (fieldSchema.required && !fieldSchema.hasDefaultValue) {
+          throw new ValidationError(`Required field "${fieldSchema.name}" is missing or empty`, { field: fieldId });
+        }
+        continue;
+      }
+      converted[fieldId] = result;
     }
 
     return converted;
@@ -227,24 +249,23 @@ export class ConverterRegistry {
   /**
    * Built-in converter for string fields.
    * 
-   * Converts value to string, trims whitespace, returns empty string for null/undefined.
+   * Preserves free text, including whitespace, and returns an empty string for null/undefined.
    * 
    * @param value - User-provided value
-   * @returns Trimmed string
+   * @returns String with original whitespace
    */
   private convertString(value: unknown): string {
     if (value === null || value === undefined) {
       return '';
     }
     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-    return String(value).trim();
+    return String(value);
   }
 
   /**
    * Built-in converter for text fields (paragraphs).
    * 
-   * Converts value to string, preserves internal newlines and spaces,
-   * trims only leading/trailing whitespace.
+   * Converts value to string without changing its content or whitespace.
    * 
    * @param value - User-provided value
    * @returns String with preserved internal formatting
@@ -254,9 +275,7 @@ export class ConverterRegistry {
       return '';
     }
     // eslint-disable-next-line @typescript-eslint/no-base-to-string
-    const text = String(value);
-    // Trim only leading/trailing whitespace, preserve internal newlines/spaces
-    return text.replace(/^\s+|\s+$/g, '');
+    return String(value);
   }
 
 }

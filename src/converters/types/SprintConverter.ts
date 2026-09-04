@@ -43,7 +43,7 @@ import type { FieldSchema } from '../../types/schema.js';
 interface JiraSprint {
   id: number;
   name: string;
-  state: 'active' | 'future' | 'closed' | string;
+  state: string;
   originBoardId?: number;
 }
 
@@ -429,7 +429,7 @@ export const convertSprintType: FieldConverter = async (value, fieldSchema, cont
     );
   }
 
-  const str = (value as string).trim();
+  const str = (value).trim();
 
   if (str === '') {
     throw new ValidationError(
@@ -454,5 +454,5 @@ export const convertSprintType: FieldConverter = async (value, fieldSchema, cont
   }
 
   // Sprint name — resolve via Agile API with caching
-  return resolveSprintByName(str, fieldSchema as FieldSchema, context);
+  return resolveSprintByName(str, fieldSchema, context);
 };

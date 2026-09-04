@@ -35,6 +35,7 @@
  */
 
 import { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
+import { isBlank } from '../utils/isBlank.js';
 import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
 import { ProjectSchema, FieldSchema } from '../types/schema.js';
 import { ValidationResult, ValidationError, ValidationWarning } from './types.js';
@@ -179,7 +180,7 @@ export class ValidationService {
 
     // Check all required fields in schema
     for (const fieldSchema of Object.values(schema.fields)) {
-      if (fieldSchema.required) {
+      if (fieldSchema.required && !fieldSchema.hasDefaultValue && fieldSchema.schema.custom !== 'virtual') {
         const value = this.findFieldValue(row, fieldSchema);
 
         if (this.isEmptyValue(value)) {
@@ -452,7 +453,7 @@ export class ValidationService {
    * Check if value is empty (null, undefined, empty string)
    */
   private isEmptyValue(value: unknown): boolean {
-    return value === null || value === undefined || value === '';
+    return isBlank(value);
   }
 
   /**

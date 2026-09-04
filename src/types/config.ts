@@ -253,8 +253,8 @@ export interface JMLConfig {
   /**
    * Enable automatic quote preprocessing for YAML/JSON/CSV input.
    *
-   * When enabled (default), the library automatically detects and escapes
-   * unescaped quote characters in field values before parsing. This handles
+   * When explicitly enabled, the library attempts legacy quote repair only
+   * after normal parsing fails. This handles
    * common issues when users copy/paste text from Slack, emails, or other
    * sources that contain unescaped quotes.
    *
@@ -262,9 +262,9 @@ export interface JMLConfig {
    * - JSON: Escapes internal `"` as `\"`
    * - CSV: Escapes internal `"` as `""` (RFC 4180)
    *
-   * Set to `false` to disable preprocessing and require properly escaped input.
+   * Valid input and literal <<< blocks are never rewritten. Use blocks for pasted text.
    *
-   * @default true
+   * @default false
    * @example
    * ```typescript
    * // Disable preprocessing (require valid input)

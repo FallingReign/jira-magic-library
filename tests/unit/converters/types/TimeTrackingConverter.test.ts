@@ -18,105 +18,105 @@ describe('TimeTrackingConverter', () => {
     describe('Single unit formats - pass through', () => {
       it('should pass through "2h" as-is', () => {
         const result = convertTimeTrackingType('2h', mockFieldSchema, mockContext);
-        expect(result).toBe('2h');
+        expect(result).toEqual({ originalEstimate: '2h' });
       });
 
       it('should pass through "30m" as-is', () => {
         const result = convertTimeTrackingType('30m', mockFieldSchema, mockContext);
-        expect(result).toBe('30m');
+        expect(result).toEqual({ originalEstimate: '30m' });
       });
 
       it('should pass through "1d" as-is', () => {
         const result = convertTimeTrackingType('1d', mockFieldSchema, mockContext);
-        expect(result).toBe('1d');
+        expect(result).toEqual({ originalEstimate: '1d' });
       });
 
       it('should pass through "1w" as-is', () => {
         const result = convertTimeTrackingType('1w', mockFieldSchema, mockContext);
-        expect(result).toBe('1w');
+        expect(result).toEqual({ originalEstimate: '1w' });
       });
     });
 
     describe('Compound formats - pass through', () => {
       it('should pass through "1h 30m" as-is', () => {
         const result = convertTimeTrackingType('1h 30m', mockFieldSchema, mockContext);
-        expect(result).toBe('1h 30m');
+        expect(result).toEqual({ originalEstimate: '1h 30m' });
       });
 
       it('should pass through "2d 3h" as-is', () => {
         const result = convertTimeTrackingType('2d 3h', mockFieldSchema, mockContext);
-        expect(result).toBe('2d 3h');
+        expect(result).toEqual({ originalEstimate: '2d 3h' });
       });
 
       it('should pass through "1w 2d 4h" as-is', () => {
         const result = convertTimeTrackingType('1w 2d 4h', mockFieldSchema, mockContext);
-        expect(result).toBe('1w 2d 4h');
+        expect(result).toEqual({ originalEstimate: '1w 2d 4h' });
       });
 
       it('should pass through compound format with all units', () => {
         const result = convertTimeTrackingType('1w 1d 1h 1m', mockFieldSchema, mockContext);
-        expect(result).toBe('1w 1d 1h 1m');
+        expect(result).toEqual({ originalEstimate: '1w 1d 1h 1m' });
       });
     });
 
     describe('Multiple values of same unit - pass through', () => {
       it('should pass through multiple hours as-is', () => {
         const result = convertTimeTrackingType('2h 3h', mockFieldSchema, mockContext);
-        expect(result).toBe('2h 3h'); // JIRA will sum these
+        expect(result).toEqual({ originalEstimate: '2h 3h' }); // JIRA will sum these
       });
 
       it('should pass through multiple days as-is', () => {
         const result = convertTimeTrackingType('1d 2d', mockFieldSchema, mockContext);
-        expect(result).toBe('1d 2d');
+        expect(result).toEqual({ originalEstimate: '1d 2d' });
       });
     });
 
     describe('Friendly formats - normalize to JIRA format', () => {
       it('should normalize "2 hours" to "2h"', () => {
         const result = convertTimeTrackingType('2 hours', mockFieldSchema, mockContext);
-        expect(result).toBe('2h');
+        expect(result).toEqual({ originalEstimate: '2h' });
       });
 
       it('should normalize "30 minutes" to "30m"', () => {
         const result = convertTimeTrackingType('30 minutes', mockFieldSchema, mockContext);
-        expect(result).toBe('30m');
+        expect(result).toEqual({ originalEstimate: '30m' });
       });
 
       it('should normalize "1 day" to "1d"', () => {
         const result = convertTimeTrackingType('1 day', mockFieldSchema, mockContext);
-        expect(result).toBe('1d');
+        expect(result).toEqual({ originalEstimate: '1d' });
       });
 
       it('should normalize "1 week" to "1w"', () => {
         const result = convertTimeTrackingType('1 week', mockFieldSchema, mockContext);
-        expect(result).toBe('1w');
+        expect(result).toEqual({ originalEstimate: '1w' });
       });
 
       it('should normalize "5 mins" to "5m"', () => {
         const result = convertTimeTrackingType('5 mins', mockFieldSchema, mockContext);
-        expect(result).toBe('5m');
+        expect(result).toEqual({ originalEstimate: '5m' });
       });
 
       it('should normalize "10 min" to "10m"', () => {
         const result = convertTimeTrackingType('10 min', mockFieldSchema, mockContext);
-        expect(result).toBe('10m');
+        expect(result).toEqual({ originalEstimate: '10m' });
       });
     });
 
     describe('Edge cases', () => {
       it('should handle leading/trailing spaces', () => {
         const result = convertTimeTrackingType('  2h  ', mockFieldSchema, mockContext);
-        expect(result).toBe('2h');
+        expect(result).toEqual({ originalEstimate: '2h' });
       });
 
       it('should handle large values', () => {
         const result = convertTimeTrackingType('100w', mockFieldSchema, mockContext);
-        expect(result).toBe('100w');
+        expect(result).toEqual({ originalEstimate: '100w' });
       });
 
       it('should handle zero values', () => {
         const result = convertTimeTrackingType('0h', mockFieldSchema, mockContext);
-        expect(result).toBe('0h');
+        expect(result).toEqual({ originalEstimate: '0h' });
       });
     });
   });
@@ -124,42 +124,42 @@ describe('TimeTrackingConverter', () => {
   describe('AC2: Support Numeric Values (Convert Seconds to Duration String)', () => {
     it('should convert 7200 seconds to "2h"', () => {
       const result = convertTimeTrackingType(7200, mockFieldSchema, mockContext);
-      expect(result).toBe('2h');
+      expect(result).toEqual({ originalEstimate: '2h' });
     });
 
     it('should convert 1800 seconds to "30m"', () => {
       const result = convertTimeTrackingType(1800, mockFieldSchema, mockContext);
-      expect(result).toBe('30m');
+      expect(result).toEqual({ originalEstimate: '30m' });
     });
 
     it('should convert 28800 seconds to "1d" (8-hour day)', () => {
       const result = convertTimeTrackingType(28800, mockFieldSchema, mockContext);
-      expect(result).toBe('1d');
+      expect(result).toEqual({ originalEstimate: '1d' });
     });
 
     it('should convert 144000 seconds to "1w" (5-day week)', () => {
       const result = convertTimeTrackingType(144000, mockFieldSchema, mockContext);
-      expect(result).toBe('1w');
+      expect(result).toEqual({ originalEstimate: '1w' });
     });
 
     it('should convert 5400 seconds to "1h 30m"', () => {
       const result = convertTimeTrackingType(5400, mockFieldSchema, mockContext);
-      expect(result).toBe('1h 30m');
+      expect(result).toEqual({ originalEstimate: '1h 30m' });
     });
 
     it('should convert 68400 seconds to "2d 3h"', () => {
       const result = convertTimeTrackingType(68400, mockFieldSchema, mockContext);
-      expect(result).toBe('2d 3h'); // 2*28800 + 3*3600 = 57600 + 10800
+      expect(result).toEqual({ originalEstimate: '2d 3h' }); // 2*28800 + 3*3600 = 57600 + 10800
     });
 
     it('should convert 216000 seconds to "1w 2d 4h"', () => {
       const result = convertTimeTrackingType(216000, mockFieldSchema, mockContext);
-      expect(result).toBe('1w 2d 4h'); // 144000 + 57600 + 14400
+      expect(result).toEqual({ originalEstimate: '1w 2d 4h' }); // 144000 + 57600 + 14400
     });
 
     it('should convert 0 seconds to "0m"', () => {
       const result = convertTimeTrackingType(0, mockFieldSchema, mockContext);
-      expect(result).toBe('0m');
+      expect(result).toEqual({ originalEstimate: '0m' });
     });
 
     it('should reject negative seconds', () => {

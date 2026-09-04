@@ -17,7 +17,7 @@ import { convertSprintType } from '../../../../src/converters/types/SprintConver
 import type { FieldSchema } from '../../../../src/types/schema.js';
 import type { ConversionContext } from '../../../../src/types/converter.js';
 import { ValidationError } from '../../../../src/errors/ValidationError.js';
-import { createMockContext, createMockClient, createMockCache, mockLookupResult } from '../../../helpers/test-utils.js';
+import { createMockContext, createMockClient, createMockCache } from '../../../helpers/test-utils.js';
 import type { JiraClient } from '../../../../src/client/JiraClient.js';
 
 const sprintFieldSchema: FieldSchema = {

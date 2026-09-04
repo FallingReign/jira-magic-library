@@ -4,7 +4,7 @@ import { FieldResolver } from '../converters/FieldResolver.js';
 import { ConverterRegistry } from '../converters/ConverterRegistry.js';
 import { Issue } from '../types/index.js';
 import type { AttachmentInput, AttachmentUploadResult } from '../types/attachment.js';
-import { BulkResult, BulkManifest } from '../types/bulk.js';
+import { BulkResult, BulkManifest, BulkValidationResult } from '../types/bulk.js';
 import { LookupCache, GenericCache } from '../types/converter.js';
 import type { JMLConfig, DeploymentType, AmbiguityPolicyConfig, FuzzyMatchConfig } from '../types/config.js';
 import { parseInput, ParseInputOptions } from '../parsers/InputParser.js';
@@ -25,6 +25,7 @@ import { AttachmentUploader } from './AttachmentUploader.js';
 import { AttachmentUploadError } from '../errors/AttachmentUploadError.js';
 import { ValidationError } from '../errors/ValidationError.js';
 import { normalizeFieldName } from '../utils/normalizeFieldName.js';
+import { prepareIssueFields } from './prepareIssueFields.js';
 
 /**
  * Input supported by {@link JML.issues | `jml.issues.create`}.
@@ -101,7 +102,7 @@ export interface IssuesAPI {
   create(
     input: IssuesCreateInput,
     options?: IssuesCreateOptions
-  ): Promise<Issue | BulkResult>;
+  ): Promise<Issue | BulkResult | BulkValidationResult>;
 
   /**
    * Search for issues using human-readable field names and values.
@@ -136,7 +137,7 @@ export interface IssuesAPI {
    * @param input - Single object or array of objects to preview
    * @returns PreviewResult for single, PreviewResult[] for array
    */
-  preview(input: Record<string, unknown> | Array<Record<string, unknown>>): Promise<PreviewResult | PreviewResult[]>;
+  preview(input: IssuesCreateInput): Promise<PreviewResult | PreviewResult[]>;
 
   /**
    * Attach files to an existing issue.
@@ -272,10 +273,19 @@ export class IssueOperations implements IssuesAPI {
   async create(
     input: IssuesCreateInput,
     options?: IssuesCreateOptions
-  ): Promise<Issue | BulkResult> {
+  ): Promise<Issue | BulkResult | BulkValidationResult> {
+    // Validation must branch before retries, bulk storage, markers, and all submission paths.
+    if (options?.validate) {
+      const normalized = this.normalizeInput(input);
+      if (!options.retry && this.detectInputType(normalized) === 'single') {
+        return this.createSingle(normalized as Record<string, unknown>, options);
+      }
+      return this.validateBulkInput(normalized, options);
+    }
+
     // E4-S05: Handle retry with manifest ID
     if (options?.retry) {
-      return this.retryWithManifest(input, options.retry, options);
+      return this.retryWithManifest(this.normalizeInput(input), options.retry, options);
     }
 
     // Normalize input: unwrap { fields: {...} } and { issues: [...] } formats
@@ -289,6 +299,53 @@ export class IssueOperations implements IssuesAPI {
 
     // Dispatch to bulk creation (E4-S01, E4-S02, E4-S03)
     return this.createBulk(normalizedInput, options);
+  }
+
+  private async validateBulkInput(
+    input: IssuesCreateInput,
+    options: IssuesCreateOptions
+  ): Promise<BulkValidationResult> {
+    const records = Array.isArray(input) ? input : (await this.parseIssueInput(input as ParseInputOptions)).data;
+    const normalized = records.map(record => this.normalizeInput(record) as Record<string, unknown>);
+    await preprocessHierarchyRecords(normalized);
+    this.rejectBulkAttachments(normalized);
+    let indices = normalized.map((_record, index) => index);
+    let existingParents: Record<string, string> = {};
+    if (options.retry) {
+      const manifest = await this.manifestStorage?.getManifest(options.retry);
+      if (!manifest) throw new ValidationError(`Manifest '${options.retry}' not found or expired`);
+      indices = manifest.failed;
+      existingParents = manifest.uidMap ?? {};
+    }
+
+    const uidIndices = new Map(normalized.flatMap((record, index) =>
+      typeof record.uid === 'string' ? [[record.uid, index] as const] : []));
+    const results: BulkValidationResult['results'] = [];
+    for (const index of indices) {
+      const dependencies: BulkValidationResult['results'][number]['dependencies'] = [];
+      try {
+        if (!normalized[index]) throw new ValidationError(`Retry row ${index} is missing from the input`);
+        const record = { ...normalized[index] };
+        for (const [field, value] of Object.entries(record)) {
+          if (normalizeFieldName(field) !== 'parent' || typeof value !== 'string') continue;
+          if (existingParents[value]) {
+            record[field] = existingParents[value];
+          } else if (uidIndices.has(value)) {
+            dependencies.push({ field, uid: value, index: uidIndices.get(value)! });
+            delete record[field];
+          }
+        }
+        const prepared = await this.createSingle(record, { ...options, validate: true }, dependencies.map(dependency => dependency.field));
+        results.push({ index, valid: true, payload: { fields: prepared.fields! }, dependencies });
+      } catch (error) {
+        results.push({ index, valid: false, error: error instanceof Error ? error.message : String(error), dependencies });
+      }
+    }
+    return { validation: true, valid: results.every(result => result.valid), total: results.length, results };
+  }
+
+  private parseIssueInput(input: ParseInputOptions): ReturnType<typeof parseInput> {
+    return parseInput({ preprocessQuotes: this.config?.preprocessQuotes, ...input });
   }
 
   /**
@@ -392,12 +449,13 @@ export class IssueOperations implements IssuesAPI {
       inputArray = input;
     } else if (typeof input === 'object' && ('from' in input || 'data' in input)) {
       // Parse from file/string
-      const parseResult = await parseInput(input as ParseInputOptions);
+      const parseResult = await this.parseIssueInput(input as ParseInputOptions);
       inputArray = parseResult.data;
     } else {
       throw new Error('Retry requires array or parse options input format');
     }
 
+    inputArray = inputArray.map(record => this.normalizeInput(record) as Record<string, unknown>);
     this.rejectBulkAttachments(inputArray);
 
     // Filter to only include rows that previously failed
@@ -623,7 +681,8 @@ export class IssueOperations implements IssuesAPI {
    */
   private async createSingle(
     input: Record<string, unknown>,
-    options?: IssuesCreateOptions
+    options?: IssuesCreateOptions,
+    deferredRequiredFields?: string[]
   ): Promise<Issue> {
     // Strip library-internal fields that shouldn't go to JIRA
     // uid is used for hierarchy tracking in bulk operations
@@ -644,19 +703,10 @@ export class IssueOperations implements IssuesAPI {
     // This handles all formats: string, object with key/id, object with name
     // Returns projectKey (for schema lookup), issueType (for schema lookup), 
     // and resolved fields (with project/issuetype already in JIRA format)
-    const { projectKey, issueType, fields: resolvedFields } = 
-      await this.resolver.resolveFieldsWithExtraction(cleanInput);
-
-    // Get schema for conversion context
-    const projectSchema = await this.schema.getFieldsForIssueType(projectKey, issueType);
-
-    // Convert values to JIRA format (await for async converters like priority, user, etc.)
-    const convertedFields = await this.converter.convertFields(
-      projectSchema,
-      resolvedFields,
+    const convertedFields = await prepareIssueFields(
+      cleanInput, this.schema, this.resolver, this.converter,
       { 
-        projectKey, 
-        issueType, 
+        deferredRequiredFields,
         baseUrl: this.baseUrl, 
         cache: this.cache,
         cacheClient: this.cache as unknown as GenericCache, // RedisCache implements both LookupCache and GenericCache
@@ -754,10 +804,11 @@ export class IssueOperations implements IssuesAPI {
       records = input;
     } else {
       // Parse from file or string data (E4-S01)
-      const parseResult = await parseInput(input as ParseInputOptions);
+      const parseResult = await this.parseIssueInput(input as ParseInputOptions);
       records = parseResult.data;
     }
 
+    records = records.map(record => this.normalizeInput(record) as Record<string, unknown>);
     this.rejectBulkAttachments(records);
 
     // Ensure bulk dependencies are available
@@ -1400,7 +1451,7 @@ export class IssueOperations implements IssuesAPI {
       // Inject markers into payloads for this level (Phase 2.2)
       if (markerInjector) {
         validPayloads.forEach(vp => {
-          vp.payload = markerInjector!.injectMarker(vp.payload);
+          vp.payload = markerInjector.injectMarker(vp.payload);
         });
       }
 
@@ -1589,9 +1640,7 @@ export class IssueOperations implements IssuesAPI {
    * @param input - Single object or array of objects to preview
    * @returns PreviewResult for single input, PreviewResult[] for array
    */
-  async preview(
-    input: Record<string, unknown> | Array<Record<string, unknown>>
-  ): Promise<PreviewResult | PreviewResult[]> {
+  async preview(input: IssuesCreateInput): Promise<PreviewResult | PreviewResult[]> {
     const cloudAdapter = await this.getCloudAdapter();
     const deploymentFn = async (): Promise<DeploymentType> => this.getDeployment();
 
@@ -1604,13 +1653,16 @@ export class IssueOperations implements IssuesAPI {
       this.endpointResolverFn ?? (() => Promise.reject(new Error('No endpoint resolver'))),
       deploymentFn,
       this.cache,
-      this.config
+      this.config,
+      this.baseUrl
     );
 
-    if (Array.isArray(input)) {
-      return previewInstance.previewBulk(input);
+    const normalized = this.normalizeInput(input);
+    if (this.detectInputType(normalized) === 'bulk') {
+      const records = Array.isArray(normalized) ? normalized : (await this.parseIssueInput(normalized as ParseInputOptions)).data;
+      return previewInstance.previewBulk(records.map(record => this.normalizeInput(record) as Record<string, unknown>));
     }
-    return previewInstance.preview(input);
+    return previewInstance.preview(normalized as Record<string, unknown>);
   }
 
   async addAttachments(

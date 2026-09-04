@@ -5,7 +5,7 @@
  * Ensures backward compatibility with old `auth: { token: 'x' }` format.
  */
 
-import type { JMLConfig, AuthConfig, LegacyAuthConfig } from '../types/config.js';
+import type { JMLConfig, LegacyAuthConfig } from '../types/config.js';
 
 /**
  * Whether the deprecation warning has been logged this process.
@@ -43,7 +43,7 @@ function isLegacyAuthFormat(auth: unknown): auth is LegacyAuthConfig {
  * @returns Properly typed JMLConfig with migrated auth
  */
 export function migrateConfig(config: JMLConfig): JMLConfig {
-  const auth = config.auth as AuthConfig | LegacyAuthConfig;
+  const auth = config.auth;
 
   if (isLegacyAuthFormat(auth)) {
     if (!hasWarnedLegacyAuth) {

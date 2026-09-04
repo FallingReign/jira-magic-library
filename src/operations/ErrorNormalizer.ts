@@ -159,14 +159,14 @@ export class ErrorNormalizer {
         if (issueErrors && Object.keys(issueErrors).length > 0) {
           // This issue failed (Cloud per-issue error)
           for (const [field, message] of Object.entries(issueErrors)) {
-            const parsed = this.parseFieldError(field, message as string);
+            const parsed = this.parseFieldError(field, message);
             errors.push({ rowIndex: index, ...parsed });
           }
-        } else if (issueObj.key) {
+        } else if (typeof issueObj.key === 'string' && issueObj.key) {
           // Success
           successes.push({
             rowIndex: index,
-            issueKey: issueObj.key as string,
+            issueKey: issueObj.key,
             issueUrl: `${this.baseUrl}/browse/${issueObj.key}`,
           });
         }
@@ -223,7 +223,7 @@ export class ErrorNormalizer {
     }
 
     const err = error as Record<string, unknown>;
-    const message = (err.message as string) || String(error);
+    const message = typeof err.message === 'string' ? err.message : JSON.stringify(error);
 
     // Check for ambiguity errors
     if (message.includes('ambiguous') || message.includes('Ambiguous') || (err.name === 'AmbiguityError')) {

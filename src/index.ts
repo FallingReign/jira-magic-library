@@ -96,7 +96,7 @@ export { preprocessCustomBlocks } from './parsers/custom-block-preprocessor.js';
 
 // Bulk Operations (E4-S02)
 export { ManifestStorage } from './operations/ManifestStorage.js';
-export type { BulkManifest, BulkResult, ManifestUpdateData } from './types/bulk.js';
+export type { BulkManifest, BulkResult, BulkValidationResult, ManifestUpdateData } from './types/bulk.js';
 
 // Bulk Operations (E4-S03)
 export { JiraBulkApiWrapper } from './operations/JiraBulkApiWrapper.js';

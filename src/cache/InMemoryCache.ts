@@ -44,11 +44,11 @@ export class InMemoryCache implements CacheAdapter {
     this.hardTtlMultiplier = hardTtlMultiplier;
   }
 
-  async get(key: string): Promise<CacheAdapterResult> {
+  get(key: string): Promise<CacheAdapterResult> {
     const entry = this.store.get(key);
 
     if (!entry) {
-      return { value: null, isStale: false };
+      return Promise.resolve({ value: null, isStale: false });
     }
 
     const now = Date.now();
@@ -56,15 +56,15 @@ export class InMemoryCache implements CacheAdapter {
     // Hard-expired: evict and return miss
     if (now > entry.expiresAt) {
       this.store.delete(key);
-      return { value: null, isStale: false };
+      return Promise.resolve({ value: null, isStale: false });
     }
 
     // Stale but not expired: return with isStale flag
     const isStale = now > entry.staleAt;
-    return { value: entry.value, isStale };
+    return Promise.resolve({ value: entry.value, isStale });
   }
 
-  async set(key: string, value: string, ttlSeconds: number): Promise<void> {
+  set(key: string, value: string, ttlSeconds: number): Promise<void> {
     const now = Date.now();
     const ttlMs = ttlSeconds * 1000;
 
@@ -73,15 +73,18 @@ export class InMemoryCache implements CacheAdapter {
       staleAt: now + ttlMs,
       expiresAt: now + ttlMs * this.hardTtlMultiplier,
     });
+    return Promise.resolve();
   }
 
-  async delete(key: string): Promise<void> {
+  delete(key: string): Promise<void> {
     this.store.delete(key);
+    return Promise.resolve();
   }
 
-  async disconnect(): Promise<void> {
+  disconnect(): Promise<void> {
     this.store.clear();
     this.refreshInFlight.clear();
+    return Promise.resolve();
   }
 
   async refreshOnce(key: string, refreshFn: () => Promise<void>): Promise<void> {

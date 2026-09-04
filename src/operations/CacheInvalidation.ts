@@ -124,7 +124,7 @@ export class CacheInvalidation {
   /**
    * Get cache stats.
    */
-  async stats(): Promise<{ keys: number; hitRate?: number }> {
-    return { keys: this.knownKeys.size };
+  stats(): Promise<{ keys: number; hitRate?: number }> {
+    return Promise.resolve({ keys: this.knownKeys.size });
   }
 }

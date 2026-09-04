@@ -118,9 +118,9 @@ export function resolveUniqueName(
     // Check 'id' field if it exists
     const idMatch = v.id && v.id.toLowerCase() === normalizedInput;
     // Check 'key' field if it exists (for project key matching)
-    const keyMatch = (v as any).key && (v as any).key.toLowerCase() === normalizedInput;
+    const keyMatch = 'key' in v && typeof v.key === 'string' && v.key.toLowerCase() === normalizedInput;
     // Check 'jiraId' field if it exists (for JIRA's internal ID)
-    const jiraIdMatch = (v as any).jiraId && (v as any).jiraId.toLowerCase() === normalizedInput;
+    const jiraIdMatch = 'jiraId' in v && typeof v.jiraId === 'string' && v.jiraId.toLowerCase() === normalizedInput;
     return nameMatch || idMatch || keyMatch || jiraIdMatch;
   });
 
@@ -145,8 +145,8 @@ export function resolveUniqueName(
   // Search name, id, and key fields (supports JIRA project format)
   const searchKeys = ['name'];
   if (validValues.length > 0) {
-    const firstValue = validValues[0] as any;
-    if (firstValue.key !== undefined) searchKeys.push('key');
+    const firstValue = validValues[0]!;
+    if ('key' in firstValue && firstValue.key !== undefined) searchKeys.push('key');
     if (firstValue.id !== undefined) searchKeys.push('id');
   }
   

@@ -39,9 +39,9 @@ describe('ConverterRegistry', () => {
       expect(result).toBe('test value');
     });
 
-    it('should trim whitespace from string', async () => {
+    it('should preserve whitespace in string', async () => {
       const result = await registry.convert('  test value  ', stringField, context);
-      expect(result).toBe('test value');
+      expect(result).toBe('  test value  ');
     });
 
     it('should convert number to string', async () => {
@@ -84,9 +84,9 @@ describe('ConverterRegistry', () => {
       expect(result).toBe('line 1\nline 2\nline 3');
     });
 
-    it('should trim leading and trailing whitespace only', async () => {
+    it('should preserve leading and trailing whitespace', async () => {
       const result = await registry.convert('  line 1\n  line 2  \n  line 3  ', textField, context);
-      expect(result).toBe('line 1\n  line 2  \n  line 3');
+      expect(result).toBe('  line 1\n  line 2  \n  line 3  ');
     });
 
     it('should preserve internal spaces', async () => {
@@ -143,8 +143,8 @@ describe('ConverterRegistry', () => {
       const result = await registry.convertFields(schema, resolvedFields, context);
 
       expect(result).toEqual({
-        summary: 'Test Issue',
-        description: 'Line 1\nLine 2',
+        summary: '  Test Issue  ',
+        description: '  Line 1\nLine 2  ',
       });
     });
 
@@ -223,7 +223,7 @@ describe('ConverterRegistry', () => {
       expect(result).toEqual({
         project: { key: 'TEST' },
         issuetype: { name: 'Bug' },
-        summary: 'Test Issue',
+        summary: '  Test Issue  ',
       });
     });
 

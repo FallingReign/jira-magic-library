@@ -5,7 +5,6 @@
 
 import { JiraClientImpl } from '../../../src/client/JiraClient.js';
 import type { JMLConfig } from '../../../src/types/config.js';
-import { NetworkError } from '../../../src/errors/NetworkError.js';
 
 // Mock fetch globally
 const originalFetch = global.fetch;

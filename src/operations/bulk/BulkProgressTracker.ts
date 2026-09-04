@@ -149,21 +149,32 @@ export class BulkProgressTracker {
 
     // Initial check
     const initialProgress = await this.trackProgress();
-    onProgress(initialProgress);
+    // Submission can finish and call stopTracking while this search is still pending.
+    if (!this.isTracking) return;
+    try {
+      onProgress(initialProgress);
+    } catch (error) {
+      this.stopTracking();
+      throw error;
+    }
+    if (!this.isTracking || initialProgress.completed >= this.totalIssues || initialProgress.isStuck) {
+      this.stopTracking();
+      return;
+    }
 
     // Start polling loop
-    this.intervalId = setInterval(async () => {
-      if (!this.isTracking) {
-        return;
-      }
-
-      const progress = await this.trackProgress();
-      onProgress(progress);
-
-      // Stop if complete or stuck
-      if (progress.completed >= this.totalIssues || progress.isStuck) {
+    let polling = false;
+    this.intervalId = setInterval(() => {
+      if (!this.isTracking || polling) return;
+      polling = true;
+      void this.trackProgress().then(progress => {
+        if (!this.isTracking) return;
+        onProgress(progress);
+        if (progress.completed >= this.totalIssues || progress.isStuck) this.stopTracking();
+      }).catch(error => {
         this.stopTracking();
-      }
+        console.warn('Progress callback failed:', error);
+      }).finally(() => { polling = false; });
     }, this.pollingInterval);
   }
 

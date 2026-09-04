@@ -36,13 +36,13 @@ export interface AuthStrategy {
 export class PatAuthStrategy implements AuthStrategy {
   constructor(private readonly token: string) {}
 
-  async getHeaders(): Promise<AuthHeaders> {
-    return { Authorization: `Bearer ${this.token}` };
+  getHeaders(): Promise<AuthHeaders> {
+    return Promise.resolve({ Authorization: `Bearer ${this.token}` });
   }
 
-  async handleUnauthorized(): Promise<boolean> {
+  handleUnauthorized(): Promise<boolean> {
     // PAT cannot be refreshed
-    return false;
+    return Promise.resolve(false);
   }
 }
 
@@ -57,13 +57,13 @@ export class BasicAuthStrategy implements AuthStrategy {
     this.encoded = Buffer.from(`${email}:${apiToken}`).toString('base64');
   }
 
-  async getHeaders(): Promise<AuthHeaders> {
-    return { Authorization: `Basic ${this.encoded}` };
+  getHeaders(): Promise<AuthHeaders> {
+    return Promise.resolve({ Authorization: `Basic ${this.encoded}` });
   }
 
-  async handleUnauthorized(): Promise<boolean> {
+  handleUnauthorized(): Promise<boolean> {
     // Basic auth cannot be refreshed
-    return false;
+    return Promise.resolve(false);
   }
 }
 
@@ -182,11 +182,11 @@ export class OAuth2AuthStrategy implements AuthStrategy {
     this.tokenManager = new OAuthTokenManager(config);
   }
 
-  async getHeaders(): Promise<AuthHeaders> {
-    return { Authorization: `Bearer ${this.tokenManager.getAccessToken()}` };
+  getHeaders(): Promise<AuthHeaders> {
+    return Promise.resolve({ Authorization: `Bearer ${this.tokenManager.getAccessToken()}` });
   }
 
-  async handleUnauthorized(): Promise<boolean> {
+  handleUnauthorized(): Promise<boolean> {
     return this.tokenManager.refresh();
   }
 }

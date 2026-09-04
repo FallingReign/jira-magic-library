@@ -11,6 +11,7 @@ import type { SchemaDiscovery } from '../schema/SchemaDiscovery.js';
 import type { FieldResolver } from '../converters/FieldResolver.js';
 import type { ConverterRegistry } from '../converters/ConverterRegistry.js';
 import type { Issue } from '../types/index.js';
+import { ValidationError } from '../errors/ValidationError.js';
 
 /**
  * Search options for issue queries
@@ -129,6 +130,7 @@ export class IssueSearch {
 
         // For MVP, use values directly (no conversion)
         // Future enhancement: use ConverterRegistry for value conversion
+        if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') throw new ValidationError(`Search field "${fieldName}" must contain text, a number, or an array`);
         const jqlValue = String(value);
 
         // Build JQL clause

@@ -186,7 +186,7 @@ describe('IssueOperations', () => {
       expect(mockConverter.convertFields).toHaveBeenCalledWith(
         mockProjectSchema,
         mockResolvedFields,
-        { projectKey: 'ENG', issueType: 'Bug', cache: undefined, client: expect.any(Object) }
+        expect.objectContaining({ projectKey: 'ENG', issueType: 'Bug', operation: 'create', cache: undefined, client: expect.any(Object) })
       );
     });
 

@@ -14,6 +14,9 @@ export interface FieldSchema {
   /** Whether this field is required when creating issues */
   required: boolean;
 
+  /** Jira supplies a value when this field is omitted during creation. */
+  hasDefaultValue?: boolean;
+
   /** Allowed values for select fields, priorities, etc. */
   allowedValues?: Array<{
     id: string;

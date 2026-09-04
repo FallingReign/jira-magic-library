@@ -3,7 +3,6 @@
  */
 
 import { PayloadPreview } from '../../../src/operations/PayloadPreview.js';
-import type { PreviewResult } from '../../../src/operations/PayloadPreview.js';
 import { CloudCreateAdapter } from '../../../src/operations/CloudCreateAdapter.js';
 import { EndpointResolver } from '../../../src/client/EndpointResolver.js';
 
@@ -205,8 +204,9 @@ describe('PayloadPreview', () => {
       });
 
       expect(result.payload.fields).toEqual({});
+      expect(result.valid).toBe(false);
       expect(result.warnings.length).toBeGreaterThan(0);
-      expect(result.warnings[0].field).toBe('_resolution');
+      expect(result.warnings[0].field).toBe('_preparation');
       expect(result.warnings[0].message).toContain("Field 'Project' is required");
     });
 
@@ -220,9 +220,10 @@ describe('PayloadPreview', () => {
         Summary: 'Test',
       });
 
-      // Should still return a result (using resolved fields before conversion)
-      expect(result.payload.fields).toBeDefined();
-      expect(result.warnings.some((w) => w.field === '_conversion')).toBe(true);
+      // Invalid conversion must never expose an unconverted request as a usable preview.
+      expect(result.valid).toBe(false);
+      expect(result.payload.fields).toEqual({});
+      expect(result.warnings.some((w) => w.field === '_preparation')).toBe(true);
     });
 
     it('strips uid field from input', async () => {
@@ -345,4 +346,20 @@ describe('PayloadPreview', () => {
       expect(results).toEqual([]);
     });
   });
+  it.each([null, 0, false, [], { value: 'Red' }])('describes resolved value %p in preview', async value => {
+    mockResolver.resolveFieldsWithExtraction.mockResolvedValue({ projectKey: 'TEST', issueType: 'Task', fields: { summary: value } });
+    const result = await createPreview().preview({ Summary: 'Original' });
+    expect(result.valid).toBe(true);
+    expect(result.resolutions.Summary.resolvedValue).toEqual(value);
+    expect(typeof result.resolutions.Summary.resolvedTo).toBe('string');
+  });
+  it('warns when resolution metadata only partially matches a field name', async () => {
+    const result = await createPreview().preview({ 'Summary Detail': 'Original' });
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.objectContaining({ field: 'Summary Detail', message: expect.stringContaining('Low confidence') })]));
+  });
+  it('reports non-Error preparation failures', async () => {
+    mockResolver.resolveFieldsWithExtraction.mockRejectedValue('offline');
+    expect(await createPreview().preview({ Summary: 'Original' })).toMatchObject({ valid: false, warnings: [{ field: '_preparation', message: expect.stringContaining('offline') }] });
+  });
+
 });

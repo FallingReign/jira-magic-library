@@ -99,22 +99,22 @@ Line 3 with {braces}
         expect(output).toBe('description: "Line 1: with colon\\nLine 2 with \\"quotes\\"\\nLine 3 with {braces}"');
       });
 
-      it('should trim empty first line after <<<', () => {
+      it('should preserve empty first line after <<<', () => {
         const input = `description: <<<
 
 Content starts here
 >>>`;
         const output = preprocessCustomBlocks(input, 'yaml');
-        expect(output).toBe('description: "Content starts here"');
+        expect(output).toBe("description: \"\\nContent starts here\"");
       });
 
-      it('should trim empty last line before >>>', () => {
+      it('should preserve empty last line before >>>', () => {
         const input = `description: <<<
 Content ends here
 
 >>>`;
         const output = preprocessCustomBlocks(input, 'yaml');
-        expect(output).toBe('description: "Content ends here"');
+        expect(output).toBe("description: \"Content ends here\\n\"");
       });
 
       it('should preserve empty lines in middle of content', () => {
@@ -361,11 +361,10 @@ Content
     // AC8: EDGE CASES AND ERROR HANDLING
     // =========================================================================
     describe('edge cases and error handling', () => {
-      it('should return unchanged if unclosed block', () => {
+      it('should report an unclosed block', () => {
         const input = `description: <<<
 Unclosed block`;
-        const output = preprocessCustomBlocks(input, 'yaml');
-        expect(output).toBe(input);
+        expect(() => preprocessCustomBlocks(input, 'yaml')).toThrow(/Unclosed <<< block/);
       });
 
       it('should handle empty block', () => {
@@ -380,14 +379,13 @@ Unclosed block`;
    
 >>>`;
         const output = preprocessCustomBlocks(input, 'yaml');
-        expect(output).toBe('description: ""');
+        expect(output).toBe("description: \"   \"");
       });
 
-      it('should handle block at EOF without final >>>', () => {
+      it('should reject block at EOF without final >>>', () => {
         const input = `description: <<<
 Content here`;
-        const output = preprocessCustomBlocks(input, 'yaml');
-        expect(output).toBe(input); // Return unchanged
+        expect(() => preprocessCustomBlocks(input, 'yaml')).toThrow(/Unclosed <<< block/);
       });
 
       it('should preserve CRLF line endings', () => {
@@ -499,7 +497,7 @@ With "quotes" and special: chars
         // Rare but historically used on old Mac systems
         const input = 'description: <<<\rLine 1\rLine 2\r>>>';
         const output = preprocessCustomBlocks(input, 'yaml');
-        expect(output).toBe('description: "Line 1\\nLine 2"');
+        expect(output).toBe("description: \"Line 1\\rLine 2\"");
       });
     });
 
@@ -510,8 +508,7 @@ With "quotes" and special: chars
       it('should handle block with only empty lines', () => {
         const input = 'description: <<<\n\n\n>>>';
         const output = preprocessCustomBlocks(input, 'yaml');
-        // All lines are empty, trimmed to empty string
-        expect(output).toBe('description: ""');
+        expect(output).toBe("description: \"\\n\"");
       });
 
       it('should handle block with only whitespace lines', () => {
@@ -567,22 +564,19 @@ With "quotes" and special: chars
       it('should preserve content with only first line empty', () => {
         const input = 'description: <<<\n\nActual content\n>>>';
         const output = preprocessCustomBlocks(input, 'yaml');
-        // First empty line trimmed, content preserved
-        expect(output).toBe('description: "Actual content"');
+        expect(output).toBe("description: \"\\nActual content\"");
       });
 
       it('should preserve content with only last line empty', () => {
         const input = 'description: <<<\nActual content\n\n>>>';
         const output = preprocessCustomBlocks(input, 'yaml');
-        // Last empty line trimmed, content preserved
-        expect(output).toBe('description: "Actual content"');
+        expect(output).toBe("description: \"Actual content\\n\"");
       });
 
       it('should handle content with both first and last lines empty', () => {
         const input = 'description: <<<\n\nMiddle content\n\n>>>';
         const output = preprocessCustomBlocks(input, 'yaml');
-        // Both empty lines trimmed
-        expect(output).toBe('description: "Middle content"');
+        expect(output).toBe("description: \"\\nMiddle content\\n\"");
       });
     });
   });

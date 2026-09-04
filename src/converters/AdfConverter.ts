@@ -58,10 +58,10 @@ export class AdfConverter {
       }
 
       // Unordered list (- item or * item)
-      if (/^[\-\*]\s+/.test(line)) {
+      if (/^[-*]\s+/.test(line)) {
         const items: string[] = [];
-        while (i < lines.length && /^[\-\*]\s+/.test(lines[i]!)) {
-          items.push(lines[i]!.replace(/^[\-\*]\s+/, ''));
+        while (i < lines.length && /^[-*]\s+/.test(lines[i]!)) {
+          items.push(lines[i]!.replace(/^[-*]\s+/, ''));
           i++;
         }
         content.push(AdfConverter.bulletList(items));
@@ -92,7 +92,7 @@ export class AdfConverter {
         lines[i]!.trim() !== '' &&
         !lines[i]!.startsWith('```') &&
         !lines[i]!.match(/^#{1,6}\s+/) &&
-        !lines[i]!.match(/^[\-\*]\s+/) &&
+        !lines[i]!.match(/^[-*]\s+/) &&
         !lines[i]!.match(/^\d+\.\s+/)
       ) {
         paraLines.push(lines[i]!);

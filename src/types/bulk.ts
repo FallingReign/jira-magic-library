@@ -10,6 +10,21 @@ export interface BulkIssuePayload {
   fields: Record<string, unknown>;
 }
 
+/** Validation results contain prepared requests, never creation results or a stored manifest. */
+export interface BulkValidationResult {
+  validation: true;
+  valid: boolean;
+  total: number;
+  results: Array<{
+    index: number;
+    valid: boolean;
+    payload?: BulkIssuePayload;
+    error?: string;
+    /** Parent rows whose real Jira keys will only be available during creation. */
+    dependencies: Array<{ field: string; uid: string; index: number }>;
+  }>;
+}
+
 /**
  * Manifest tracking bulk operation results
  *

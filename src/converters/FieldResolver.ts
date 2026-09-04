@@ -236,11 +236,15 @@ export class FieldResolver {
     // Merge virtual field groups into resolved (E3-S02b)
     // After main loop to ensure all virtual fields are collected
     for (const [parentFieldId, properties] of virtualFieldGroups) {
-      if (resolved[parentFieldId]) {
+      if (resolved[parentFieldId] !== undefined && resolved[parentFieldId] !== null) {
         // AC5: Top-level virtual fields override object format
         // Merge with precedence: virtual fields win
+        const parentValue = resolved[parentFieldId];
+        const parentObject = typeof parentValue === 'object'
+          ? parentValue as Record<string, unknown>
+          : { originalEstimate: parentValue };
         resolved[parentFieldId] = {
-          ...(resolved[parentFieldId] as Record<string, unknown>),
+          ...parentObject,
           ...properties, // Virtual fields override
         };
       } else {

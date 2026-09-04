@@ -621,6 +621,7 @@ describe('IssueOperations - Progress Tracking Integration', () => {
       const result = await issueOperations.create(rows, { onProgress });
 
       // Should have detected stuck state
+      expect(result).toHaveProperty('total', rows.length);
       const progressCalls = onProgress.mock.calls;
       const lastProgress = progressCalls[progressCalls.length - 1]?.[0];
 

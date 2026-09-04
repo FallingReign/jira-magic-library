@@ -1,6 +1,7 @@
 import { FieldSchema } from '../../types/schema.js';
 import { ConversionContext } from '../../types/converter.js';
 import { ValidationError } from '../../errors/ValidationError.js';
+import { isBlank } from '../../utils/isBlank.js';
 
 /**
  * Time tracking object format
@@ -13,12 +14,12 @@ interface TimeTrackingObject {
 /**
  * Converts time tracking values for fields with type: "timetracking"
  * 
- * Normalizes user-friendly time formats to JIRA's expected duration string format.
+ * Wraps scalar estimates in Jira's time-tracking object and normalizes durations.
  * JIRA accepts duration strings (e.g., "2h", "1d 4h") and stores both the string
  * and seconds representation internally.
  * 
  * Features:
- * - Accepts JIRA format strings: "2h", "30m", "1d", "1w", "1h 30m", "1w 2d 4h" (pass-through)
+ * - Accepts JIRA format strings: "2h", "30m", "1d", "1w", "1h 30m", "1w 2d 4h" (sets originalEstimate)
  * - Normalizes friendly formats: "2 hours" → "2h", "30 minutes" → "30m"
  * - Accepts numeric seconds: 7200 → "2h" (converts to duration string)
  * - Accepts object format: { originalEstimate: "2h", remainingEstimate: "1h 30m" }
@@ -27,24 +28,25 @@ interface TimeTrackingObject {
  * 
  * @param value - User input (string, number, object, null, or undefined)
  * @param fieldSchema - JIRA field schema from createmeta
- * @param context - Conversion context (unused but required by interface)
- * @returns Duration string, time tracking object, or null/undefined if optional
+ * @param context - Creation omits blank optional estimates.
+ * Scalar durations set originalEstimate. Object input can set either estimate.
+ * @returns Jira time tracking object, or null/undefined if optional
  * @throws {ValidationError} if value is invalid format
  * 
  * @example
  * ```typescript
  * // JIRA format strings (pass through)
- * convertTimeTrackingType('2h', field, context)              // → '2h'
- * convertTimeTrackingType('1h 30m', field, context)          // → '1h 30m'
- * convertTimeTrackingType('1w 2d 4h', field, context)        // → '1w 2d 4h'
+ * convertTimeTrackingType('2h', field, context)              // → { originalEstimate: '2h' }
+ * convertTimeTrackingType('1h 30m', field, context)          // → { originalEstimate: '1h 30m' }
+ * convertTimeTrackingType('1w 2d 4h', field, context)        // → { originalEstimate: '1w 2d 4h' }
  * 
  * // Friendly formats (normalize)
- * convertTimeTrackingType('2 hours', field, context)         // → '2h'
- * convertTimeTrackingType('30 minutes', field, context)      // → '30m'
+ * convertTimeTrackingType('2 hours', field, context)         // → { originalEstimate: '2h' }
+ * convertTimeTrackingType('30 minutes', field, context)      // → { originalEstimate: '30m' }
  * 
  * // Numeric seconds (convert to duration string)
- * convertTimeTrackingType(7200, field, context)              // → '2h'
- * convertTimeTrackingType(5400, field, context)              // → '1h 30m'
+ * convertTimeTrackingType(7200, field, context)              // → { originalEstimate: '2h' }
+ * convertTimeTrackingType(5400, field, context)              // → { originalEstimate: '1h 30m' }
  * 
  * // Object formats
  * convertTimeTrackingType(
@@ -66,8 +68,8 @@ interface TimeTrackingObject {
 export function convertTimeTrackingType(
   value: unknown,
   fieldSchema: FieldSchema,
-  _context: ConversionContext
-): string | TimeTrackingObject | null | undefined {
+  context: ConversionContext
+): TimeTrackingObject | null | undefined {
   // Handle null/undefined (optional field)
   if (value === null) return null;
   if (value === undefined) return undefined;
@@ -76,8 +78,12 @@ export function convertTimeTrackingType(
   if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
     const obj = value as Record<string, unknown>;
     const result: TimeTrackingObject = {};
+    const unknownKeys = Object.keys(obj).filter(key => key !== 'originalEstimate' && key !== 'remainingEstimate');
+    if (unknownKeys.length > 0) {
+      throw new ValidationError(`Unknown time tracking field "${unknownKeys.join(', ')}". Use originalEstimate or remainingEstimate.`);
+    }
 
-    if ('originalEstimate' in obj) {
+    if ('originalEstimate' in obj && !(context.operation === 'create' && isBlank(obj.originalEstimate))) {
       if (obj.originalEstimate === null) {
         result.originalEstimate = null;
       } else if (obj.originalEstimate !== undefined) {
@@ -85,7 +91,7 @@ export function convertTimeTrackingType(
       }
     }
 
-    if ('remainingEstimate' in obj) {
+    if ('remainingEstimate' in obj && !(context.operation === 'create' && isBlank(obj.remainingEstimate))) {
       if (obj.remainingEstimate === null) {
         result.remainingEstimate = null;
       } else if (obj.remainingEstimate !== undefined) {
@@ -97,7 +103,7 @@ export function convertTimeTrackingType(
   }
 
   // Handle string or numeric format
-  return parseTimeValue(value, fieldSchema);
+  return { originalEstimate: parseTimeValue(value, fieldSchema) };
 }
 
 /**

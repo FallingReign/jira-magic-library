@@ -369,6 +369,8 @@ export class SchemaDiscovery {
       schema: fieldDef.schema,
     };
 
+    if (fieldDef.hasDefaultValue) schema.hasDefaultValue = true;
+
     // Include allowed values for select fields
     if (fieldDef.allowedValues && Array.isArray(fieldDef.allowedValues)) {
       schema.allowedValues = fieldDef.allowedValues.map((v) => {
