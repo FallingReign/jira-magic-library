@@ -3,6 +3,7 @@ import { loadConfig } from '../../src/config/loader.js';
 
 describe('Integration: E3-S02b Virtual Time Tracking Fields', () => {
   let jml: JML;
+  afterAll(async () => { await jml?.disconnect(); });
 
   beforeAll(() => {
     if (!process.env.JIRA_BASE_URL) {

@@ -1,4 +1,5 @@
 import { IssueOperations } from '../../../src/operations/IssueOperations.js';
+import { BulkProgressTracker } from '../../../src/operations/bulk/BulkProgressTracker.js';
 import { JiraClient } from '../../../src/client/JiraClient.js';
 import { SchemaDiscovery } from '../../../src/schema/SchemaDiscovery.js';
 import { FieldResolver } from '../../../src/converters/FieldResolver.js';
@@ -1880,6 +1881,19 @@ describe('IssueOperations', () => {
   });
 
   describe('Progress Tracking HTTP Timeout Behavior', () => {
+    let tracking: jest.SpyInstance;
+
+    beforeEach(() => {
+      tracking = jest.spyOn(BulkProgressTracker.prototype, 'startTracking');
+    });
+
+    afterEach(async () => {
+      // The immediate HTTP mock can finish before the initial progress search.
+      // Settle and close the real trackers created by this fixture.
+      await Promise.all(tracking.mock.results.map(result => result.value));
+      tracking.mock.instances.forEach(tracker => tracker.stopTracking());
+    });
+
     it('should disable HTTP timeout when onProgress callback provided', async () => {
       // Arrange
       const mockBulkApiWrapper = {

@@ -52,6 +52,7 @@ describe('Integration: E3-S14 AC5 - Multi-Level Hierarchy Creation', () => {
         }
       }
     }
+    await client?.disconnect();
   });
 
   it('AC5: creates multi-level hierarchy with correct parent fields', async () => {

@@ -50,12 +50,7 @@ describe('Integration: Retry with Manifest Support (E4-S05)', () => {
 
   afterAll(async () => {
     // Clean up Redis connections to allow Jest to exit
-    if (jml && (jml.issues as any).cache) {
-      const cache = (jml.issues as any).cache;
-      if (cache.disconnect) {
-        await cache.disconnect();
-      }
-    }
+    await jml?.disconnect();
   }, 10000);
 
   // AC7: Integration test - create → partial fail → retry → success

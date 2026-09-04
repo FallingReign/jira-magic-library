@@ -41,7 +41,7 @@ import { parse as parseCSV } from 'csv-parse/sync';
 import * as yaml from 'js-yaml';
 import { InputParseError, FileNotFoundError } from '../errors/index.js';
 import { preprocessQuotes, escapeAllBackslashes } from './quote-preprocessor.js';
-import { preprocessCustomBlocks } from './custom-block-preprocessor.js';
+import { protectCustomBlocks } from './custom-block-preprocessor.js';
 
 /**
  * Parsed input with normalized data array
@@ -305,24 +305,23 @@ function parseContent(
   shouldPreprocessCustomBlocks = true,
   shouldPreprocessQuotes = true
 ): Record<string, unknown>[] {
-  let processedContent = content;
+  const blocks = shouldPreprocessCustomBlocks ? protectCustomBlocks(content, format) : undefined;
+  let processedContent = blocks?.content ?? content;
 
-  // Step 1: Escape quotes and backslashes in user-typed values (regular quoted strings).
-  // Custom block markers (<<<) are unquoted content — this step leaves them untouched.
+  // Step 1: Repair ordinary quoted values. Literal block contents are protected
+  // by placeholders so their quotes, backslashes and lines are escaped once.
   if (shouldPreprocessQuotes) {
-    const preprocessed = preprocessQuotes(content, format);
-    if (preprocessed !== content) {
+    const preprocessed = preprocessQuotes(processedContent, format);
+    if (preprocessed !== processedContent) {
       // eslint-disable-next-line no-console
       console.debug(`Input required quote preprocessing for ${format} format`);
     }
     processedContent = preprocessed;
   }
 
-  // Step 2: Convert custom blocks (<<< >>>) into fully-escaped quoted strings.
-  // Runs AFTER quote preprocessing so there is no double-escaping:
-  // the output of this step is already payload-ready and won't be touched again.
+  // Step 2: Restore the escaped block strings before parsing and text cleanup.
   if (shouldPreprocessCustomBlocks) {
-    const preprocessed = preprocessCustomBlocks(processedContent, format);
+    const preprocessed = blocks!.restore(processedContent);
     if (preprocessed !== processedContent) {
       // eslint-disable-next-line no-console
       console.debug(`Input required custom block preprocessing for ${format} format`);

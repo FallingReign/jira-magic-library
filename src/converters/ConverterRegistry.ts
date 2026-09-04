@@ -217,8 +217,21 @@ export class ConverterRegistry {
         continue;
       }
 
+      // A blank Sprint means no Sprint selection. Other blank fields retain
+      // their existing conversion behavior and are left for Jira to validate.
+      // Legacy quote repair keeps JSON whitespace escapes literal. In an empty
+      // Sprint selection these still mean blank, not a Sprint name to look up.
+      if (fieldSchema.type === 'sprint' && typeof value === 'string' && /^(?:\s|\\[nrt])*$/.test(value)) {
+        continue;
+      }
+
       // Convert based on field type (await in case converter is async)
-      converted[fieldId] = await this.convert(value, fieldSchema, contextWithRegistry);
+      const result = await this.convert(value, fieldSchema, contextWithRegistry);
+      // Jira requires an object here. Keep the standalone duration converter's
+      // existing return value, and wrap scalars only when preparing fields.
+      converted[fieldId] = fieldSchema.type === 'timetracking' && typeof result === 'string'
+        ? { originalEstimate: result }
+        : result;
     }
 
     return converted;

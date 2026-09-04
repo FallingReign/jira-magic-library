@@ -19,6 +19,7 @@ import { Issue } from '../../src/types/index.js';
 
 describe('Integration: Progress Tracking & Search API', () => {
   let jml: JML;
+  afterAll(async () => { await jml?.disconnect(); });
   let client: JiraClientImpl;
   const PROJECT_KEY = process.env.JIRA_PROJECT_KEY || 'PROJ';
   const createdIssues: string[] = [];

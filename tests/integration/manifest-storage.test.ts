@@ -14,8 +14,8 @@ describe('Integration: ManifestStorage with Real Redis', () => {
   beforeAll(async () => {
     // Create real Redis connection
     redisCache = new RedisCache({
-      host: 'localhost',
-      port: 6379,
+      host: process.env.REDIS_HOST || 'localhost',
+      port: Number(process.env.REDIS_PORT || 6379),
     });
 
     // Wait for connection
@@ -296,7 +296,7 @@ describe('Integration: ManifestStorage with Real Redis', () => {
       expect(result).toBeNull();
 
       // Reconnect for cleanup
-      redisCache = new RedisCache({ host: 'localhost', port: 6379 });
+      redisCache = new RedisCache({ host: process.env.REDIS_HOST || 'localhost', port: Number(process.env.REDIS_PORT || 6379) });
       await redisCache.ping();
       storage = new ManifestStorage(redisCache);
     });

@@ -1356,12 +1356,10 @@ Second block
     });
 
     describe('JSON with Windows paths and invalid backslash sequences', () => {
-      it('should double backslashes even in what looks like already-escaped JSON', async () => {
-        // With new approach: ALL backslashes doubled (users never intend escape sequences)
+      it('should decode already-escaped JSON backslashes once', async () => {
         const json = '{"path": "C:\\\\\\\\server\\\\\\\\share\\\\\\\\file"}';
         const result = await parseInput({ data: json, format: 'json' });
-        // Input had 4 backslashes, we double to 8, after JSON.parse we get 4 backslashes in final value
-        expect(result.data[0].path).toBe('C:\\\\\\\\server\\\\\\\\share\\\\\\\\file');
+        expect(result.data[0].path).toBe('C:\\\\server\\\\share\\\\file');
       });
 
       it('should parse JSON with bare invalid escape sequences via retry fallback', async () => {

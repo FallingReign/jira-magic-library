@@ -51,10 +51,10 @@ export const USER_SCENARIOS: UserScenario[] = [
       Description: 'Testing all available fields with exact string matches.\n\nCreated by E3-S15 data-driven integration test suite.',
       Priority: 'P1 - Critical',
       'Component/s': ['Code - Automation'],
-      'Fix Version/s': ['PROJ_MS1_2024'],
+      'Fix Version/s': [process.env.JIRA_TEST_FIX_VERSION || `${process.env.JIRA_PROJECT_KEY || 'PROJ'}_MS1_2024`],
       'Due Date': '2025-12-31',
       Assignee: process.env.JIRA_TEST_USER_NAME || 'Slack Tools',
-      Level: 'MP -> mp_apartment', // Cascading select
+      Level: `MP -> ${process.env.JIRA_TEST_LEVEL_CHILD || 'mp_apartment'}`, // Cascading select
       'Time Tracking': {
         'Original Estimate': '3h',
         'Remaining Estimate': '1h',
@@ -78,7 +78,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'comprehensive-fuzzy',
     testDescription: 'should create Task with all available fields using fuzzy matching (lowercase, mixed case)',
     payload: {
-      Project: 'PROJ',
+      Project: process.env.JIRA_PROJECT_KEY || 'PROJ',
       'Issue Type': 'task',
       Summary: 'Task with all fields - fuzzy match test',
       Description: 'Testing all available fields with fuzzy/case-insensitive values.',
@@ -86,8 +86,8 @@ export const USER_SCENARIOS: UserScenario[] = [
       'Component/s': 'code - automation',
       'Fix Version/s': 'MS7 2025', // Should fuzzy match to PROJ_MS7_2025
       'Due Date': '2025-12-31',
-      Assignee: 'Slack Tools',
-      Level: { parent: 'mp', child: 'apartment' },
+      Assignee: process.env.JIRA_TEST_USER_NAME || 'Slack Tools',
+      Level: { parent: 'mp', child: process.env.JIRA_TEST_LEVEL_CHILD_FUZZY || 'apartment' },
       'Original Estimate': '2 hours',
       'Remaining Estimate': '30 min',
       Labels: ['integration-test', 'fuzzy-match', 'e3-s15'],
@@ -153,7 +153,7 @@ export const USER_SCENARIOS: UserScenario[] = [
     category: 'edge-cases',
     testDescription: 'should create Task with ultra-fuzzy values and still resolve correctly',
     payload: {
-      Project: 'PROJ', // Project keys must be exact (no fuzzy matching)
+      Project: process.env.JIRA_PROJECT_KEY || 'PROJ', // Project keys must be exact (no fuzzy matching)
       'Issue Type': 'TASK', // UPPERCASE
       Summary: 'Task with ultra-fuzzy values - edge case test',
       Description: 'Testing extreme fuzzy matching capabilities.',

@@ -17,6 +17,7 @@ import * as path from 'path';
 describe('Integration: Schema Validation', () => {
   let jml: JML;
   const testProjectKey = process.env.JIRA_PROJECT_KEY || 'TEST';
+  const reporter = process.env.JIRA_REPORTER || process.env.JIRA_TEST_USER_NAME!;
 
   beforeAll(() => {
     if (!process.env.JIRA_BASE_URL) {
@@ -26,6 +27,8 @@ describe('Integration: Schema Validation', () => {
     const config = loadConfig();
     jml = new JML(config);
   });
+
+  afterAll(async () => { await jml?.disconnect(); });
 
   describe('CSV Input Validation', () => {
     const csvFilePath = path.join(__dirname, '../fixtures/validation-test.csv');
@@ -41,9 +44,9 @@ describe('Integration: Schema Validation', () => {
     it('should validate valid CSV input', async () => {
       if (!jml) return;
 
-      const csvContent = `Project,Issue Type,Summary
-${testProjectKey},Task,Test issue 1
-${testProjectKey},Task,Test issue 2`;
+      const csvContent = `Project,Issue Type,Reporter,Summary
+${testProjectKey},Task,${reporter},Test issue 1
+${testProjectKey},Task,${reporter},Test issue 2`;
 
       await writeFile(csvFilePath, csvContent);
 
@@ -74,9 +77,9 @@ ${testProjectKey},Task`;
       if (!jml) return;
 
       // Generate CSV with 100 rows
-      const rows = [`Project,Issue Type,Summary`];
+      const rows = [`Project,Issue Type,Reporter,Summary`];
       for (let i = 1; i <= 100; i++) {
-        rows.push(`${testProjectKey},Task,Test issue ${i}`);
+        rows.push(`${testProjectKey},Task,${reporter},Test issue ${i}`);
       }
 
       await writeFile(csvFilePath, rows.join('\n'));
@@ -96,8 +99,8 @@ ${testProjectKey},Task`;
 
       const result = await jml.validate({
         data: [
-          { Project: testProjectKey, 'Issue Type': 'Task', Summary: 'Test 1' },
-          { Project: testProjectKey, 'Issue Type': 'Task', Summary: 'Test 2' }
+          { Project: testProjectKey, 'Issue Type': 'Task', Reporter: reporter, Summary: 'Test 1' },
+          { Project: testProjectKey, 'Issue Type': 'Task', Reporter: reporter, Summary: 'Test 2' }
         ]
       });
 
@@ -109,7 +112,7 @@ ${testProjectKey},Task`;
       if (!jml) return;
 
       const result = await jml.validate({
-        data: { Project: testProjectKey, 'Issue Type': 'Task', Summary: 'Test' }
+        data: { Project: testProjectKey, 'Issue Type': 'Task', Reporter: reporter, Summary: 'Test' }
       });
 
       expect(result.valid).toBe(true);
@@ -122,7 +125,7 @@ ${testProjectKey},Task`;
       const result = await jml.validate({
         data: [{
           Project: testProjectKey,
-          'Issue Type': 'Task',
+          'Issue Type': 'Task', Reporter: reporter,
           Summary: 'Test',
           Labels: 'not-an-array'  // Should be array
         }]
@@ -142,7 +145,7 @@ ${testProjectKey},Task`;
       const result = await jml.validate({
         data: [{
           Project: testProjectKey,
-          'Issue Type': 'Task'
+          'Issue Type': 'Task', Reporter: reporter
           // Missing Summary (required)
         }]
       });
@@ -157,9 +160,9 @@ ${testProjectKey},Task`;
 
       const result = await jml.validate({
         data: [
-          { Project: testProjectKey, 'Issue Type': 'Task' },  // Row 0 - missing Summary
-          { Project: testProjectKey, 'Issue Type': 'Task', Summary: 'Valid' },  // Row 1 - valid
-          { Project: testProjectKey, 'Issue Type': 'Task', Labels: 'invalid' }  // Row 2 - missing Summary, invalid Labels
+          { Project: testProjectKey, 'Issue Type': 'Task', Reporter: reporter },  // Row 0 - missing Summary
+          { Project: testProjectKey, 'Issue Type': 'Task', Reporter: reporter, Summary: 'Valid' },  // Row 1 - valid
+          { Project: testProjectKey, 'Issue Type': 'Task', Reporter: reporter, Labels: 'invalid' }  // Row 2 - missing Summary, invalid Labels
         ]
       });
 
@@ -181,7 +184,7 @@ ${testProjectKey},Task`;
 
       const rows = Array.from({ length: 100 }, (_, i) => ({
         Project: testProjectKey,
-        'Issue Type': 'Task',
+        'Issue Type': 'Task', Reporter: reporter,
         Summary: `Test issue ${i + 1}`
       }));
 
@@ -199,7 +202,7 @@ ${testProjectKey},Task`;
       // Create rows with validation errors
       const rows = Array.from({ length: 100 }, () => ({
         Project: testProjectKey,
-        'Issue Type': 'Task'
+        'Issue Type': 'Task', Reporter: reporter
         // Missing Summary to trigger validation errors
       }));
 

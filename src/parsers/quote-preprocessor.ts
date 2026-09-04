@@ -461,9 +461,10 @@ function findUnescapedQuotes(content: string, quoteType: '"' | "'"): number[] {
     /* istanbul ignore if -- defensive type guard for noUncheckedIndexedAccess */
     if (content[i] === quoteType) {
       if (quoteType === '"') {
-        // Check for backslash escape
-        /* istanbul ignore if -- escape detection path */
-        if (i > 0 && content[i - 1] === '\\') continue;
+        // An escaped backslash does not escape the following closing quote.
+        let backslashes = 0;
+        for (let j = i - 1; j >= 0 && content[j] === '\\'; j--) backslashes++;
+        if (backslashes % 2 === 1) continue;
       } else {
         // Single quotes: '' is escaped
         if (i > 0 && content[i - 1] === "'") continue;
@@ -510,13 +511,8 @@ export function escapeAllBackslashes(content: string, format: 'yaml' | 'json' | 
 /**
  * Escape internal quotes and backslashes in YAML content to preserve literal text.
  *
- * Users never want to input escape sequences themselves — when they type `c:\temp`,
- * they want that literal string, not a tab character. So we double ALL backslashes
- * before the YAML parser sees them.
- *
- * For double-quoted strings:
- * - Step 1: Double all backslashes (user text is always literal)
- * - Step 2: Escape unescaped quotes
+ * Double-quoted strings retain escaped quotes and backslashes. Raw quotes and
+ * backslashes are escaped, preserving legacy literal paths such as `c:\temp`.
  *
  * For single-quoted strings:
  * - No backslash escaping (single quotes don't interpret backslashes in YAML)
@@ -524,10 +520,7 @@ export function escapeAllBackslashes(content: string, format: 'yaml' | 'json' | 
  */
 function escapeQuotesYaml(content: string, quoteType: '"' | "'"): string {
   if (quoteType === '"') {
-    // Step 1: Double ALL backslashes — user content is literal, never escape sequences
-    const backslashFixed = escapeAllBackslashes(content, 'yaml');
-    // Step 2: Escape " as \" (but not already escaped \")
-    return backslashFixed.replace(/(?<!\\)"/g, '\\"');
+    return escapeQuotedContent(content);
   } else {
     // Escape ' as '' (but not already escaped '')
     return content.replace(/(?<!')'(?!')/g, "''");
@@ -849,23 +842,19 @@ function findJsonClosingQuote(content: string, startIndex: number, quoteChar: '"
 }
 
 /**
- * Escape all backslashes and internal quotes in JSON content to preserve literal text.
- *
- * Users typing content like `c:\this\that` always want the literal string preserved,
- * never escape sequences. We double ALL backslashes before the JSON parser sees them.
- *
- * Step 1: Double all backslashes (user text is always literal)
- * Step 2: Escape unescaped `"` as `\"`
- *
- * This mirrors the YAML path exactly — both formats now get backslash fixing
- * at the quote-preprocessor stage (Step 2 of the pipeline), keeping the
- * retry fallback in InputParser as a genuine last resort only.
+ * Preserve escaped quotes/backslashes in JSON values while repairing raw quotes
+ * and backslashes, using the same rules as double-quoted YAML values.
  */
 function escapeQuotesJson(content: string): string {
-  // Step 1: Double ALL backslashes — user content is literal, never escape sequences
-  const backslashFixed = escapeAllBackslashes(content, 'json');
-  // Step 2: Escape " as \" (but not already escaped \")
-  return backslashFixed.replace(/(?<!\\)"/g, '\\"');
+  return escapeQuotedContent(content);
+}
+
+/** Preserve escaped quotes/backslashes; retain legacy literal handling of \n, \t and raw paths. */
+function escapeQuotedContent(content: string): string {
+  return content.replace(/\\[\\"]|\\|"/g, value => {
+    if (value.length === 2) return value;
+    return '\\' + value;
+  });
 }
 
 // =============================================================================

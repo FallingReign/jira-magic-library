@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [2.2.1] - 2026-09-04
+
+Built from the exact 2.2.0 release, preserving compatibility outside these fixes.
+
+### Fixed
+- Scalar Time Tracking, including quoted and unquoted YAML durations, is wrapped in Jira's required object when preparing the request. Existing nested estimates and standalone converter results retain their behavior.
+- Blank Sprint selections are omitted from Jira requests. Other blank fields retain their existing behavior.
+- Escaped quotes and backslashes are no longer escaped a second time. Bare and quoted `<<< >>>` blocks are protected from ordinary quote repair, retaining multiline content and the existing text cleanup.
+
+Quote repair remains enabled by default. Required-field validation, duplicate-field handling, preview, authentication and public response formats retain their 2.2.0 behavior.
+
+The separately published **3.0.0 is unsuitable for this compatibility upgrade**. Its tag is retained unchanged; existing 2.2.0 applications should use 2.2.1.
+
 ## [2.2.0] - 2026-08-28
 
 ### Added

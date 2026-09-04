@@ -1,5 +1,7 @@
 # JIRA Magic Library (JML)
 
+**Compatibility upgrade from 2.2.0: use 2.2.1.** The published 3.0.0 contains behavior changes and is unsuitable for this upgrade. See the [2.2.1 compatibility notes](docs/releases/2.2.1-compatibility.md).
+
 Schema-aware helpers for working with the JIRA Server/Data Center REST API. JML converts human-readable payloads into API-ready requests, validates data against live schema metadata, and includes demos for parsing/validation/bulk retries.
 
 ---
@@ -152,7 +154,7 @@ Since the package is not on npm yet, reference the Git repo directly (or via loc
 // your-project/package.json
 {
   "dependencies": {
-    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v2.2.0"
+    "jira-magic-library": "git+https://github.com/FallingReign/jira-magic-library.git#v2.2.1"
   }
 }
 ```

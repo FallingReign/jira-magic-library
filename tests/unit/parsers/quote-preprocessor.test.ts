@@ -26,11 +26,10 @@ describe('QuotePreprocessor', () => {
           expect(output).toBe('text: "he said \\"hi\\" and she said \\"bye\\""');
         });
 
-        it('should double backslashes in already-escaped quotes (users want literal backslashes)', () => {
+        it('should preserve already-escaped quotes', () => {
           const input = 'description: "Say \\"hello\\" world"';
           const output = preprocessQuotes(input, 'yaml');
-          // Backslashes are doubled: \\" becomes \\\\"
-          expect(output).toBe('description: "Say \\\\"hello\\\\" world"');
+          expect(output).toBe(input);
         });
 
         it('should not modify unquoted values without quotes', () => {
@@ -141,16 +140,14 @@ end"`;
           // User typing "line1\\nline2" wants literal backslash-n, not a newline
           const input = 'description: "line1\\nline2\\ttabbed\\\\end"';
           const output = preprocessQuotes(input, 'yaml');
-          // All backslashes doubled, even \\n and \\t
-          expect(output).toBe('description: "line1\\\\nline2\\\\ttabbed\\\\\\\\end"');
+          // Literal newline/tab text retains its old behavior; escaped backslashes are not doubled again.
+          expect(output).toBe('description: "line1\\\\nline2\\\\ttabbed\\\\end"');
         });
 
-        it('should double already-doubled backslashes (content might be pre-escaped)', () => {
-          // Input has \\\\ (already doubled) - still double again for literal preservation
+        it('should preserve already-escaped backslashes', () => {
           const input = 'path: "C:\\\\Users\\\\name"';
           const output = preprocessQuotes(input, 'yaml');
-          // Each \\ becomes \\\\ (doubled again)
-          expect(output).toBe('path: "C:\\\\\\\\Users\\\\\\\\name"');
+          expect(output).toBe(input);
         });
 
         it('should double all backslashes in multiline values with Windows paths', () => {
@@ -190,14 +187,13 @@ priority: High`;
           expect(output).toContain('priority: High');
         });
 
-        it('should double all backslashes even in what looks like proper YAML escaping', () => {
+        it('should preserve escaped quotes alongside single-quoted YAML', () => {
           const input = `project: ENG
 summary: "Fix \\"bug\\" in parser"
 description: 'it''s fine'
 priority: High`;
           const output = preprocessQuotes(input, 'yaml');
-          // Backslashes in double-quoted summary are doubled
-          expect(output).toContain('summary: "Fix \\\\"bug\\\\" in parser"');
+          expect(output).toContain('summary: "Fix \\"bug\\" in parser"');
           // Single quotes in single-quoted description are NOT doubled ('' is standard YAML escaping, not ambiguous like backslashes)
           expect(output).toContain("description: 'it''s fine'");
         });
@@ -346,11 +342,10 @@ Version: MS8 2026`;
           expect(output).toBe('{"text": "he \\"said\\" she \\"replied\\""}');
         });
 
-        it('should double backslashes in already-escaped quotes (users want literal backslashes)', () => {
+        it('should preserve already-escaped JSON quotes', () => {
           const input = '{"description": "Say \\"hello\\" world"}';
           const output = preprocessQuotes(input, 'json');
-          // Backslashes are doubled
-          expect(output).toBe('{"description": "Say \\\\"hello\\\\" world"}');
+          expect(output).toBe(input);
         });
 
         it('should not modify valid JSON', () => {
@@ -687,11 +682,10 @@ priority: High`;
         expect(output).toBe(input);
       });
 
-      it('should double all backslashes even when they look like proper YAML escapes', () => {
+      it('should leave correctly escaped YAML quotes unchanged', () => {
         const input = 'description: "He said \\"hello\\" to me"';
         const output = preprocessQuotes(input, 'yaml');
-        // All backslashes doubled
-        expect(output).toBe('description: "He said \\\\"hello\\\\" to me"');
+        expect(output).toBe(input);
       });
 
       it('should not modify valid JSON', () => {
@@ -757,8 +751,8 @@ field2: "needs "escaping""
 field3: 'already ''escaped'' here'
 field4: 'needs 'escaping' here'`;
         const output = preprocessQuotes(input, 'yaml');
-        // field1: backslashes doubled, quotes preserved
-        expect(output).toContain('field1: "already \\\\"escaped\\\\""');
+        // field1: already escaped quotes stay unchanged
+        expect(output).toContain('field1: "already \\"escaped\\""');
         // field2: unescaped quotes get escaped
         expect(output).toContain('field2: "needs \\"escaping\\""');
         // field3: already doubled single quotes stay unchanged ('' is standard YAML escaping, not ambiguous)
@@ -781,13 +775,12 @@ field4: 'needs 'escaping' here'`;
       expect(result.output).toContain('\\"hello\\"');
     });
 
-    it('should return modified=true when backslashes are doubled', () => {
+    it('should report no repair for already-escaped quotes', () => {
       const input = 'text: "already \\"escaped\\""';
       const result = preprocessQuotesWithDetails(input, 'yaml');
-      // Backslashes ARE doubled, so modified=true
-      expect(result.modified).toBe(true);
-      expect(result.changes.length).toBeGreaterThan(0);
-      expect(result.output).toBe('text: "already \\\\"escaped\\\\""');
+      expect(result.modified).toBe(false);
+      expect(result.changes).toEqual([]);
+      expect(result.output).toBe(input);
     });
 
     it('should list specific changes made', () => {

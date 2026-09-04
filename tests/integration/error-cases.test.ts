@@ -26,6 +26,7 @@ import type { NotFoundError } from '../../src/errors/NotFoundError.js';
 
 describe('Integration: Error Cases', () => {
   let jml: JML;
+  afterAll(async () => { await jml?.disconnect(); });
   let client: JiraClientImpl;
   const createdIssues: string[] = [];
 

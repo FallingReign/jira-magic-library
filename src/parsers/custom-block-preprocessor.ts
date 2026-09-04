@@ -56,6 +56,26 @@ export type Format = 'yaml' | 'json' | 'csv';
  * ```
  */
 export function preprocessCustomBlocks(content: string, format: Format): string {
+  return processBlocks(content, format, value => value);
+}
+
+/** Keep block contents out of ordinary quote repair, then restore their escaping. */
+export function protectCustomBlocks(content: string, format: Format): { content: string; restore: (value: string) => string } {
+  let prefix = '__JML_LITERAL_BLOCK__';
+  while (content.includes(prefix)) prefix += '_';
+  const replacements: Array<[string, string]> = [];
+  const protectedContent = processBlocks(content, format, quoted => {
+    const marker = '"' + prefix + replacements.length + '"';
+    replacements.push([marker, quoted]);
+    return marker;
+  });
+  return {
+    content: protectedContent,
+    restore: value => replacements.reduce((result, [marker, quoted]) => result.split(marker).join(quoted), value),
+  };
+}
+
+function processBlocks(content: string, format: Format, replace: (value: string) => string): string {
   try {
     // Fast path: Return immediately if no blocks present
     if (!content.includes('<<<')) {
@@ -67,8 +87,8 @@ export function preprocessCustomBlocks(content: string, format: Format): string 
 
     // Process quoted blocks FIRST (so outer quotes are removed before bare block processing)
     // Then process bare blocks
-    let processed = processQuotedBlocks(content, format, lineEnding);
-    processed = processBareBlocks(processed, format, lineEnding);
+    let processed = processQuotedBlocks(content, format, lineEnding, replace);
+    processed = processBareBlocks(processed, format, lineEnding, replace);
 
     return processed;
   } catch {
@@ -93,12 +113,12 @@ function detectLineEnding(content: string): string {
 /**
  * Process bare blocks (<<<\n...content...\n>>>)
  */
-function processBareBlocks(content: string, format: Format, lineEnding: string): string {
+function processBareBlocks(content: string, format: Format, lineEnding: string, replace: (value: string) => string): string {
   // Match bare blocks: <<< followed by newline, content, newline, >>>
   // Special case: handle empty blocks (<<< followed immediately by >>>)
   // (?!>) ensures we only match exactly >>> and not >>>>+ (e.g. >>>>>> some text)
   const emptyBlockPattern = new RegExp(`<<<\\s*${escapeRegex(lineEnding)}\\s*>>>(?!>)`, 'g');
-  let processed = content.replace(emptyBlockPattern, '""');
+  let processed = content.replace(emptyBlockPattern, () => replace('""'));
 
   // Match non-empty bare blocks
   // Use [\s\S] to match any character including newlines
@@ -107,7 +127,7 @@ function processBareBlocks(content: string, format: Format, lineEnding: string):
   const bareBlockPattern = new RegExp(`<<<\\s*${escapeRegex(lineEnding)}([\\s\\S]*?)${escapeRegex(lineEnding)}\\s*>>>(?!>)`, 'g');
 
   processed = processed.replace(bareBlockPattern, (_match, blockContent: string) => {
-    return convertBlockToQuotedString(blockContent, format, lineEnding);
+    return replace(convertBlockToQuotedString(blockContent, format, lineEnding));
   });
 
   return processed;
@@ -116,7 +136,7 @@ function processBareBlocks(content: string, format: Format, lineEnding: string):
 /**
  * Process quoted blocks ("<<<\n...content...\n>>>" or '<<<\n...content...\n>>>')
  */
-function processQuotedBlocks(content: string, format: Format, lineEnding: string): string {
+function processQuotedBlocks(content: string, format: Format, lineEnding: string, replace: (value: string) => string): string {
   // Match quoted blocks: " or ' followed by <<<, content, >>>, closing quote
   // We need to capture and replace the entire quoted block including the outer quotes
   // (?!>) ensures we only match exactly >>> and not >>>>+ (e.g. >>>>>> some text)
@@ -124,7 +144,7 @@ function processQuotedBlocks(content: string, format: Format, lineEnding: string
 
   return content.replace(quotedBlockPattern, (_match, blockContent: string) => {
     // Return just the converted quoted string (outer quotes are removed and replaced)
-    return convertBlockToQuotedString(blockContent, format, lineEnding);
+    return replace(convertBlockToQuotedString(blockContent, format, lineEnding));
   });
 }
 

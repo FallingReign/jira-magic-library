@@ -69,6 +69,7 @@ describe('Integration: Data-Driven User Scenarios', () => {
     console.log(`   Issues created: ${createdIssues.length}`);
     
     await cleanupIssues(client, createdIssues);
+    await jml.disconnect();
     
     console.log('   ✅ Test cleanup complete\n');
   });

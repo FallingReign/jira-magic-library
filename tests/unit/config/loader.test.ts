@@ -40,6 +40,9 @@ describe('Configuration Loader', () => {
     it('should apply default values for optional fields', () => {
       process.env.JIRA_BASE_URL = 'https://jira.example.com';
       process.env.JIRA_PAT = 'test-token-123';
+      for (const key of ['REDIS_HOST', 'REDIS_PORT', 'REDIS_PASSWORD', 'CACHE_TTL_SECONDS', 'JIRA_API_VERSION']) {
+        delete process.env[key];
+      }
 
       const config = loadConfig();
 
