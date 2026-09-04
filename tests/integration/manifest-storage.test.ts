@@ -242,8 +242,8 @@ describe('Integration: ManifestStorage with Real Redis', () => {
   });
 
   describe('TTL Behavior', () => {
-    it('should store manifest with configurable TTL', async () => {
-      // Use short TTL for testing (2 seconds)
+    it('should mark a manifest stale after its configured TTL while retaining it for retry', async () => {
+      // Preserve 2.2.0 stale-while-revalidate behavior with a short freshness period.
       const shortTtlStorage = new ManifestStorage(redisCache, 2);
       const manifestId = shortTtlStorage.generateManifestId();
 
@@ -261,14 +261,19 @@ describe('Integration: ManifestStorage with Real Redis', () => {
 
       // Should exist immediately
       const immediate = await shortTtlStorage.getManifest(manifestId);
-      expect(immediate).not.toBeNull();
+      expect(immediate).toEqual(manifest);
+      const cacheKey = `bulk:manifest:${manifestId}`;
+      expect((await redisCache.get(cacheKey)).isStale).toBe(false);
 
-      // Wait for TTL to expire
+      // Wait for the configured freshness period to expire.
       await new Promise((resolve) => setTimeout(resolve, 2100));
 
-      // Should be expired
-      const expired = await shortTtlStorage.getManifest(manifestId);
-      expect(expired).toBeNull();
+      const stale = await redisCache.get(cacheKey);
+      expect(stale.isStale).toBe(true);
+      expect(JSON.parse(stale.value!)).toEqual(manifest);
+      expect(await shortTtlStorage.getManifest(manifestId)).toEqual(manifest);
+      expect(await redisCache.get(cacheKey, { rejectStale: true }))
+        .toEqual({ value: null, isStale: false });
     });
   });
 

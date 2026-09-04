@@ -329,7 +329,7 @@ describe('Integration: Progress Tracking & Search API', () => {
       }
     }, 90000);
 
-    it('should track accurate progress counts during hierarchical bulk', async () => {
+    it('should report progress snapshots and the final hierarchical creation result', async () => {
       if (!isJiraConfigured()) return;
 
       console.log('   📝 Creating hierarchy with progress tracking...');
@@ -386,12 +386,20 @@ describe('Integration: Progress Tracking & Search API', () => {
       // Verify progress tracking worked
       expect(progressUpdates.length).toBeGreaterThan(0);
 
-      // Final progress should match total
-      const lastUpdate = progressUpdates[progressUpdates.length - 1];
-      if (lastUpdate) {
-        expect(lastUpdate.completed).toBe(3);
-        expect(lastUpdate.total).toBe(3);
+      // In 2.2.0 these are Jira search snapshots. Creation can finish before
+      // the next poll or before Jira indexes every created issue.
+      for (const update of progressUpdates) {
+        expect(update.total).toBe(3);
+        expect(Number.isInteger(update.completed)).toBe(true);
+        expect(update.completed).toBeGreaterThanOrEqual(0);
+        expect(update.completed).toBeLessThanOrEqual(update.total);
       }
+
+      // The create response, rather than the last search snapshot, is final.
+      expect(result).toMatchObject({ total: 3, succeeded: 3, failed: 0 });
+      expect(result.results).toHaveLength(3);
+      expect(result.results.every(record => record.success)).toBe(true);
+      expect(new Set(result.results.map(record => record.key)).size).toBe(3);
     }, 90000);
   });
 
