@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [3.0.0] - 2026-09-04
+
+### Fixed
+- **Time Tracking** — Scalar estimates now produce the Jira time-tracking object. Quoted and unquoted YAML estimates work alike; nested and top-level estimate fields remain supported. Unknown nested fields produce an actionable error.
+- **Optional fields** — Blank optional fields, including Sprint, are omitted during creation in JSON, YAML and CSV. Required fields are checked against Jira metadata; zero and false are retained.
+- **Literal descriptions** — Bare and quoted `<<< >>>` blocks preserve quotes, paths, Unicode, whitespace and line endings without double escaping. Unclosed blocks report their location.
+- **Validation without creation** — Validation cannot submit raw-input, bulk, hierarchy or retry batches. Preview and creation share field preparation, including the Jira address needed by field converters.
+- **Progress cleanup** — A completed or stopped operation cannot leave a polling timer running. Slow polls do not overlap, and callback failures stop tracking.
+
+### Changed
+- **Breaking: standard parsing by default** — Valid JSON follows ordinary escaping rules. Free text is no longer trimmed or Unicode-normalized. Legacy quote repair requires `preprocessQuotes: true` and only runs after parsing fails. Literal blocks are protected from that repair.
+- **Breaking: validation results** — Bulk validation returns `BulkValidationResult` with per-row payloads, errors and pending parent dependencies, instead of creation counts and a manifest. Preview includes `valid`; failed preparation returns an empty payload.
+- **Field names** — Duplicate names after whitespace/Unicode normalization are rejected instead of silently overwriting fields.
+- **Release checks** — Expanded regression and public API tests meet the existing coverage thresholds. Resolved existing lint errors without disabling checks.
+
+See the [migration and SHGJiraTools handoff guide](docs/guides/upgrading-to-3.md).
+
 ## [2.2.0] - 2026-08-28
 
 ### Added
