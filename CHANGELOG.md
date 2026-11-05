@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
-## [3.0.1] - Unreleased
+## [3.0.1] - 2026-11-05
 
 ### Fixed
 - **Bulk row matching** — Bulk create results now map Jira's compact success list around failed request positions. When response counts, failure positions or created keys are inconsistent, affected rows are marked `not_confirmed` rather than assigned speculatively; manifest retries only resend confirmed failures.
