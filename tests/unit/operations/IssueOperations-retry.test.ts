@@ -13,6 +13,7 @@ import { FieldResolver } from '../../../src/converters/FieldResolver.js';
 import { ConverterRegistry } from '../../../src/converters/ConverterRegistry.js';
 import { BulkResult } from '../../../src/types/bulk.js';
 import { RedisCache } from '../../../src/cache/RedisCache.js';
+import { UidReplacer } from '../../../src/operations/bulk/UidReplacer.js';
 import { 
   createBasicManifest, 
   createMultiFailureManifest, 
@@ -102,6 +103,271 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
     });
 
     issueOps = new IssueOperations(mockClient, mockSchema, mockResolver, mockConverter, mockCache);
+  });
+
+  it('merges created, failed, unconfirmed, and validation retry outcomes independently', async () => {
+    const manifest = {
+      id: 'bulk-mixed-outcomes',
+      timestamp: Date.now(),
+      total: 6,
+      succeeded: [5],
+      failed: [1, 2, 3, 4],
+      notConfirmed: [0],
+      created: { 5: 'PROJ-5' },
+      errors: {
+        1: { status: 400, errors: { field: 'old error' } },
+        2: { status: 400, errors: { field: 'old error' } },
+        3: { status: 400, errors: { field: 'old error' } },
+        4: { status: 400, errors: { field: 'old error' } },
+      },
+    };
+
+    const result = await (issueOps as any).mergeRetryResultsIntoManifest(
+      {
+        created: [{ index: 0, key: 'PROJ-1' }],
+        failed: [{ index: 1, status: 400, errors: { field: 'still failing' } }],
+        notConfirmed: [2],
+        unmatchedKeys: ['PROJ-999'],
+      },
+      [0, 1, 2, 3].map(index => ({
+        index,
+        payload: { fields: {} },
+        ...(index === 0 ? { uid: 'new-parent' } : {}),
+      })),
+      [{ index: 3, error: new Error('row validation') }],
+      [1, 2, 3, 4],
+      manifest,
+      new UidReplacer(),
+    ) as BulkResult;
+
+    expect(result.manifest.succeeded).toEqual([5, 1]);
+    expect(result.manifest.failed).toEqual([2, 4]);
+    expect(result.manifest.notConfirmed).toEqual([0, 3]);
+    expect(result.unmatchedKeys).toEqual(['PROJ-999']);
+    expect(result.results.map(row => [row.index, row.outcome])).toEqual([
+      [0, 'not_confirmed'],
+      [1, 'created'],
+      [2, 'failed'],
+      [3, 'not_confirmed'],
+      [4, 'failed'],
+      [5, 'created'],
+    ]);
+  });
+
+  it('retries only confirmed failed rows and preserves unconfirmed rows', async () => {
+    const manifest = {
+      id: 'bulk-confirmed-only',
+      timestamp: Date.now(),
+      total: 3,
+      succeeded: [0],
+      failed: [1],
+      notConfirmed: [2],
+      created: { 0: 'PROJ-1' },
+      errors: { 1: { status: 400, errors: { summary: 'Required' } } },
+    };
+    setupManifestInCache(mockCache, manifest);
+    setupBulkSuccess(mockClient, ['PROJ-2']);
+
+    const result = await issueOps.create(testInput.slice(0, 3), { retry: manifest.id }) as BulkResult;
+
+    expect(mockClient.post).toHaveBeenCalledTimes(1);
+    expect(mockClient.post.mock.calls[0][1].issueUpdates).toHaveLength(1);
+    expect(result.manifest.succeeded).toEqual(expect.arrayContaining([0, 1]));
+    expect(result.manifest.failed).toEqual([]);
+    expect(result.manifest.notConfirmed).toEqual([2]);
+    expect(result.results.find(row => row.index === 2)).toMatchObject({
+      success: false,
+      outcome: 'not_confirmed',
+    });
+  });
+
+  it('does not retry a row marked notConfirmed even if it is in failed', async () => {
+    const manifest = {
+      id: 'bulk-no-confirmed-failures',
+      timestamp: Date.now(),
+      total: 2,
+      succeeded: [0],
+      failed: [1],
+      notConfirmed: [1],
+      created: { 0: 'PROJ-1' },
+      errors: {},
+    };
+    setupManifestInCache(mockCache, manifest);
+
+    const result = await issueOps.create(testInput.slice(0, 2), { retry: manifest.id }) as BulkResult;
+
+    expect(mockClient.post).not.toHaveBeenCalled();
+    expect(result.results).toEqual([
+      { index: 0, success: true, outcome: 'created', key: 'PROJ-1' },
+      { index: 1, success: false, outcome: 'not_confirmed' },
+    ]);
+  });
+
+  it('does not submit a blocked child when its notConfirmed parent is excluded from retry', async () => {
+    const manifest = {
+      id: 'bulk-blocked-child-retry',
+      timestamp: Date.now(),
+      total: 2,
+      succeeded: [],
+      failed: [1],
+      notConfirmed: [0],
+      created: {},
+      errors: { 1: { status: 400, errors: { blocked: 'Parent was not confirmed' } } },
+      uidMap: {},
+    };
+    setupManifestInCache(mockCache, manifest);
+    const input = [
+      { uid: 'parent', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Parent' },
+      { uid: 'child', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Child', Parent: 'parent' },
+    ];
+
+    const result = await issueOps.create(input, { retry: manifest.id }) as BulkResult;
+
+    expect(mockClient.post).not.toHaveBeenCalled();
+    expect(result.manifest.notConfirmed).toEqual([0]);
+    expect(result.results.find(row => row.index === 1)).toMatchObject({
+      success: false,
+      outcome: 'failed',
+      blocked: true,
+    });
+  });
+
+  it('maps unconfirmed retry rows past earlier rows omitted by validation and skips their resend', async () => {
+    const manifest = {
+      id: 'bulk-retry-validation-gap',
+      timestamp: Date.now(),
+      total: 3,
+      succeeded: [0],
+      failed: [1, 2],
+      created: { 0: 'PROJ-1' },
+      errors: {
+        1: { status: 400, errors: { summary: 'Rejected' } },
+        2: { status: 400, errors: { summary: 'Rejected' } },
+      },
+    };
+    setupManifestInCache(mockCache, manifest);
+    const createSingle = jest.spyOn(issueOps, 'createSingle')
+      .mockRejectedValueOnce(new Error('Earlier row validation failed'))
+      .mockResolvedValueOnce({ fields: { summary: 'Later submitted row' } } as never);
+    mockClient.post.mockResolvedValue({ issues: [], errors: [] });
+
+    const result = await issueOps.create(testInput.slice(0, 3), { retry: manifest.id }) as BulkResult;
+
+    expect(mockClient.post.mock.calls[0][1].issueUpdates).toEqual([
+      { fields: { summary: 'Later submitted row' } },
+    ]);
+    expect(result.manifest.failed).toEqual([1]);
+    expect(result.manifest.notConfirmed).toEqual([2]);
+    expect(result.manifest.errors[1].errors.validation).toBe('Earlier row validation failed');
+    expect(result.manifest.errors[2]).toBeUndefined();
+    expect(result.results.find(row => row.index === 1)).toMatchObject({
+      success: false,
+      outcome: 'failed',
+    });
+    expect(result.results.find(row => row.index === 2)).toMatchObject({
+      success: false,
+      outcome: 'not_confirmed',
+    });
+
+    setupManifestInCache(mockCache, result.manifest);
+    createSingle.mockClear().mockResolvedValueOnce({ fields: { summary: 'Fixed earlier row' } } as never);
+    mockClient.post.mockClear().mockResolvedValue({
+      issues: [{ id: '2', key: 'PROJ-2', self: 'https://jira/rest/api/2/issue/2' }],
+      errors: [],
+    });
+
+    const retried = await issueOps.create(testInput.slice(0, 3), { retry: manifest.id }) as BulkResult;
+
+    expect(createSingle).toHaveBeenCalledTimes(1);
+    expect(createSingle).toHaveBeenCalledWith(testInput[1], { validate: true });
+    expect(mockClient.post.mock.calls[0][1].issueUpdates).toHaveLength(1);
+    expect(retried.manifest.notConfirmed).toEqual([2]);
+    expect(retried.manifest.failed).toEqual([]);
+  });
+
+  it('stores unconfirmed retry outcomes and their unmatched keys', async () => {
+    const manifest = createBasicManifest('bulk-retry-unconfirmed');
+    setupManifestInCache(mockCache, manifest);
+    mockClient.post.mockResolvedValue({
+      issues: [
+        { id: '999', key: 'PROJ-999', self: 'https://jira/rest/api/2/issue/999' },
+        { id: '998', key: 'PROJ-998', self: 'https://jira/rest/api/2/issue/998' },
+      ],
+      errors: [],
+    });
+
+    const result = await issueOps.create(testInput.slice(0, 2), { retry: manifest.id }) as BulkResult;
+
+    expect(result.manifest.failed).toEqual([]);
+    expect(result.manifest.notConfirmed).toEqual([1]);
+    expect(result.unmatchedKeys).toEqual(['PROJ-999', 'PROJ-998']);
+    expect(result.results.find(row => row.index === 1)).toMatchObject({
+      success: false,
+      outcome: 'not_confirmed',
+    });
+  });
+
+  it('keeps an unconfirmed hierarchy parent from being retried as a success or submitting children', async () => {
+    const manifest = {
+      id: 'bulk-hierarchy-unconfirmed-parent',
+      timestamp: Date.now(),
+      total: 4,
+      succeeded: [0],
+      failed: [1, 2],
+      notConfirmed: [3],
+      created: { 0: 'PROJ-1' },
+      errors: {
+        1: { status: 400, errors: { summary: 'Rejected' } },
+        2: { status: 400, errors: { summary: 'Rejected' } },
+      },
+      uidMap: { prior: 'PROJ-1' },
+    };
+    setupManifestInCache(mockCache, manifest);
+    mockClient.post.mockResolvedValue({
+      issues: [
+        { id: '999', key: 'PROJ-999', self: 'https://jira/rest/api/2/issue/999' },
+        { id: '998', key: 'PROJ-998', self: 'https://jira/rest/api/2/issue/998' },
+      ],
+      errors: [],
+    });
+    const input = [
+      { uid: 'prior', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Prior' },
+      { uid: 'parent', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Parent' },
+      { uid: 'child', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Child', Parent: 'parent' },
+      { uid: 'unknown', Project: 'PROJ', 'Issue Type': 'Task', Summary: 'Unknown' },
+    ];
+
+    const result = await issueOps.create(input, { retry: manifest.id }) as BulkResult;
+
+    expect(mockClient.post).toHaveBeenCalledTimes(1);
+    expect(mockClient.post.mock.calls[0][1].issueUpdates).toHaveLength(1);
+    expect(result.manifest.notConfirmed).toEqual([3, 1]);
+    expect(result.manifest.failed).toEqual([2]);
+    expect(result.unmatchedKeys).toEqual(['PROJ-999', 'PROJ-998']);
+    expect(result.results.find(row => row.index === 2)).toMatchObject({
+      outcome: 'failed',
+      blocked: true,
+    });
+    expect(result.results.find(row => row.index === 3)).toMatchObject({
+      outcome: 'not_confirmed',
+      success: false,
+    });
+  });
+
+  it('uses the flat fallback for a retry manifest with no UID rows', async () => {
+    const manifest = createBasicManifest('bulk-uid-manifest-flat-fallback');
+    manifest.uidMap = { prior: 'PROJ-9' };
+    setupManifestInCache(mockCache, manifest);
+    jest.spyOn(issueOps, 'createSingle').mockRejectedValueOnce(new Error('row validation failed'));
+
+    const result = await issueOps.create(testInput.slice(0, 2), { retry: manifest.id }) as BulkResult;
+
+    expect(mockClient.post).not.toHaveBeenCalled();
+    expect(result.manifest.errors[1]?.errors.validation).toBe('row validation failed');
+    expect(result.results.find(row => row.index === 1)).toMatchObject({
+      success: false,
+      outcome: 'failed',
+    });
   });
 
   describe('AC1: Accept Retry Parameter', () => {
@@ -571,6 +837,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
     it('should throw descriptive error when bulk API returns unmapped indexes', async () => {
       const manifest = createPartialRetryManifest('bulk-remap');
+      manifest.succeeded = [];
+      manifest.created = {};
       manifest.failed = [0];
       manifest.errors = { '0': { status: 400, errors: { field: 'error' } } };
       setupManifestInCache(mockCache, manifest);
@@ -596,6 +864,8 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
 
     it('should throw when failed API indexes cannot be remapped', async () => {
       const manifest = createPartialRetryManifest('bulk-remap-failed');
+      manifest.succeeded = [];
+      manifest.created = {};
       manifest.failed = [0];
       manifest.errors = { '0': { status: 400, errors: { field: 'error' } } };
       setupManifestInCache(mockCache, manifest);
@@ -622,8 +892,31 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
       allSettledSpy.mockRestore();
     });
 
+    it('should throw when unconfirmed API indexes cannot be remapped', async () => {
+      const manifest = createPartialRetryManifest('bulk-remap-unconfirmed');
+      manifest.succeeded = [];
+      manifest.created = {};
+      manifest.failed = [0];
+      manifest.errors = { '0': { status: 400, errors: { field: 'error' } } };
+      setupManifestInCache(mockCache, manifest);
+      (issueOps as any).bulkApiWrapper = {
+        createBulk: jest.fn().mockResolvedValue({
+          created: [],
+          failed: [],
+          notConfirmed: [99],
+          unmatchedKeys: ['PROJ-999'],
+        }),
+      };
+
+      await expect(
+        issueOps.create(testInput.slice(0, 1), { retry: manifest.id })
+      ).rejects.toThrow(/Failed to map filtered index 99/);
+    });
+
     it('should throw when validation errors cannot be remapped to original indices', async () => {
       const manifest = createPartialRetryManifest('bulk-remap-validation');
+      manifest.succeeded = [];
+      manifest.created = {};
       manifest.failed = [0];
       manifest.errors = { '0': { status: 400, errors: { field: 'error' } } };
       setupManifestInCache(mockCache, manifest);

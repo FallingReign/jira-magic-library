@@ -188,7 +188,8 @@ describe('ErrorNormalizer', () => {
       const response: BulkApiResponse = {};
       const result = normalizer.normalizeBulk(response, 3);
       expect(result.successes).toHaveLength(0);
-      expect(result.errors).toHaveLength(0);
+      expect(result.errors.map(error => error.rowIndex)).toEqual([0, 1, 2]);
+      expect(result.errors.every(error => error.message.includes('did not confirm'))).toBe(true);
       expect(result.summary).toEqual({ total: 3, created: 0, failed: 3 });
     });
   });

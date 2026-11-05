@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [3.0.1] - Unreleased
+
+### Fixed
+- **Bulk row matching** — Bulk create results now map Jira's compact success list around failed request positions. When response counts, failure positions or created keys are inconsistent, affected rows are marked `not_confirmed` rather than assigned speculatively; manifest retries only resend confirmed failures.
+- **Bulk hierarchy safety** — A child is not submitted unless its internal parent has a confirmed Jira key. Descendants of failed or unconfirmed parents are reported as blocked.
+
+### Changed
+- **Bulk result metadata** — Per-row outcomes, manifest `notConfirmed` indexes and `BulkResult.unmatchedKeys` are additive optional fields.
+
 ## [3.0.0] - 2026-09-04
 
 ### Fixed
