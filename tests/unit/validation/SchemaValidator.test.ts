@@ -210,6 +210,20 @@ describe('ValidationService', () => {
         expect(result.errors[0].code).toBe('REQUIRED_FIELD_MISSING');
       });
 
+      it('should not flag a blank required Reporter (Jira uses the submitting user)', async () => {
+        const row = { Project: 'TEST', 'Issue Type': 'Task', Summary: 'Test issue', Reporter: '' };
+        mockSchemaDiscovery.getFieldsForIssueType.mockResolvedValue({
+          ...testSchema,
+          fields: { ...testSchema.fields, reporter: { ...testSchema.fields.reporter!, required: true, hasDefaultValue: false } }
+        });
+        mockParseInput.mockResolvedValue({ data: [row], format: 'json', source: 'array' });
+
+        const result = await validationService.validate({ data: [row] });
+
+        expect(result.valid).toBe(true);
+        expect(result.errors).toHaveLength(0);
+      });
+
       it('should fail validation when required field is null', async () => {
         mockParseInput.mockResolvedValue({
           data: [{ Project: 'TEST', 'Issue Type': 'Task', Summary: null }],

@@ -55,10 +55,8 @@ export interface GenericCache {
  * Context provided to field converters during conversion
  */
 export interface ConversionContext {
-  /** Creation treats blank optional values as absent and checks required fields. */
+  /** Creation treats blank values as absent; Jira validates required fields on submit. */
   operation?: 'create';
-  /** Required fields that depend on another row being created first. */
-  deferredRequiredFields?: string[];
   /** JIRA project key (e.g., "ENG") */
   projectKey: string;
 

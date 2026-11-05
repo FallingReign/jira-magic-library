@@ -42,6 +42,7 @@ import { ValidationResult, ValidationError, ValidationWarning } from './types.js
 import { NotFoundError } from '../errors/NotFoundError.js';
 import { findSystemField } from '../utils/findSystemField.js';
 import { normalizeFieldName } from '../utils/normalizeFieldName.js';
+import { SERVER_FILLED_FIELDS } from './serverFilledFields.js';
 
 type SchemaLookupErrorMeta = Omit<ValidationError, 'rowIndex'>;
 
@@ -178,9 +179,10 @@ export class ValidationService {
     const errors: ValidationError[] = [];
     const warnings: ValidationWarning[] = [];
 
-    // Check all required fields in schema
+    // Check all required fields in schema (skip fields Jira fills when blank)
     for (const fieldSchema of Object.values(schema.fields)) {
-      if (fieldSchema.required && !fieldSchema.hasDefaultValue && fieldSchema.schema.custom !== 'virtual') {
+      if (fieldSchema.required && !fieldSchema.hasDefaultValue && fieldSchema.schema.custom !== 'virtual' &&
+          !SERVER_FILLED_FIELDS.has(fieldSchema.id)) {
         const value = this.findFieldValue(row, fieldSchema);
 
         if (this.isEmptyValue(value)) {

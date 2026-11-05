@@ -36,7 +36,7 @@ During **creation**, an omitted field, `null`, `undefined`, `""`, or whitespace-
 }
 ```
 
-Blank required fields fail before submission, unless Jira metadata says the field has a default. This is creation behavior; it does not redefine how an update clears an existing field.
+Blank fields are omitted from the payload. Creation does not check required fields: Jira validates on submit and its errors are reported. Call `jml.validate()` to check required fields before creating. This is creation behavior; it does not redefine how an update clears an existing field.
 
 ## F3: Pasted descriptions
 

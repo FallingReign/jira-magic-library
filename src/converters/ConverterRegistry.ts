@@ -15,8 +15,6 @@ import { convertIssueTypeType } from './types/IssueTypeConverter.js';
 import { convertProjectType } from './types/ProjectConverter.js';
 import { convertSprintType } from './types/SprintConverter.js';
 import { isBlank } from '../utils/isBlank.js';
-import { normalizeFieldName } from '../utils/normalizeFieldName.js';
-import { ValidationError } from '../errors/ValidationError.js';
 
 /**
  * Registry for field type converters.
@@ -206,17 +204,8 @@ export class ConverterRegistry {
       registry: this,
     };
 
-    if (context.operation === 'create') {
-      for (const field of Object.values(schema.fields)) {
-        const deferred = context.deferredRequiredFields?.some(name =>
-          normalizeFieldName(name) === normalizeFieldName(field.name) || normalizeFieldName(name) === normalizeFieldName(field.id));
-        if (field.required && !field.hasDefaultValue && field.schema.custom !== 'virtual' && !deferred &&
-            (isBlank(resolvedFields[field.id]) || (Array.isArray(resolvedFields[field.id]) && (resolvedFields[field.id] as unknown[]).length === 0))) {
-          throw new ValidationError(`Required field "${field.name}" is missing or empty`, { field: field.id });
-        }
-      }
-    }
-
+    // Creation never checks required fields: Jira validates on submit, and
+    // jml.validate() is the only place JML reports missing required fields.
     for (const [fieldId, value] of Object.entries(resolvedFields)) {
       // Skip null/undefined fields
       if (value === null || value === undefined || (context.operation === 'create' && isBlank(value))) {
@@ -235,9 +224,6 @@ export class ConverterRegistry {
       const result = await this.convert(value, fieldSchema, contextWithRegistry);
       if (context.operation === 'create' && fieldSchema.type === 'timetracking' &&
           typeof result === 'object' && result !== null && Object.keys(result).length === 0) {
-        if (fieldSchema.required && !fieldSchema.hasDefaultValue) {
-          throw new ValidationError(`Required field "${fieldSchema.name}" is missing or empty`, { field: fieldId });
-        }
         continue;
       }
       converted[fieldId] = result;

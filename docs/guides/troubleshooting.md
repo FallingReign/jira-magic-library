@@ -2,7 +2,7 @@
 
 ## Schema / Validation
 - **INVALID_PROJECT / INVALID_ISSUE_TYPE**: The project or issue type doesn’t exist in your JIRA instance. Fix the payload or pick a valid issue type (see the error’s `availableTypes` context).
-- **REQUIRED_FIELD_MISSING**: Summary or other required fields are empty/undefined. Provide a value or remove the row.
+- **REQUIRED_FIELD_MISSING** (from `jml.validate()` only): Summary or other required fields are empty/undefined. Provide a value or remove the row. A blank Reporter is not reported because Jira uses the submitting user.
 - **INVALID_TYPE**: Value doesn’t match schema (string/number/array/user/project). Correct the type or adjust parsing.
 - **INVALID_ENUM_VALUE**: Value not in allowed options. Use one of the allowed values listed in the error.
 - **Warnings (UNKNOWN_FIELD)**: Non-blocking; field will be ignored. Rename/remove if unintended.

@@ -38,8 +38,8 @@ describe('creation field contract', () => {
     expect(result).toEqual({ summary: 'Test' });
   });
 
-  it.each([null, undefined, '', ' \t '])('rejects blank required values (%p)', async summary => {
-    await expect(new ConverterRegistry().convertFields(schema, { summary }, context)).rejects.toThrow('Summary');
+  it.each([null, undefined, '', ' \t '])('omits blank required values and leaves validation to Jira (%p)', async summary => {
+    expect(await new ConverterRegistry().convertFields(schema, { summary }, context)).toEqual({});
   });
 
   it('does not consider zero or false blank', async () => {
@@ -62,16 +62,21 @@ describe('required fields and Jira defaults during creation', () => {
     const defaulted = { ...schema, fields: { ...fields, defaulted: { ...field('defaulted', 'Defaulted', 'string', true), hasDefaultValue: true } } };
     expect(await new ConverterRegistry().convertFields(defaulted, { summary: 'Test', defaulted: '' }, context)).toEqual({ summary: 'Test' });
   });
-  it('rejects an empty required collection', async () => {
-    const required = { ...schema, fields: { ...fields, tags: field('tags', 'Tags', 'array', true) } };
-    await expect(new ConverterRegistry().convertFields(required, { summary: 'Test', tags: [] }, context)).rejects.toThrow('Tags');
+  it('does not check missing required fields during creation', async () => {
+    const required = { ...schema, fields: { ...fields, reporter: field('reporter', 'Reporter', 'user', true) } };
+    expect(await new ConverterRegistry().convertFields(required, { summary: 'Test', reporter: '' }, context)).toEqual({ summary: 'Test' });
+    expect(await new ConverterRegistry().convertFields(required, { summary: 'Test' }, context)).toEqual({ summary: 'Test' });
+  });
+  it('passes an empty required collection to Jira unchanged', async () => {
+    const required = { ...schema, fields: { ...fields, tags: { ...field('tags', 'Tags', 'array', true), schema: { type: 'array', items: 'string' } } } };
+    expect(await new ConverterRegistry().convertFields(required, { summary: 'Test', tags: [] }, context)).toEqual({ summary: 'Test', tags: [] });
   });
   it.each([{}, { originalEstimate: '', remainingEstimate: null }, { originalEstimate: undefined }])('omits an empty optional time-tracking object %p', async timetracking => {
     expect(await new ConverterRegistry().convertFields(schema, { summary: 'Test', timetracking }, context)).toEqual({ summary: 'Test' });
   });
-  it('rejects an empty required time-tracking object', async () => {
+  it('omits an empty required time-tracking object', async () => {
     const required = { ...schema, fields: { ...fields, timetracking: { ...fields.timetracking, required: true } } };
-    await expect(new ConverterRegistry().convertFields(required, { summary: 'Test', timetracking: {} }, context)).rejects.toThrow('Time Tracking');
+    expect(await new ConverterRegistry().convertFields(required, { summary: 'Test', timetracking: {} }, context)).toEqual({ summary: 'Test' });
   });
   it.each([['2h', '2h'], [0, '0m']])('combines scalar original estimate %p with a virtual remaining estimate', async (original, expected) => {
     const resolver = new FieldResolver({ getFieldsForIssueType: async () => schema } as any);
