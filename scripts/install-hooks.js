@@ -2,7 +2,7 @@
 /**
  * Install Git Hooks Script
  * 
- * Installs pre-commit hook for workflow validation and PII detection.
+ * Installs the PII-detection pre-commit hook.
  * 
  * Run: npm run install:hooks
  */
@@ -52,16 +52,7 @@ try {
   }
   
   console.log('✅ Pre-commit hook installed successfully!\n');
-  console.log('What happens now:');
-  console.log('  • Validation runs automatically before each commit');
-  console.log('  • Only runs if story/backlog files changed');
-  console.log('  • Shows warnings but lets you choose to continue or abort');
-  console.log('  • Takes ~1 second to run\n');
-  console.log('Test it:');
-  console.log('  1. Make a change to docs/backlog.md');
-  console.log('  2. git add docs/backlog.md');
-  console.log('  3. git commit -m "test"');
-  console.log('  4. You should see validation output\n');
+  console.log('PII detection now runs before each commit and blocks commits that contain PII.\n');
   
 } catch (err) {
   console.error('❌ Error installing hook:', err.message);
