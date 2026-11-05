@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
-## [Unreleased]
+## [3.0.2] - 2026-11-06
 
 ### Fixed
 - **Direct submission** — Creation (single, bulk, hierarchy and `validate: true` dry runs) no longer checks required fields. Blank values are still omitted, and Jira's own errors are reported. Required-field checks happen only in `jml.validate()`.
