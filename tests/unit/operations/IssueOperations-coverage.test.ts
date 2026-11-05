@@ -106,6 +106,25 @@ describe('IssueOperations coverage paths', () => {
     expect(result.failed).toBe(0);
   });
 
+  it('should persist unconfirmed rows separately from retryable failures', async () => {
+    (issueOps as any).bulkApiWrapper.createBulk.mockResolvedValueOnce({
+      created: [],
+      failed: [{ index: 1, status: 400, errors: { summary: 'Rejected' } }],
+      notConfirmed: [0],
+      unmatchedKeys: ['ENG-999'],
+    });
+
+    const result = await issueOps.create([
+      { Project: 'ENG', 'Issue Type': 'Bug', Summary: 'Unknown result' },
+      { Project: 'ENG', 'Issue Type': 'Bug', Summary: 'Rejected row' },
+    ]) as any;
+
+    expect(result.manifest.failed).toEqual([1]);
+    expect(result.manifest.notConfirmed).toEqual([0]);
+    expect(result.results.map((row: any) => row.outcome)).toEqual(['failed', 'not_confirmed']);
+    expect(result.unmatchedKeys).toEqual(['ENG-999']);
+  });
+
   it('should use preprocessed level data when hierarchy is detected with a single level', async () => {
     (preprocessHierarchyRecords as jest.Mock).mockResolvedValueOnce({
       hasHierarchy: true,

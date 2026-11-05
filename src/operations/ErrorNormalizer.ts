@@ -5,6 +5,8 @@
  * structure for user-facing error reporting.
  */
 
+import { mapBulkResponseRows } from './bulk/BulkRowMapper.js';
+
 export interface NormalizedError {
   rowIndex: number;
   field?: string;
@@ -150,58 +152,41 @@ export class ErrorNormalizer {
   normalizeBulk(response: BulkApiResponse, rowCount: number): NormalizedBulkResult {
     const successes: NormalizedBulkResult['successes'] = [];
     const errors: NormalizedError[] = [];
+    const mapped = mapBulkResponseRows(response, rowCount);
 
-    // Process successful issues
-    if (response.issues && Array.isArray(response.issues)) {
-      response.issues.forEach((issue, index) => {
-        const issueObj = issue as Record<string, unknown>;
-        const issueErrors = issueObj.errors as Record<string, string> | undefined;
-        if (issueErrors && Object.keys(issueErrors).length > 0) {
-          // This issue failed (Cloud per-issue error)
-          for (const [field, message] of Object.entries(issueErrors)) {
-            const parsed = this.parseFieldError(field, message);
-            errors.push({ rowIndex: index, ...parsed });
-          }
-        } else if (typeof issueObj.key === 'string' && issueObj.key) {
-          // Success
-          successes.push({
-            rowIndex: index,
-            issueKey: issueObj.key,
-            issueUrl: `${this.baseUrl}/browse/${issueObj.key}`,
-          });
-        }
-      });
-    }
+    for (const row of mapped.rows) {
+      if (row.outcome === 'created' && row.issue?.key) {
+        successes.push({
+          rowIndex: row.index,
+          issueKey: row.issue.key,
+          issueUrl: `${this.baseUrl}/browse/${row.issue.key}`,
+        });
+        continue;
+      }
 
-    // Process error entries (Server format and Cloud fallback)
-    if (response.errors && Array.isArray(response.errors)) {
-      for (const errorEntry of response.errors) {
-        const rowIndex = errorEntry.failedElementNumber;
-        const fieldErrors = errorEntry.elementErrors?.errors || {};
-        const errorMessages = errorEntry.elementErrors?.errorMessages || [];
+      const fieldErrors = row.failure?.elementErrors?.errors ?? row.issue?.errors ?? {};
+      const errorMessages = row.failure?.elementErrors?.errorMessages ?? row.issue?.errorMessages ?? [];
+      for (const [field, message] of Object.entries(fieldErrors)) {
+        const parsed = this.parseFieldError(field, message);
+        errors.push({ rowIndex: row.index, ...parsed });
+      }
+      for (const msg of errorMessages) {
+        errors.push({
+          rowIndex: row.index,
+          code: this.classifyMessage(msg),
+          message: msg,
+          jiraMessage: msg,
+        });
+      }
 
-        for (const [field, message] of Object.entries(fieldErrors)) {
-          const parsed = this.parseFieldError(field, message);
-          errors.push({ rowIndex, ...parsed });
-        }
-
-        for (const msg of errorMessages) {
-          errors.push({
-            rowIndex,
-            code: this.classifyMessage(msg),
-            message: msg,
-            jiraMessage: msg,
-          });
-        }
-
-        // If no specific errors parsed, add generic one
-        if (Object.keys(fieldErrors).length === 0 && errorMessages.length === 0) {
-          errors.push({
-            rowIndex,
-            code: 'SERVER_ERROR',
-            message: `Issue creation failed with status ${errorEntry.status}`,
-          });
-        }
+      if (Object.keys(fieldErrors).length === 0 && errorMessages.length === 0) {
+        errors.push({
+          rowIndex: row.index,
+          code: 'SERVER_ERROR',
+          message: row.outcome === 'not_confirmed'
+            ? 'Jira did not confirm whether this issue was created'
+            : `Issue creation failed with status ${row.failure?.status ?? 0}`,
+        });
       }
     }
 

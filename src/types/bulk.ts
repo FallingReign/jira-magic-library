@@ -45,6 +45,9 @@ export interface BulkManifest {
   
   /** Array of row indices that failed */
   failed: number[];
+
+  /** Rows whose create outcome could not be safely matched to the response */
+  notConfirmed?: number[];
   
   /** Map of row index to created issue key */
   created: Record<number, string>;
@@ -93,6 +96,8 @@ export interface BulkResult {
     index: number;
     /** Whether creation succeeded */
     success: boolean;
+    /** Confirmed outcome for this row */
+    outcome?: 'created' | 'failed' | 'not_confirmed';
     /** Issue key if succeeded */
     key?: string;
     /** Error details if failed */
@@ -100,7 +105,12 @@ export interface BulkResult {
       status: number;
       errors: Record<string, string>;
     };
+    /** Present when the row was not submitted because its parent was not confirmed */
+    blocked?: boolean;
   }>;
+
+  /** Created Jira keys that could not be matched to request rows */
+  unmatchedKeys?: string[];
 }
 
 /**
@@ -146,4 +156,10 @@ export interface BulkApiResult {
     /** Field-level errors (field name → error message) */
     errors: Record<string, string>;
   }>;
+
+  /** Request rows whose outcomes could not be safely matched to the response */
+  notConfirmed?: number[];
+
+  /** Created Jira keys that could not be matched to request rows */
+  unmatchedKeys?: string[];
 }

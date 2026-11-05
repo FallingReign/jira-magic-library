@@ -9,6 +9,7 @@
 import type { JiraClient } from '../client/JiraClient.js';
 import type { BulkApiResult } from '../types/bulk.js';
 import { ValidationError } from '../errors/ValidationError.js';
+import { mapBulkResponseRows } from './bulk/BulkRowMapper.js';
 
 /**
  * JIRA bulk API response structure (tested format)
@@ -122,13 +123,13 @@ export class JiraBulkApiWrapper {
       );
 
       // Normalize response to BulkApiResult
-      return this.normalizeResponse(response);
+      return this.normalizeResponse(response, payloads.length);
     } catch (error) {
       // Handle HTTP 400 (full failure) - JIRA returns structured response in error
       if (error instanceof ValidationError && error.jiraResponse) {
         // Extract bulk API response from error (HTTP 400 is valid for bulk API)
         const bulkResponse = error.jiraResponse as JiraBulkApiResponse;
-        return this.normalizeResponse(bulkResponse);
+        return this.normalizeResponse(bulkResponse, payloads.length);
       }
       // Re-throw other errors (network, auth, etc.)
       throw error;
@@ -148,33 +149,33 @@ export class JiraBulkApiWrapper {
    * @returns Normalized BulkApiResult
    * @private
    */
-  private normalizeResponse(response: JiraBulkApiResponse): BulkApiResult {
+  private normalizeResponse(response: JiraBulkApiResponse, rowCount: number): BulkApiResult {
     const created: BulkApiResult['created'] = [];
     const failed: BulkApiResult['failed'] = [];
+    const mapped = mapBulkResponseRows(response, rowCount);
+    const notConfirmed: number[] = [];
 
-    // Process successful creations
-    if (response.issues) {
-      response.issues.forEach((issue, index) => {
+    for (const row of mapped.rows) {
+      if (row.outcome === 'created' && row.issue?.key) {
         created.push({
-          index,
-          key: issue.key,
-          id: issue.id,
-          self: issue.self,
+          index: row.index,
+          key: row.issue.key,
+          id: row.issue.id ?? '',
+          self: row.issue.self ?? '',
         });
-      });
-    }
-
-    // Process failures
-    if (response.errors) {
-      response.errors.forEach((error) => {
+      } else if (row.outcome === 'failed' && row.failure) {
         failed.push({
-          index: error.failedElementNumber,
-          status: error.status,
-          errors: error.elementErrors.errors,
+          index: row.index,
+          status: row.failure.status,
+          errors: row.failure.elementErrors?.errors ?? {},
         });
-      });
+      } else if (row.outcome === 'not_confirmed') {
+        notConfirmed.push(row.index);
+      }
     }
 
-    return { created, failed };
+    return mapped.invariantFailed
+      ? { created, failed, notConfirmed, unmatchedKeys: mapped.unmatchedKeys ?? [] }
+      : { created, failed };
   }
 }

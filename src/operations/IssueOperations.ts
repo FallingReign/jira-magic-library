@@ -420,8 +420,13 @@ export class IssueOperations implements IssuesAPI {
       console.warn(`⚠️  Manifest is older than 24 hours (${ageHours.toFixed(1)}h old). Data may be stale.`);
     }
 
-    // If no failures remain, return current state immediately
-    if (manifest.failed.length === 0) {
+    const failedRowIndices = manifest.failed.filter(index =>
+      !manifest.succeeded.includes(index) &&
+      !manifest.notConfirmed?.includes(index)
+    );
+
+    // If no confirmed failures remain, return current state immediately
+    if (failedRowIndices.length === 0) {
       // Build results array from manifest
       const results = [];
       for (let i = 0; i < manifest.total; i++) {
@@ -429,15 +434,21 @@ export class IssueOperations implements IssuesAPI {
           results.push({
             index: i,
             success: true as const,
+            outcome: 'created' as const,
             key: manifest.created[i]
           });
+        } else if (manifest.notConfirmed?.includes(i)) {
+          results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
         }
       }
       
       return {
         total: manifest.total,
         succeeded: manifest.succeeded.length,
-        failed: 0,
+        failed: manifest.failed.filter(index =>
+          !manifest.succeeded.includes(index) &&
+          !manifest.notConfirmed?.includes(index)
+        ).length + (manifest.notConfirmed?.length ?? 0),
         manifest,
         results
       };
@@ -458,8 +469,16 @@ export class IssueOperations implements IssuesAPI {
     inputArray = inputArray.map(record => this.normalizeInput(record) as Record<string, unknown>);
     this.rejectBulkAttachments(inputArray);
 
+    const allUidIndices: Record<string, number> = {};
+    inputArray.forEach((record, index) => {
+      const uid = record.uid;
+      if (typeof uid === 'string' || typeof uid === 'number') {
+        const normalizedUid = String(uid).trim();
+        if (normalizedUid) allUidIndices[normalizedUid] = index;
+      }
+    });
+
     // Filter to only include rows that previously failed
-    const failedRowIndices = manifest.failed;
     const filteredInput = inputArray.filter((_, index) => {
       return failedRowIndices.includes(index);
     });
@@ -467,14 +486,18 @@ export class IssueOperations implements IssuesAPI {
     // eslint-disable-next-line no-console
     console.log(`🔄 Retrying ${filteredInput.length} failed rows from manifest ${manifestId}`);
 
-    // E4-S13 AC8: Check if this was a hierarchy operation
-    // If uidMap exists, route to hierarchy-aware retry
-    if (manifest.uidMap && Object.keys(manifest.uidMap).length > 0) {
+    // Keep hierarchy-aware blocking even when no parent was confirmed during
+    // the original attempt and the manifest therefore has no UID→key entries.
+    if (
+      Object.keys(allUidIndices).length > 0 ||
+      Object.keys(manifest.uidMap ?? {}).length > 0
+    ) {
       return this.retryWithHierarchy(
         filteredInput,
         failedRowIndices,
         manifest,
-        _options // Pass options for progress tracking
+        _options, // Pass options for progress tracking
+        allUidIndices
       );
     }
 
@@ -545,6 +568,14 @@ export class IssueOperations implements IssuesAPI {
       }
       return { ...item, index: originalIndex };
     });
+    const remappedNotConfirmed = (apiResult.notConfirmed ?? []).map(apiIndex => {
+      const filteredIndex = validPayloads[apiIndex]?.index ?? apiIndex;
+      const originalIndex = failedRowIndices[filteredIndex];
+      if (originalIndex === undefined) {
+        throw new Error(`Failed to map filtered index ${filteredIndex} to original index`);
+      }
+      return originalIndex;
+    });
 
     // Remap validation errors to original indices
     const remappedValidationErrors = validationErrors.map(({ index: filteredIndex, error }) => {
@@ -562,6 +593,7 @@ export class IssueOperations implements IssuesAPI {
       total: manifest.total,
       succeeded: [...manifest.succeeded],
       failed: [...manifest.failed],
+      ...(manifest.notConfirmed?.length ? { notConfirmed: [...manifest.notConfirmed] } : {}),
       created: { ...manifest.created },
       errors: { ...manifest.errors }
     };
@@ -590,6 +622,13 @@ export class IssueOperations implements IssuesAPI {
       updatedManifest.errors[item.index] = { status: item.status, errors: item.errors };
     });
 
+    remappedNotConfirmed.forEach(index => {
+      updatedManifest.failed = updatedManifest.failed.filter(failedIndex => failedIndex !== index);
+      updatedManifest.notConfirmed ??= [];
+      if (!updatedManifest.notConfirmed.includes(index)) updatedManifest.notConfirmed.push(index);
+      delete updatedManifest.errors[index];
+    });
+
     // Update with validation failures
     remappedValidationErrors.forEach(({ index, error }) => {
       updatedManifest.errors[index] = {
@@ -608,6 +647,7 @@ export class IssueOperations implements IssuesAPI {
         results.push({
           index: i,
           success: true as const,
+          outcome: 'created' as const,
           key: updatedManifest.created[i]
         });
       } else if (updatedManifest.failed.includes(i)) {
@@ -616,9 +656,12 @@ export class IssueOperations implements IssuesAPI {
           results.push({
             index: i,
             success: false as const,
-            error: { status: error.status, errors: error.errors }
+            outcome: 'failed' as const,
+            error: { status: error.status, errors: error.errors },
           });
         }
+      } else if (updatedManifest.notConfirmed?.includes(i)) {
+        results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
       }
     }
 
@@ -626,9 +669,10 @@ export class IssueOperations implements IssuesAPI {
     return {
       total: updatedManifest.total,
       succeeded: updatedManifest.succeeded.length,
-      failed: updatedManifest.failed.length,
+      failed: updatedManifest.failed.length + (updatedManifest.notConfirmed?.length ?? 0),
       manifest: updatedManifest,
-      results
+      results,
+      ...(apiResult.unmatchedKeys ? { unmatchedKeys: apiResult.unmatchedKeys } : {}),
     };
   }
 
@@ -954,6 +998,9 @@ export class IssueOperations implements IssuesAPI {
       ...item,
       index: indexMapping.get(item.index) ?? item.index
     }));
+    const remappedNotConfirmed = (apiResult.notConfirmed ?? []).map(index =>
+      validPayloads[index]!.index
+    );
 
     // Stop progress tracking after API call (Phase 2.2)
     if (progressTracker) {
@@ -994,6 +1041,7 @@ export class IssueOperations implements IssuesAPI {
       total: recordsToProcess.length,
       succeeded: remappedCreated.map(item => item.index),
       failed: [...remappedFailed.map(item => item.index), ...validationErrors.map(ve => ve.index)],
+      ...(remappedNotConfirmed.length > 0 ? { notConfirmed: remappedNotConfirmed } : {}),
       created: createdMap,
       errors: errorsMap,
     };
@@ -1014,27 +1062,36 @@ export class IssueOperations implements IssuesAPI {
       manifest,
       total: recordsToProcess.length,
       succeeded: remappedCreated.length,
-      failed: remappedFailed.length + validationErrors.length,
+      failed: remappedFailed.length + validationErrors.length + remappedNotConfirmed.length,
       results: [
         // Successfully created issues (with remapped indices)
         ...remappedCreated.map(item => ({
           index: item.index,
           success: true as const,
+          outcome: 'created' as const,
           key: item.key,
         })),
         // API-level failures (with remapped indices)
         ...remappedFailed.map(item => ({
           index: item.index,
           success: false as const,
+          outcome: 'failed' as const,
           error: { status: item.status, errors: item.errors },
         })),
         // Validation failures (before API call)
         ...validationErrors.map(({ index, error }) => ({
           index,
           success: false as const,
+          outcome: 'failed' as const,
           error: { status: 400, errors: { validation: error.message } },
         })),
+        ...remappedNotConfirmed.map(index => ({
+          index,
+          success: false as const,
+          outcome: 'not_confirmed' as const,
+        })),
       ],
+      ...(apiResult.unmatchedKeys ? { unmatchedKeys: apiResult.unmatchedKeys } : {}),
     };
   }
 
@@ -1061,17 +1118,18 @@ export class IssueOperations implements IssuesAPI {
     filteredInput: Array<Record<string, unknown>>,
     failedRowIndices: number[],
     manifest: BulkManifest,
-    options?: IssuesCreateOptions
+    options?: IssuesCreateOptions,
+    allUidIndices?: Record<string, number>
   ): Promise<BulkResult> {
     // Preprocess failed records to rebuild hierarchy
     const preprocessResult = await preprocessHierarchyRecords(filteredInput);
     
     // If no hierarchy in retry set, fall back to flat bulk
-    if (!preprocessResult.hasHierarchy || preprocessResult.levels.length <= 1) {
+    if (!preprocessResult.hasHierarchy) {
       // Use flat bulk retry by calling createBulkHierarchy with single level
       // and existing mappings for UID resolution
       const uidReplacer = new UidReplacer();
-      uidReplacer.loadExistingMappings(manifest.uidMap || {});
+      uidReplacer.loadExistingMappings(manifest.uidMap!);
       
       // Replace UIDs in records before processing
       const recordsWithReplacedUids = filteredInput.map(record => {
@@ -1140,7 +1198,7 @@ export class IssueOperations implements IssuesAPI {
     // Multi-level hierarchy retry: call createBulkHierarchy with existing mappings
     const hierarchyResult = await this.createBulkHierarchy(
       preprocessResult.levels,
-      preprocessResult.uidMap,
+      { ...allUidIndices, ...preprocessResult.uidMap },
       manifest.uidMap, // Pass existing UID→Key mappings
       options // options for progress tracking
     );
@@ -1153,6 +1211,7 @@ export class IssueOperations implements IssuesAPI {
       total: manifest.total,
       succeeded: [...manifest.succeeded],
       failed: [...manifest.failed],
+      ...(manifest.notConfirmed?.length ? { notConfirmed: [...manifest.notConfirmed] } : {}),
       created: { ...manifest.created },
       errors: { ...manifest.errors },
       uidMap: { ...manifest.uidMap, ...hierarchyResult.manifest.uidMap }, // Merge UID maps
@@ -1178,8 +1237,16 @@ export class IssueOperations implements IssuesAPI {
         // Remove error
         delete updatedManifest.errors[originalIndex];
       } else {
-        // Update error
-        updatedManifest.errors[originalIndex] = result.error!;
+        if (result.outcome === 'not_confirmed') {
+          updatedManifest.failed = updatedManifest.failed.filter(index => index !== originalIndex);
+          updatedManifest.notConfirmed ??= [];
+          if (!updatedManifest.notConfirmed.includes(originalIndex)) {
+            updatedManifest.notConfirmed.push(originalIndex);
+          }
+          delete updatedManifest.errors[originalIndex];
+        } else {
+          updatedManifest.errors[originalIndex] = result.error!;
+        }
       }
     });
 
@@ -1193,6 +1260,7 @@ export class IssueOperations implements IssuesAPI {
         results.push({
           index: i,
           success: true as const,
+          outcome: 'created' as const,
           key: updatedManifest.created[i]
         });
       } else if (updatedManifest.failed.includes(i)) {
@@ -1201,18 +1269,23 @@ export class IssueOperations implements IssuesAPI {
           results.push({
             index: i,
             success: false as const,
-            error: { status: error.status, errors: error.errors }
+            outcome: 'failed' as const,
+            error: { status: error.status, errors: error.errors },
+            ...(error.errors.validation?.startsWith('Blocked:') ? { blocked: true as const } : {}),
           });
         }
+      } else if (updatedManifest.notConfirmed?.includes(i)) {
+        results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
       }
     }
 
     return {
       total: updatedManifest.total,
       succeeded: updatedManifest.succeeded.length,
-      failed: updatedManifest.failed.length,
+      failed: updatedManifest.failed.length + (updatedManifest.notConfirmed?.length ?? 0),
       manifest: updatedManifest,
-      results
+      results,
+      ...(hierarchyResult.unmatchedKeys ? { unmatchedKeys: hierarchyResult.unmatchedKeys } : {}),
     };
   }
 
@@ -1222,7 +1295,12 @@ export class IssueOperations implements IssuesAPI {
    * @private
    */
   private async mergeRetryResultsIntoManifest(
-    apiResult: { created: Array<{ index: number; key: string }>; failed: Array<{ index: number; status: number; errors: Record<string, string> }> },
+    apiResult: {
+      created: Array<{ index: number; key: string }>;
+      failed: Array<{ index: number; status: number; errors: Record<string, string> }>;
+      notConfirmed?: number[];
+      unmatchedKeys?: string[];
+    },
     validPayloads: Array<{ index: number; payload: { fields: Record<string, unknown> }; uid?: string }>,
     validationErrors: Array<{ index: number; error: Error }>,
     failedRowIndices: number[],
@@ -1235,6 +1313,7 @@ export class IssueOperations implements IssuesAPI {
       total: manifest.total,
       succeeded: [...manifest.succeeded],
       failed: [...manifest.failed],
+      ...(manifest.notConfirmed?.length ? { notConfirmed: [...manifest.notConfirmed] } : {}),
       created: { ...manifest.created },
       errors: { ...manifest.errors },
       uidMap: { ...manifest.uidMap },
@@ -1277,6 +1356,19 @@ export class IssueOperations implements IssuesAPI {
       updatedManifest.errors[originalIndex] = { status: item.status, errors: item.errors };
     });
 
+    (apiResult.notConfirmed ?? []).forEach(filteredIndex => {
+      const validPayload = validPayloads[filteredIndex];
+      if (!validPayload) return;
+      const originalIndex = failedRowIndices[validPayload.index];
+      if (originalIndex === undefined) return;
+      updatedManifest.failed = updatedManifest.failed.filter(index => index !== originalIndex);
+      updatedManifest.notConfirmed ??= [];
+      if (!updatedManifest.notConfirmed.includes(originalIndex)) {
+        updatedManifest.notConfirmed.push(originalIndex);
+      }
+      delete updatedManifest.errors[originalIndex];
+    });
+
     // Process validation errors
     validationErrors.forEach(({ index: filteredIndex, error }) => {
       const originalIndex = failedRowIndices[filteredIndex];
@@ -1301,6 +1393,7 @@ export class IssueOperations implements IssuesAPI {
         results.push({
           index: i,
           success: true as const,
+          outcome: 'created' as const,
           key: updatedManifest.created[i]
         });
       } else if (updatedManifest.failed.includes(i)) {
@@ -1309,17 +1402,21 @@ export class IssueOperations implements IssuesAPI {
           results.push({
             index: i,
             success: false as const,
+            outcome: 'failed' as const,
             error: { status: error.status, errors: error.errors }
           });
         }
+      } else if (updatedManifest.notConfirmed?.includes(i)) {
+        results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
       }
     }
 
     return {
       total: updatedManifest.total,
       succeeded: updatedManifest.succeeded.length,
-      failed: updatedManifest.failed.length,
+      failed: updatedManifest.failed.length + (updatedManifest.notConfirmed?.length ?? 0),
       manifest: updatedManifest,
+      ...(apiResult.unmatchedKeys ? { unmatchedKeys: apiResult.unmatchedKeys } : {}),
       results
     };
   }
@@ -1383,7 +1480,10 @@ export class IssueOperations implements IssuesAPI {
     // Track all results across levels
     const allCreated: Array<{ index: number; key: string }> = [];
     const allFailed: Array<{ index: number; status: number; errors: Record<string, string> }> = [];
-    const allValidationErrors: Array<{ index: number; error: Error }> = [];
+    const allValidationErrors: Array<{ index: number; error: Error; blocked?: boolean }> = [];
+    const allNotConfirmed: number[] = [];
+    const unmatchedKeys: string[] = [];
+    let hasUnmatchedKeys = false;
     let totalIssues = 0;
 
     // Process each level sequentially
@@ -1394,6 +1494,24 @@ export class IssueOperations implements IssuesAPI {
       const payloadResults = await Promise.allSettled(
         level.issues.map(async (issue) => {
           try {
+            const parent = issue.record.Parent;
+            const parentUid = typeof parent === 'string' || typeof parent === 'number'
+              ? String(parent)
+              : undefined;
+            if (
+              parentUid &&
+              _uidMap &&
+              Object.prototype.hasOwnProperty.call(_uidMap, parentUid) &&
+              !uidReplacer.getKey(parentUid)
+            ) {
+              return {
+                index: issue.index,
+                success: false as const,
+                blocked: true as const,
+                error: new Error(`Blocked: parent "${parentUid}" has no confirmed created Jira key`),
+              };
+            }
+
             // Replace UIDs with actual keys from previous levels
             const recordWithReplacedUids = uidReplacer.replaceUids({ ...issue.record });
             
@@ -1432,7 +1550,11 @@ export class IssueOperations implements IssuesAPI {
               uid: value.uid,
             });
           } else {
-            allValidationErrors.push({ index: value.index, error: value.error });
+            allValidationErrors.push({
+              index: value.index,
+              error: value.error,
+              ...(value.blocked ? { blocked: true } : {}),
+            });
           }
         } else {
           // Promise rejection (shouldn't happen with try/catch)
@@ -1523,6 +1645,15 @@ export class IssueOperations implements IssuesAPI {
           });
         }
       });
+
+      (apiResult.notConfirmed ?? []).forEach((index) => {
+        const validPayload = validPayloads[index];
+        if (validPayload) allNotConfirmed.push(validPayload.index);
+      });
+      if (apiResult.notConfirmed) {
+        hasUnmatchedKeys = true;
+        unmatchedKeys.push(...(apiResult.unmatchedKeys ?? []));
+      }
     }
 
     // Stop progress tracking after all levels complete (Phase 2.2)
@@ -1553,6 +1684,7 @@ export class IssueOperations implements IssuesAPI {
       total: totalIssues,
       succeeded: allCreated.map(item => item.index),
       failed: [...allFailed.map(item => item.index), ...allValidationErrors.map(ve => ve.index)],
+      ...(allNotConfirmed.length > 0 ? { notConfirmed: allNotConfirmed } : {}),
       created: createdMap,
       errors: errorsMap,
       uidMap: uidReplacer.getUidMap(), // Include UID mappings for retry
@@ -1573,24 +1705,34 @@ export class IssueOperations implements IssuesAPI {
       manifest,
       total: totalIssues,
       succeeded: allCreated.length,
-      failed: allFailed.length + allValidationErrors.length,
+      failed: allFailed.length + allValidationErrors.length + allNotConfirmed.length,
       results: [
         ...allCreated.map(item => ({
           index: item.index,
           success: true as const,
+          outcome: 'created' as const,
           key: item.key,
         })),
         ...allFailed.map(item => ({
           index: item.index,
           success: false as const,
+          outcome: 'failed' as const,
           error: { status: item.status, errors: item.errors },
         })),
-        ...allValidationErrors.map(({ index, error }) => ({
+        ...allValidationErrors.map(({ index, error, blocked }) => ({
           index,
           success: false as const,
+          outcome: 'failed' as const,
           error: { status: 400, errors: { validation: error.message } },
+          ...(blocked ? { blocked: true as const } : {}),
+        })),
+        ...allNotConfirmed.map(index => ({
+          index,
+          success: false as const,
+          outcome: 'not_confirmed' as const,
         })),
       ],
+      ...(hasUnmatchedKeys ? { unmatchedKeys } : {}),
     };
   }
 

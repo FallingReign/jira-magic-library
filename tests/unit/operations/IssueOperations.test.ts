@@ -1725,6 +1725,7 @@ describe('IssueOperations', () => {
           issues: [{ id: '100', key: 'HELP-100', self: 'https://...' }],
           errors: [{ 
             status: 400, 
+            failedElementNumber: 1,
             elementErrors: { 
               errors: { project: 'Project does not exist' } 
             } 
@@ -1974,4 +1975,3 @@ describe('IssueOperations', () => {
     });
   });
 });
-

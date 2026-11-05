@@ -300,7 +300,7 @@ Based on the field's **type** (from `fieldSchema.type`), converts user values to
 
 **Lookup Types** (query JIRA for ID):
 - **`type: "priority"`**: `"High"` → Query priorities → `{id: "1"}`
-- **`type: "user"`**: `"alex@example.com"` → Query user API → `{name: "alex"}` or `{accountId: "..."}` (Server vs Cloud)
+- **`type: "user"`**: `"alex"` → Query user API → `{name: "alex"}` or `{accountId: "..."}` (Server vs Cloud)
 - **`type: "option"`**: `"Production"` → Query custom field options → `{id: "10100"}`
 
 **Array Types** (container with item type):
@@ -387,14 +387,31 @@ interface BulkResult {
   total: number;
   succeeded: number;
   failed: number;
+  unmatchedKeys?: string[];
   results: Array<{
     index: number;
     success: boolean;
+    outcome?: 'created' | 'failed' | 'not_confirmed';
     key?: string;        // JIRA issue key if created
     error?: Error;       // Error details if failed
   }>;
+  manifest: {
+    succeeded: number[];
+    failed: number[];
+    notConfirmed?: number[];
+    created: Record<number, string>;
+  };
 }
 ```
+
+Manifest retries include only confirmed failed rows; successful and
+`not_confirmed` rows are skipped. The response mapper uses Jira's zero-based
+`failedElementNumber` positions, then consumes returned successes in request
+order among non-failed rows. The ordering is a documented implementation
+assumption: Jira Cloud does not guarantee success ordering. When response
+counts, positions, or keys violate the mapping invariants, unresolved rows are
+marked `not_confirmed` and unmapped created keys are returned as
+`unmatchedKeys` rather than assigned to rows speculatively.
 
 ### 7. **CLI Interface** (Epic 7)
 **Purpose**: Command-line tool for users who prefer terminal workflows.
