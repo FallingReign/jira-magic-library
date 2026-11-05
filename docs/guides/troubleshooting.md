@@ -14,7 +14,7 @@
 ## Environment / Setup
 - **Redis required**: Provide `REDIS_URL` (e.g., `redis://localhost:6379`). For local dev: `docker run -d --name jml-redis -p 6379:6379 redis:7-alpine`.
 - **Auth failures**: Ensure `JIRA_TOKEN` (PAT) and `JIRA_BASE_URL` are set, and the PAT has project access.
-- **Coverage/lint gates**: Run `npm test -- --coverage`, `npm run lint`, and `npm run validate:workflow` before committing.
+- **Coverage/lint gates**: Run `npm test -- --coverage`, `npm run lint`, and `npm run type-check` before committing.
 - **Hanging demo spinner**: With `validate()`, spinners now stop on errors; if you see a hang, verify Redis connectivity and that project/issue type values are valid.
 
 ## Support checklist

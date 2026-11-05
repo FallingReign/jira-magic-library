@@ -20,8 +20,6 @@
     "lint": "eslint src/**/*.ts tests/**/*.ts",
     "lint:fix": "eslint src/**/*.ts tests/**/*.ts --fix",
     "type-check": "tsc --noEmit",
-    "validate:workflow": "node scripts/validate-workflow.js",
-    "archive:epic": "node scripts/archive-epic.js",
     "install:hooks": "node scripts/install-hooks.js",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
