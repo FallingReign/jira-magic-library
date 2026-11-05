@@ -335,7 +335,7 @@ export class IssueOperations implements IssuesAPI {
             delete record[field];
           }
         }
-        const prepared = await this.createSingle(record, { ...options, validate: true }, dependencies.map(dependency => dependency.field));
+        const prepared = await this.createSingle(record, { ...options, validate: true });
         results.push({ index, valid: true, payload: { fields: prepared.fields! }, dependencies });
       } catch (error) {
         results.push({ index, valid: false, error: error instanceof Error ? error.message : String(error), dependencies });
@@ -725,8 +725,7 @@ export class IssueOperations implements IssuesAPI {
    */
   private async createSingle(
     input: Record<string, unknown>,
-    options?: IssuesCreateOptions,
-    deferredRequiredFields?: string[]
+    options?: IssuesCreateOptions
   ): Promise<Issue> {
     // Strip library-internal fields that shouldn't go to JIRA
     // uid is used for hierarchy tracking in bulk operations
@@ -750,7 +749,6 @@ export class IssueOperations implements IssuesAPI {
     const convertedFields = await prepareIssueFields(
       cleanInput, this.schema, this.resolver, this.converter,
       { 
-        deferredRequiredFields,
         baseUrl: this.baseUrl, 
         cache: this.cache,
         cacheClient: this.cache as unknown as GenericCache, // RedisCache implements both LookupCache and GenericCache

@@ -135,12 +135,25 @@ describe('creation and preview use the same preparation', () => {
     expect(result.results[0]).toMatchObject({ index: 1, valid: false, error: expect.stringContaining('missing') });
     expect(client.post).not.toHaveBeenCalled();
   });
-  it('rejects invalid required fields equally in preview and validation', async () => {
-    const { ops, client } = fixture();
-    const input = { ...record, Summary: '' };
-    expect(await ops.preview(input)).toMatchObject({ valid: false, payload: { fields: {} } });
-    await expect(ops.create(input, { validate: true })).rejects.toThrow('Summary');
+  it('submits blank required fields directly and reports the Jira error', async () => {
+    const { ops, client, projectSchema } = fixture();
+    projectSchema.fields.reporter = { id: 'reporter', name: 'Reporter', type: 'user', required: true, schema: { type: 'user', system: 'reporter' } };
+    const input = { ...record, Summary: '', Reporter: '' };
+    expect(await ops.preview(input)).toMatchObject({ valid: true, payload: { fields: { project: { key: 'TEST' } } } });
+    expect((await ops.create(input, { validate: true }) as any).fields).not.toHaveProperty('summary');
     expect(client.post).not.toHaveBeenCalled();
+    client.post.mockRejectedValueOnce(new Error('summary: You must specify a summary of the issue.'));
+    await expect(ops.create(input)).rejects.toThrow('You must specify a summary');
+    const [, payload] = client.post.mock.calls[0]!;
+    expect(payload.fields).not.toHaveProperty('summary');
+    expect(payload.fields).not.toHaveProperty('reporter');
+  });
+  it('creates with a blank required Reporter without a JML error', async () => {
+    const { ops, client, projectSchema } = fixture();
+    projectSchema.fields.reporter = { id: 'reporter', name: 'Reporter', type: 'user', required: true, schema: { type: 'user', system: 'reporter' } };
+    client.post.mockResolvedValueOnce({ key: 'TEST-1', id: '1', self: '' });
+    await expect(ops.create({ ...record, Reporter: '' })).resolves.toMatchObject({ key: 'TEST-1' });
+    expect(client.post.mock.calls[0]![1].fields).not.toHaveProperty('reporter');
   });
 });
 

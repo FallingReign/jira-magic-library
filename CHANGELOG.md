@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [Unreleased]
+
+### Fixed
+- **Direct submission** — Creation (single, bulk, hierarchy and `validate: true` dry runs) no longer checks required fields. Blank values are still omitted, and Jira's own errors are reported. Required-field checks happen only in `jml.validate()`.
+- **Blank Reporter** — `jml.validate()` no longer reports a blank Reporter as missing; Jira uses the submitting user. Fields like this are listed in `src/validation/serverFilledFields.ts`.
+
 ## [3.0.1] - 2026-11-05
 
 ### Fixed

@@ -36,10 +36,10 @@ const result = await jml.validate({ from: './issues.csv' });
 
 ## Interpreting errors
 - `INVALID_PROJECT` / `INVALID_ISSUE_TYPE`: The project/issue type doesn’t exist in your instance.
-- `REQUIRED_FIELD_MISSING`: Schema required field is null/empty/missing.
+- `REQUIRED_FIELD_MISSING`: Schema required field is null/empty/missing. Fields Jira fills itself when blank (Reporter) are not reported; see `src/validation/serverFilledFields.ts`.
 - `INVALID_TYPE`: Value doesn’t match the schema type (string/number/array/user/project).
 - `INVALID_ENUM_VALUE`: Value not in allowed options.
 - `warnings`: Non-blocking issues (e.g., unknown fields), safe to ignore or warn the user.
 
 ## When to proceed to create()
-Only call `jml.issues.create()` if `result.valid === true`. This avoids API calls for bad payloads and gives users actionable feedback upfront.
+`create()` does not run these checks; it submits directly and reports Jira's errors. Call `validate()` first and only create if `result.valid === true`. This avoids API calls for bad payloads and gives users actionable feedback upfront.
