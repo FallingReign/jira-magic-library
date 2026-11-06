@@ -4,9 +4,9 @@
  * Tests the progress tracking features and search API against real JIRA:
  * - Raw JQL search API
  * - Progress tracking during bulk operations
- * - Marker injection and cleanup
+ * - Grouped bulk create (one progress update per group, no labels added)
  * - Progress callbacks with accurate counts
- * - Timeout detection via progress tracking
+ * - Progress timing metrics
  */
 
 import './setup'; // Load test config
@@ -222,7 +222,7 @@ describe('Integration: Progress Tracking & Search API', () => {
     it('should track progress during bulk creation with onProgress callback', async () => {
       if (!isJiraConfigured()) return;
 
-      console.log('   📝 Creating 10 issues with progress tracking...');
+      console.log('   📝 Creating 12 issues in groups of 10 with progress tracking...');
 
       const progressUpdates: Array<{
         completed: number;
@@ -231,10 +231,10 @@ describe('Integration: Progress Tracking & Search API', () => {
       }> = [];
 
       const timestamp = new Date().toISOString();
-      const issues = Array.from({ length: 10 }, (_, i) => ({
+      const issues = Array.from({ length: 12 }, (_, i) => ({
         Project: PROJECT_KEY,
         'Issue Type': 'Task',
-        Summary: `Progress Test ${i + 1}/10 ${timestamp}`
+        Summary: `Progress Test ${i + 1}/12 ${timestamp}`
       }));
 
       const result = await jml.issues.create(issues, {
@@ -258,40 +258,23 @@ describe('Integration: Progress Tracking & Search API', () => {
         }
       });
 
-      // Verify progress updates were received
-      expect(progressUpdates.length).toBeGreaterThan(0);
+      // One update per group of 10, from Jira's real replies
+      expect(progressUpdates.map(update => update.completed)).toEqual([10, 12]);
+      progressUpdates.forEach(update => expect(update.total).toBe(12));
+      expect(progressUpdates[1]!.inProgress).toBe(0);
 
-      // All updates should have correct total
-      progressUpdates.forEach(update => {
-        expect(update.total).toBe(10);
-        expect(update.completed).toBeGreaterThanOrEqual(0);
-        expect(update.completed).toBeLessThanOrEqual(10);
-      });
-
-      // Final update should show progress was made
-      // Note: May not be 10/10 if JIRA indexing is still in progress
-      const lastUpdate = progressUpdates[progressUpdates.length - 1];
-      if (lastUpdate) {
-        expect(lastUpdate.completed).toBeGreaterThan(0);
-        expect(lastUpdate.completed).toBeLessThanOrEqual(10);
-        console.log(`   ✓ Final progress: ${lastUpdate.completed}/${lastUpdate.total} (JIRA indexing may still be in progress)`);
-      }
-
-      // All issues were actually created successfully
-      expect(result.succeeded).toBe(10);
+      expect(result.succeeded).toBe(12);
       expect(result.failed).toBe(0);
     }, 90000);
 
-    it('should inject and cleanup marker labels', async () => {
+    it('should not add tracking labels to created issues', async () => {
       if (!isJiraConfigured()) return;
-
-      console.log('   📝 Creating issues to verify marker cleanup...');
 
       const timestamp = new Date().toISOString();
       const issues = Array.from({ length: 3 }, (_, i) => ({
         Project: PROJECT_KEY,
         'Issue Type': 'Task',
-        Summary: `Marker Test ${i + 1}/3 ${timestamp}`
+        Summary: `No Marker Test ${i + 1}/3 ${timestamp}`
       }));
 
       const result = await jml.issues.create(issues, {
@@ -300,31 +283,16 @@ describe('Integration: Progress Tracking & Search API', () => {
         }
       }) as BulkResult;
 
-      console.log(`   ✓ Created ${result.succeeded} issues`);
-
-      // Collect keys
       result.results.forEach(r => {
         if (r.success && r.key) {
           createdIssues.push(r.key);
         }
       });
 
-      // Wait for cleanup to complete
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      console.log('   🔍 Verifying markers were cleaned up...');
-
-      // Fetch one of the created issues directly
       if (createdIssues.length > 0) {
-        const issueKey = createdIssues[0];
-        const issue = await client.get<Issue>(`/rest/api/2/issue/${issueKey}`);
-
-        // Verify no jml-job-* labels remain
+        const issue = await client.get<Issue>(`/rest/api/2/issue/${createdIssues[0]}`);
         const labels = issue.fields?.labels || [];
-        const hasMarkers = labels.some((label: string) => label.startsWith('jml-job-'));
-
-        console.log(`   ✓ Issue ${issueKey} labels: ${labels.join(', ')}`);
-        expect(hasMarkers).toBe(false);
+        expect(labels.some((label: string) => label.startsWith('jml-job-'))).toBe(false);
       }
     }, 90000);
 

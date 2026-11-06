@@ -15,8 +15,14 @@ import { UidReplacer } from './bulk/UidReplacer.js';
 import type { HierarchyLevel } from './bulk/HierarchyLevels.js';
 import { preprocessHierarchyRecords } from './bulk/HierarchyPreprocessor.js';
 import { IssueSearch } from './IssueSearch.js';
-import { MarkerInjector } from './bulk/MarkerInjector.js';
-import { BulkProgressTracker, type ProgressUpdate } from './bulk/BulkProgressTracker.js';
+import type { ProgressUpdate } from '../types/bulk.js';
+import { createBulkInGroups, type GroupedBulkResult } from './bulk/GroupedBulkSender.js';
+import { BulkProgressReporter } from './bulk/BulkProgressReporter.js';
+import {
+  cloneManifest, compactManifest, manifestResults, markCreated, markFailed,
+  markNotConfirmed, markNotSent, retryableRows, toSendError, unsuccessfulCount,
+} from './bulk/ManifestRows.js';
+import { resolveBulkGroupSize } from '../config/bulkGroupSize.js';
 import { CloudCreateAdapter } from './CloudCreateAdapter.js';
 import { EndpointResolver } from '../client/EndpointResolver.js';
 import { PayloadPreview } from './PayloadPreview.js';
@@ -65,13 +71,15 @@ export interface IssuesCreateOptions {
    */
   fuzzyMatch?: FuzzyMatchConfig;
   /**
-   * Progress tracking callback for bulk operations.
-   * Receives progress updates during long-running bulk operations.
+   * Progress callback for bulk create.
+   * Called after each group of `bulk.groupSize` issues returns from Jira,
+   * with counts taken from Jira's replies (across all hierarchy levels).
+   * Does not change any HTTP timeout.
    * @example
    * ```typescript
    * await jml.issues.create(rows, {
    *   onProgress: (progress) => {
-   *     console.log(`${progress.completed}/${progress.total} issues created`);
+   *     console.log(`${progress.completed}/${progress.total} rows answered`);
    *   }
    * });
    * ```
@@ -180,6 +188,7 @@ export class IssueOperations implements IssuesAPI {
   private cloudAdapter?: CloudCreateAdapter;
   private endpointResolverFn?: () => Promise<EndpointResolver>;
   private readonly attachmentUploader: AttachmentUploader;
+  private readonly bulkGroupSize: number;
 
   constructor(
     private client: JiraClient,
@@ -194,6 +203,7 @@ export class IssueOperations implements IssuesAPI {
   ) {
     this.endpointResolverFn = endpointResolverFn;
     this.attachmentUploader = new AttachmentUploader(client);
+    this.bulkGroupSize = resolveBulkGroupSize(config);
     // Initialize bulk operation dependencies if cache available
     // Note: LookupCache is always RedisCache at runtime (from JML constructor)
     if (cache) {
@@ -314,7 +324,7 @@ export class IssueOperations implements IssuesAPI {
     if (options.retry) {
       const manifest = await this.manifestStorage?.getManifest(options.retry);
       if (!manifest) throw new ValidationError(`Manifest '${options.retry}' not found or expired`);
-      indices = manifest.failed;
+      indices = retryableRows(manifest);
       existingParents = manifest.uidMap ?? {};
     }
 
@@ -420,37 +430,16 @@ export class IssueOperations implements IssuesAPI {
       console.warn(`⚠️  Manifest is older than 24 hours (${ageHours.toFixed(1)}h old). Data may be stale.`);
     }
 
-    const failedRowIndices = manifest.failed.filter(index =>
-      !manifest.succeeded.includes(index) &&
-      !manifest.notConfirmed?.includes(index)
-    );
+    const failedRowIndices = retryableRows(manifest);
 
-    // If no confirmed failures remain, return current state immediately
+    // If nothing is left to resend, return current state immediately
     if (failedRowIndices.length === 0) {
-      // Build results array from manifest
-      const results = [];
-      for (let i = 0; i < manifest.total; i++) {
-        if (manifest.succeeded.includes(i)) {
-          results.push({
-            index: i,
-            success: true as const,
-            outcome: 'created' as const,
-            key: manifest.created[i]
-          });
-        } else if (manifest.notConfirmed?.includes(i)) {
-          results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
-        }
-      }
-      
       return {
         total: manifest.total,
         succeeded: manifest.succeeded.length,
-        failed: manifest.failed.filter(index =>
-          !manifest.succeeded.includes(index) &&
-          !manifest.notConfirmed?.includes(index)
-        ).length + (manifest.notConfirmed?.length ?? 0),
+        failed: manifest.notConfirmed?.length ?? 0,
         manifest,
-        results
+        results: manifestResults(manifest),
       };
     }
 
@@ -542,138 +531,19 @@ export class IssueOperations implements IssuesAPI {
       }
     });
 
-    // Call bulk API with valid payloads
-    const bulkEndpoint = await this.resolveBulkCreateEndpoint();
-    const apiResult = validPayloads.length > 0
-      ? await this.bulkApiWrapper.createBulk(validPayloads.map(vp => vp.payload), undefined, bulkEndpoint)
-      : { created: [], failed: [] };
+    const reporter = new BulkProgressReporter(filteredInput.length, _options?.onProgress);
+    reporter.record(0, validationErrors.length);
+    const apiResult = await this.sendInGroups(validPayloads.map(vp => vp.payload), reporter);
+    reporter.flush();
 
-    // Remap API results back to original row indices
-    const indexMapping = new Map(validPayloads.map((vp, apiIndex) => [apiIndex, vp.index]));
-    
-    const remappedCreated = apiResult.created.map(item => {
-      const filteredIndex = indexMapping.get(item.index) ?? item.index;
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) {
-        throw new Error(`Failed to map filtered index ${filteredIndex} to original index`);
-      }
-      return { ...item, index: originalIndex };
-    });
-    
-    const remappedFailed = apiResult.failed.map(item => {
-      const filteredIndex = indexMapping.get(item.index) ?? item.index;
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) {
-        throw new Error(`Failed to map filtered index ${filteredIndex} to original index`);
-      }
-      return { ...item, index: originalIndex };
-    });
-    const remappedNotConfirmed = (apiResult.notConfirmed ?? []).map(apiIndex => {
-      const filteredIndex = validPayloads[apiIndex]?.index ?? apiIndex;
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) {
-        throw new Error(`Failed to map filtered index ${filteredIndex} to original index`);
-      }
-      return originalIndex;
-    });
-
-    // Remap validation errors to original indices
-    const remappedValidationErrors = validationErrors.map(({ index: filteredIndex, error }) => {
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) {
-        throw new Error(`Failed to map filtered index ${filteredIndex} to original index`);
-      }
-      return { index: originalIndex, error };
-    });
-
-    // AC4 & AC5: Merge results with original manifest
-    const updatedManifest: BulkManifest = {
-      id: manifest.id, // Same manifest ID
-      timestamp: manifest.timestamp, // Preserve original timestamp
-      total: manifest.total,
-      succeeded: [...manifest.succeeded],
-      failed: [...manifest.failed],
-      ...(manifest.notConfirmed?.length ? { notConfirmed: [...manifest.notConfirmed] } : {}),
-      created: { ...manifest.created },
-      errors: { ...manifest.errors }
-    };
-
-    // Update with retry successes
-    remappedCreated.forEach(item => {
-      const originalIndex = item.index;
-      
-      // Add to succeeded list
-      if (!updatedManifest.succeeded.includes(originalIndex)) {
-        updatedManifest.succeeded.push(originalIndex);
-      }
-      
-      // Remove from failed list
-      updatedManifest.failed = updatedManifest.failed.filter(idx => idx !== originalIndex);
-      
-      // Add issue key
-      updatedManifest.created[originalIndex] = item.key;
-      
-      // Remove error
-      delete updatedManifest.errors[originalIndex];
-    });
-
-    // Update with retry failures (API-level)
-    remappedFailed.forEach(item => {
-      updatedManifest.errors[item.index] = { status: item.status, errors: item.errors };
-    });
-
-    remappedNotConfirmed.forEach(index => {
-      updatedManifest.failed = updatedManifest.failed.filter(failedIndex => failedIndex !== index);
-      updatedManifest.notConfirmed ??= [];
-      if (!updatedManifest.notConfirmed.includes(index)) updatedManifest.notConfirmed.push(index);
-      delete updatedManifest.errors[index];
-    });
-
-    // Update with validation failures
-    remappedValidationErrors.forEach(({ index, error }) => {
-      updatedManifest.errors[index] = {
-        status: 400,
-        errors: { validation: error.message }
-      };
-    });
-
-    // Store merged manifest back to Redis
-    await this.manifestStorage.storeManifest(updatedManifest);
-
-    // Build complete results array (all rows)
-    const results = [];
-    for (let i = 0; i < manifest.total; i++) {
-      if (updatedManifest.succeeded.includes(i)) {
-        results.push({
-          index: i,
-          success: true as const,
-          outcome: 'created' as const,
-          key: updatedManifest.created[i]
-        });
-      } else if (updatedManifest.failed.includes(i)) {
-        const error = updatedManifest.errors[i];
-        if (error) {
-          results.push({
-            index: i,
-            success: false as const,
-            outcome: 'failed' as const,
-            error: { status: error.status, errors: error.errors },
-          });
-        }
-      } else if (updatedManifest.notConfirmed?.includes(i)) {
-        results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
-      }
-    }
-
-    // Return combined result
-    return {
-      total: updatedManifest.total,
-      succeeded: updatedManifest.succeeded.length,
-      failed: updatedManifest.failed.length + (updatedManifest.notConfirmed?.length ?? 0),
-      manifest: updatedManifest,
-      results,
-      ...(apiResult.unmatchedKeys ? { unmatchedKeys: apiResult.unmatchedKeys } : {}),
-    };
+    return this.mergeRetryResultsIntoManifest(
+      apiResult,
+      validPayloads,
+      validationErrors,
+      failedRowIndices,
+      manifest,
+      new UidReplacer()
+    );
   }
 
   /**
@@ -927,110 +797,30 @@ export class IssueOperations implements IssuesAPI {
       throw firstError || new Error('All records failed validation');
     }
 
-    // Progress tracking setup (Phase 2.2)
-    let markerInjector: MarkerInjector | undefined;
-    let progressTracker: BulkProgressTracker | undefined;
-    const createdIssueKeys: string[] = [];
-
-    // Check if progress tracking is enabled
-    const progressEnabled = this.config?.timeout?.cleanupMarkers !== false;
-
-    if (progressEnabled) {
-      // Create unique job ID for this operation
-      const jobId = `bulk-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      markerInjector = new MarkerInjector(jobId, this.client);
-
-      // Inject markers into all valid payloads
-      validPayloads.forEach(vp => {
-        vp.payload = markerInjector!.injectMarker(vp.payload);
-      });
-
-      // Start progress tracker if callback provided
-      if (_options?.onProgress) {
-        progressTracker = new BulkProgressTracker(
-          this.issueSearch,
-          markerInjector,
-          {
-            totalIssues: validPayloads.length,
-            progressTimeout: this.config?.timeout?.progressTimeout,
-            pollingInterval: this.config?.timeout?.progressPolling
-          }
-        );
-
-        // Start tracking (non-blocking)
-        progressTracker.startTracking(_options.onProgress).catch(err => {
-          console.warn('Progress tracking error:', err);
-        });
-      }
-    }
-
-    // Determine HTTP timeout based on progress tracking (Phase 2.2 Hotfix)
-    // When onProgress callback is provided, disable HTTP timeout (set to Infinity)
-    // and rely entirely on progress-based timeout instead
-    const httpTimeout = _options?.onProgress
-      ? Infinity  // Disable HTTP timeout, rely on progress-based timeout
-      : undefined; // Use default bulk timeout
-
-    // Call bulk API with valid payloads only (E4-S03)
-    const bulkEndpoint = await this.resolveBulkCreateEndpoint();
-    // istanbul ignore next - defensive: validPayloads.length already checked above
-    const apiResult = validPayloads.length > 0
-      ? await this.bulkApiWrapper.createBulk(
-          validPayloads.map(vp => vp.payload),
-          httpTimeout,
-          bulkEndpoint
-        )
-      : { created: [], failed: [] };
+    const reporter = new BulkProgressReporter(recordsToProcess.length, _options?.onProgress);
+    reporter.record(0, validationErrors.length);
+    const apiResult = await this.sendInGroups(validPayloads.map(vp => vp.payload), reporter);
 
     // Remap API results back to original indices
-    const indexMapping = new Map(validPayloads.map((vp, apiIndex) => [apiIndex, vp.index]));
-    
-    // istanbul ignore next - defensive: mapping always exists for valid indices
-    const remappedCreated = apiResult.created.map(item => ({
-      ...item,
-      index: indexMapping.get(item.index) ?? item.index
-    }));
-    
-    // istanbul ignore next - defensive: mapping always exists for valid indices
-    const remappedFailed = apiResult.failed.map(item => ({
-      ...item,
-      index: indexMapping.get(item.index) ?? item.index
-    }));
-    const remappedNotConfirmed = (apiResult.notConfirmed ?? []).map(index =>
-      validPayloads[index]!.index
-    );
-
-    // Stop progress tracking after API call (Phase 2.2)
-    if (progressTracker) {
-      progressTracker.stopTracking();
-    }
-
-    // Collect created issue keys for marker cleanup
-    if (progressEnabled && remappedCreated.length > 0) {
-      remappedCreated.forEach(item => createdIssueKeys.push(item.key));
-    }
+    const toRow = (apiIndex: number): number => validPayloads[apiIndex]!.index;
+    const remappedCreated = apiResult.created.map(item => ({ ...item, index: toRow(item.index) }));
+    const remappedFailed = apiResult.failed.map(item => ({ ...item, index: toRow(item.index) }));
+    const remappedNotConfirmed = apiResult.notConfirmed.map(toRow);
+    const remappedNotSent = apiResult.notSent.map(toRow);
 
     // Build manifest (E4-S02)
     const manifestId = `bulk-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     const createdMap: Record<number, string> = {};
     const errorsMap: Record<number, { status: number; errors: Record<string, string> }> = {};
-    
-    // Add successfully created issues (remapped to original indices)
+
     remappedCreated.forEach(item => {
       createdMap[item.index] = item.key;
     });
-    
-    // Add API-level failures (remapped to original indices)
     remappedFailed.forEach(item => {
       errorsMap[item.index] = { status: item.status, errors: item.errors };
     });
-
-    // Add validation failures (happened before API call)
     validationErrors.forEach(({ index, error }) => {
-      errorsMap[index] = { 
-        status: 400, 
-        errors: { validation: error.message } 
-      };
+      errorsMap[index] = { status: 400, errors: { validation: error.message } };
     });
 
     const manifest: BulkManifest = {
@@ -1040,43 +830,32 @@ export class IssueOperations implements IssuesAPI {
       succeeded: remappedCreated.map(item => item.index),
       failed: [...remappedFailed.map(item => item.index), ...validationErrors.map(ve => ve.index)],
       ...(remappedNotConfirmed.length > 0 ? { notConfirmed: remappedNotConfirmed } : {}),
+      ...(remappedNotSent.length > 0 ? { notSent: remappedNotSent } : {}),
       created: createdMap,
       errors: errorsMap,
     };
 
-    // Store manifest (E4-S02)
     await this.manifestStorage.storeManifest(manifest);
+    const sendError = toSendError(apiResult.sendError);
 
-    // Clean up markers from created issues (Phase 2.2)
-    // Run in background - don't block return
-    if (markerInjector && createdIssueKeys.length > 0) {
-      markerInjector.removeMarkersFromIssues(createdIssueKeys).catch(err => {
-        console.warn('Marker cleanup failed (non-fatal):', err);
-      });
-    }
-
-    // Return unified result
     return {
       manifest,
       total: recordsToProcess.length,
       succeeded: remappedCreated.length,
-      failed: remappedFailed.length + validationErrors.length + remappedNotConfirmed.length,
+      failed: unsuccessfulCount(manifest),
       results: [
-        // Successfully created issues (with remapped indices)
         ...remappedCreated.map(item => ({
           index: item.index,
           success: true as const,
           outcome: 'created' as const,
           key: item.key,
         })),
-        // API-level failures (with remapped indices)
         ...remappedFailed.map(item => ({
           index: item.index,
           success: false as const,
           outcome: 'failed' as const,
           error: { status: item.status, errors: item.errors },
         })),
-        // Validation failures (before API call)
         ...validationErrors.map(({ index, error }) => ({
           index,
           success: false as const,
@@ -1088,8 +867,14 @@ export class IssueOperations implements IssuesAPI {
           success: false as const,
           outcome: 'not_confirmed' as const,
         })),
+        ...remappedNotSent.map(index => ({
+          index,
+          success: false as const,
+          outcome: 'not_sent' as const,
+        })),
       ],
       ...(apiResult.unmatchedKeys ? { unmatchedKeys: apiResult.unmatchedKeys } : {}),
+      ...(sendError ? { sendError } : {}),
     };
   }
 
@@ -1176,11 +961,10 @@ export class IssueOperations implements IssuesAPI {
         }
       });
 
-      // Call bulk API
-      const bulkEndpoint = await this.resolveBulkCreateEndpoint();
-      const apiResult = validPayloads.length > 0
-        ? await this.bulkApiWrapper!.createBulk(validPayloads.map(vp => vp.payload), undefined, bulkEndpoint)
-        : { created: [], failed: [] };
+      const reporter = new BulkProgressReporter(filteredInput.length, options?.onProgress);
+      reporter.record(0, validationErrors.length);
+      const apiResult = await this.sendInGroups(validPayloads.map(vp => vp.payload), reporter);
+      reporter.flush();
 
       // Remap results back to original indices and update manifest
       return this.mergeRetryResultsIntoManifest(
@@ -1201,90 +985,26 @@ export class IssueOperations implements IssuesAPI {
       options // options for progress tracking
     );
 
-    // Merge hierarchy results into original manifest
-    // Map filtered indices back to original indices
-    const updatedManifest: BulkManifest = {
-      id: manifest.id,
-      timestamp: manifest.timestamp,
-      total: manifest.total,
-      succeeded: [...manifest.succeeded],
-      failed: [...manifest.failed],
-      ...(manifest.notConfirmed?.length ? { notConfirmed: [...manifest.notConfirmed] } : {}),
-      created: { ...manifest.created },
-      errors: { ...manifest.errors },
-      uidMap: { ...manifest.uidMap, ...hierarchyResult.manifest.uidMap }, // Merge UID maps
-    };
+    const updatedManifest = cloneManifest(manifest);
+    updatedManifest.uidMap = { ...manifest.uidMap, ...hierarchyResult.manifest.uidMap };
 
-    // Update with retry results
+    // Map retry rows back to original row indices
     hierarchyResult.results.forEach(result => {
-      // Map back to original index
-      const filteredIndex = result.index;
-      const originalIndex = failedRowIndices[filteredIndex];
-      
+      const originalIndex = failedRowIndices[result.index];
       if (originalIndex === undefined) return;
 
       if (result.success) {
-        // Add to succeeded
-        if (!updatedManifest.succeeded.includes(originalIndex)) {
-          updatedManifest.succeeded.push(originalIndex);
-        }
-        // Remove from failed
-        updatedManifest.failed = updatedManifest.failed.filter(idx => idx !== originalIndex);
-        // Add key
-        updatedManifest.created[originalIndex] = result.key!;
-        // Remove error
-        delete updatedManifest.errors[originalIndex];
+        markCreated(updatedManifest, originalIndex, result.key!);
+      } else if (result.outcome === 'not_confirmed') {
+        markNotConfirmed(updatedManifest, originalIndex);
+      } else if (result.outcome === 'not_sent') {
+        markNotSent(updatedManifest, originalIndex);
       } else {
-        if (result.outcome === 'not_confirmed') {
-          updatedManifest.failed = updatedManifest.failed.filter(index => index !== originalIndex);
-          updatedManifest.notConfirmed ??= [];
-          if (!updatedManifest.notConfirmed.includes(originalIndex)) {
-            updatedManifest.notConfirmed.push(originalIndex);
-          }
-          delete updatedManifest.errors[originalIndex];
-        } else {
-          updatedManifest.errors[originalIndex] = result.error!;
-        }
+        markFailed(updatedManifest, originalIndex, result.error!);
       }
     });
 
-    // Store updated manifest
-    await this.manifestStorage!.storeManifest(updatedManifest);
-
-    // Build complete results array
-    const results = [];
-    for (let i = 0; i < manifest.total; i++) {
-      if (updatedManifest.succeeded.includes(i)) {
-        results.push({
-          index: i,
-          success: true as const,
-          outcome: 'created' as const,
-          key: updatedManifest.created[i]
-        });
-      } else if (updatedManifest.failed.includes(i)) {
-        const error = updatedManifest.errors[i];
-        if (error) {
-          results.push({
-            index: i,
-            success: false as const,
-            outcome: 'failed' as const,
-            error: { status: error.status, errors: error.errors },
-            ...(error.errors.validation?.startsWith('Blocked:') ? { blocked: true as const } : {}),
-          });
-        }
-      } else if (updatedManifest.notConfirmed?.includes(i)) {
-        results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
-      }
-    }
-
-    return {
-      total: updatedManifest.total,
-      succeeded: updatedManifest.succeeded.length,
-      failed: updatedManifest.failed.length + (updatedManifest.notConfirmed?.length ?? 0),
-      manifest: updatedManifest,
-      results,
-      ...(hierarchyResult.unmatchedKeys ? { unmatchedKeys: hierarchyResult.unmatchedKeys } : {}),
-    };
+    return this.finishRetry(updatedManifest, hierarchyResult.unmatchedKeys, hierarchyResult.sendError);
   }
 
   /**
@@ -1293,129 +1013,62 @@ export class IssueOperations implements IssuesAPI {
    * @private
    */
   private async mergeRetryResultsIntoManifest(
-    apiResult: {
-      created: Array<{ index: number; key: string }>;
-      failed: Array<{ index: number; status: number; errors: Record<string, string> }>;
-      notConfirmed?: number[];
-      unmatchedKeys?: string[];
-    },
+    apiResult: GroupedBulkResult,
     validPayloads: Array<{ index: number; payload: { fields: Record<string, unknown> }; uid?: string }>,
     validationErrors: Array<{ index: number; error: Error }>,
     failedRowIndices: number[],
     manifest: BulkManifest,
     uidReplacer: UidReplacer
   ): Promise<BulkResult> {
-    const updatedManifest: BulkManifest = {
-      id: manifest.id,
-      timestamp: manifest.timestamp,
-      total: manifest.total,
-      succeeded: [...manifest.succeeded],
-      failed: [...manifest.failed],
-      ...(manifest.notConfirmed?.length ? { notConfirmed: [...manifest.notConfirmed] } : {}),
-      created: { ...manifest.created },
-      errors: { ...manifest.errors },
-      uidMap: { ...manifest.uidMap },
+    const updatedManifest = cloneManifest(manifest);
+    const toOriginal = (filteredIndex: number | undefined, label: number): number => {
+      const row = filteredIndex === undefined ? undefined : failedRowIndices[filteredIndex];
+      if (row === undefined) {
+        throw new Error(`Failed to map filtered index ${label} to original index`);
+      }
+      return row;
     };
+    const toRow = (apiIndex: number): number => toOriginal(validPayloads[apiIndex]?.index, apiIndex);
 
-    // Process API successes
     apiResult.created.forEach(item => {
-      const validPayload = validPayloads[item.index];
-      if (!validPayload) return;
-      
-      const filteredIndex = validPayload.index;
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) return;
-
-      // Update succeeded/failed arrays
-      if (!updatedManifest.succeeded.includes(originalIndex)) {
-        updatedManifest.succeeded.push(originalIndex);
-      }
-      updatedManifest.failed = updatedManifest.failed.filter(idx => idx !== originalIndex);
-      
-      // Add key
-      updatedManifest.created[originalIndex] = item.key;
-      delete updatedManifest.errors[originalIndex];
-
-      // Record UID mapping if present
-      if (validPayload.uid) {
-        uidReplacer.recordCreation(validPayload.uid, item.key);
-      }
+      markCreated(updatedManifest, toRow(item.index), item.key);
+      const uid = validPayloads[item.index]!.uid;
+      if (uid) uidReplacer.recordCreation(uid, item.key);
     });
-
-    // Process API failures
     apiResult.failed.forEach(item => {
-      const validPayload = validPayloads[item.index];
-      if (!validPayload) return;
-      
-      const filteredIndex = validPayload.index;
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) return;
-
-      updatedManifest.errors[originalIndex] = { status: item.status, errors: item.errors };
+      markFailed(updatedManifest, toRow(item.index), { status: item.status, errors: item.errors });
+    });
+    apiResult.notConfirmed.forEach(apiIndex => markNotConfirmed(updatedManifest, toRow(apiIndex)));
+    apiResult.notSent.forEach(apiIndex => markNotSent(updatedManifest, toRow(apiIndex)));
+    validationErrors.forEach(({ index, error }) => {
+      markFailed(updatedManifest, toOriginal(index, index), { status: 400, errors: { validation: error.message } });
     });
 
-    (apiResult.notConfirmed ?? []).forEach(filteredIndex => {
-      const validPayload = validPayloads[filteredIndex];
-      if (!validPayload) return;
-      const originalIndex = failedRowIndices[validPayload.index];
-      if (originalIndex === undefined) return;
-      updatedManifest.failed = updatedManifest.failed.filter(index => index !== originalIndex);
-      updatedManifest.notConfirmed ??= [];
-      if (!updatedManifest.notConfirmed.includes(originalIndex)) {
-        updatedManifest.notConfirmed.push(originalIndex);
-      }
-      delete updatedManifest.errors[originalIndex];
-    });
+    const uidMap = { ...manifest.uidMap, ...uidReplacer.getUidMap() };
+    if (manifest.uidMap || Object.keys(uidMap).length > 0) updatedManifest.uidMap = uidMap;
 
-    // Process validation errors
-    validationErrors.forEach(({ index: filteredIndex, error }) => {
-      const originalIndex = failedRowIndices[filteredIndex];
-      if (originalIndex === undefined) return;
+    return this.finishRetry(updatedManifest, apiResult.unmatchedKeys, toSendError(apiResult.sendError));
+  }
 
-      updatedManifest.errors[originalIndex] = { status: 400, errors: { validation: error.message } };
-    });
-
-    // Update uidMap with new mappings
-    updatedManifest.uidMap = {
-      ...updatedManifest.uidMap,
-      ...uidReplacer.getUidMap()
-    };
-
-    // Store updated manifest
-    await this.manifestStorage!.storeManifest(updatedManifest);
-
-    // Build results array
-    const results = [];
-    for (let i = 0; i < manifest.total; i++) {
-      if (updatedManifest.succeeded.includes(i)) {
-        results.push({
-          index: i,
-          success: true as const,
-          outcome: 'created' as const,
-          key: updatedManifest.created[i]
-        });
-      } else if (updatedManifest.failed.includes(i)) {
-        const error = updatedManifest.errors[i];
-        if (error) {
-          results.push({
-            index: i,
-            success: false as const,
-            outcome: 'failed' as const,
-            error: { status: error.status, errors: error.errors }
-          });
-        }
-      } else if (updatedManifest.notConfirmed?.includes(i)) {
-        results.push({ index: i, success: false as const, outcome: 'not_confirmed' as const });
-      }
-    }
-
+  /**
+   * Store a merged retry manifest and build the full result for every row.
+   * @private
+   */
+  private async finishRetry(
+    manifest: BulkManifest,
+    unmatchedKeys?: string[],
+    sendError?: BulkResult['sendError']
+  ): Promise<BulkResult> {
+    compactManifest(manifest);
+    await this.manifestStorage!.storeManifest(manifest);
     return {
-      total: updatedManifest.total,
-      succeeded: updatedManifest.succeeded.length,
-      failed: updatedManifest.failed.length + (updatedManifest.notConfirmed?.length ?? 0),
-      manifest: updatedManifest,
-      ...(apiResult.unmatchedKeys ? { unmatchedKeys: apiResult.unmatchedKeys } : {}),
-      results
+      total: manifest.total,
+      succeeded: manifest.succeeded.length,
+      failed: unsuccessfulCount(manifest),
+      manifest,
+      results: manifestResults(manifest),
+      ...(unmatchedKeys ? { unmatchedKeys } : {}),
+      ...(sendError ? { sendError } : {}),
     };
   }
 
@@ -1459,34 +1112,25 @@ export class IssueOperations implements IssuesAPI {
       uidReplacer.loadExistingMappings(existingMappings);
     }
 
-    // Progress tracking setup for hierarchy (Phase 2.2)
-    let markerInjector: MarkerInjector | undefined;
-    let progressTracker: BulkProgressTracker | undefined;
-    const createdIssueKeys: string[] = [];
-
-    // Check if progress tracking is enabled
-    const progressEnabled = this.config?.timeout?.cleanupMarkers !== false;
-
-    if (progressEnabled) {
-      // Create unique job ID for this hierarchy operation
-      const jobId = `hier-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      markerInjector = new MarkerInjector(jobId, this.client);
-
-      // Note: Progress tracker will be started after calculating total issues
-    }
-
-    // Track all results across levels
     const allCreated: Array<{ index: number; key: string }> = [];
     const allFailed: Array<{ index: number; status: number; errors: Record<string, string> }> = [];
     const allValidationErrors: Array<{ index: number; error: Error; blocked?: boolean }> = [];
     const allNotConfirmed: number[] = [];
+    const allNotSent: number[] = [];
     const unmatchedKeys: string[] = [];
     let hasUnmatchedKeys = false;
-    let totalIssues = 0;
+    let sendError: Error | undefined;
+    const totalIssues = levels.reduce((sum, level) => sum + level.issues.length, 0);
+    const reporter = new BulkProgressReporter(totalIssues, options?.onProgress);
 
-    // Process each level sequentially
+    // Levels run in order; each level's groups run one after another, and
+    // every UID→key mapping is recorded before the next level starts.
     for (const level of levels) {
-      totalIssues += level.issues.length;
+      // After a request threw nothing more is sent, so these rows were never created.
+      if (sendError) {
+        allNotSent.push(...level.issues.map(issue => issue.index));
+        continue;
+      }
 
       // Build payloads for this level (with UID replacement)
       const payloadResults = await Promise.allSettled(
@@ -1537,6 +1181,7 @@ export class IssueOperations implements IssuesAPI {
         payload: { fields: Record<string, unknown> }; 
         uid?: string;
       }> = [];
+      const errorsBefore = allValidationErrors.length;
       
       payloadResults.forEach((result) => {
         if (result.status === 'fulfilled') {
@@ -1562,101 +1207,43 @@ export class IssueOperations implements IssuesAPI {
           });
         }
       });
+      reporter.record(0, allValidationErrors.length - errorsBefore);
 
       // Skip API call if no valid payloads for this level
       if (validPayloads.length === 0) {
+        reporter.flush();
         continue;
       }
 
-      // Inject markers into payloads for this level (Phase 2.2)
-      if (markerInjector) {
-        validPayloads.forEach(vp => {
-          vp.payload = markerInjector.injectMarker(vp.payload);
-        });
-      }
+      const apiResult = await this.sendInGroups(validPayloads.map(vp => vp.payload), reporter);
 
-      // Start progress tracker on first level (if callback provided)
-      // Note: We track across ALL levels with a single tracker
-      if (!progressTracker && markerInjector && options?.onProgress) {
-        // Calculate total issues across all levels
-        const calculatedTotal = levels.reduce((sum, lvl) => sum + lvl.issues.length, 0);
-
-        progressTracker = new BulkProgressTracker(
-          this.issueSearch,
-          markerInjector,
-          {
-            totalIssues: calculatedTotal,
-            progressTimeout: this.config?.timeout?.progressTimeout,
-            pollingInterval: this.config?.timeout?.progressPolling
-          }
-        );
-
-        // Start tracking (non-blocking)
-        progressTracker.startTracking(options.onProgress).catch(err => {
-          console.warn('Progress tracking error:', err);
-        });
-      }
-
-      // Determine HTTP timeout based on progress tracking (Phase 2.2 Hotfix)
-      const httpTimeout = options?.onProgress
-        ? Infinity  // Disable HTTP timeout for progress-tracked hierarchy
-        : undefined;
-
-      // Call bulk API for this level
-      const bulkEndpoint = await this.resolveBulkCreateEndpoint();
-      const apiResult = await this.bulkApiWrapper.createBulk(
-        validPayloads.map(vp => vp.payload),
-        httpTimeout,
-        bulkEndpoint
-      );
-
-      // Process results and record UID→Key mappings
+      // Process results and record UID→Key mappings for the next level
+      // Indices outside this level's payloads are ignored, as in 3.0.x
       apiResult.created.forEach((item) => {
         const validPayload = validPayloads[item.index];
-        if (validPayload) {
-          // Remap to original index
-          allCreated.push({
-            index: validPayload.index,
-            key: item.key
-          });
-
-          // Collect for marker cleanup (Phase 2.2)
-          if (progressEnabled) {
-            createdIssueKeys.push(item.key);
-          }
-
-          // Record UID→Key mapping for next level
-          if (validPayload.uid) {
-            uidReplacer.recordCreation(validPayload.uid, item.key);
-          }
+        if (!validPayload) return;
+        allCreated.push({ index: validPayload.index, key: item.key });
+        if (validPayload.uid) {
+          uidReplacer.recordCreation(validPayload.uid, item.key);
         }
       });
-
-      // Collect failures (remap indices)
       apiResult.failed.forEach((item) => {
         const validPayload = validPayloads[item.index];
         if (validPayload) {
-          allFailed.push({
-            index: validPayload.index,
-            status: item.status,
-            errors: item.errors,
-          });
+          allFailed.push({ index: validPayload.index, status: item.status, errors: item.errors });
         }
       });
-
-      (apiResult.notConfirmed ?? []).forEach((index) => {
+      const remap = (index: number): number[] => {
         const validPayload = validPayloads[index];
-        if (validPayload) allNotConfirmed.push(validPayload.index);
-      });
-      if (apiResult.notConfirmed) {
+        return validPayload ? [validPayload.index] : [];
+      };
+      allNotConfirmed.push(...apiResult.notConfirmed.flatMap(remap));
+      allNotSent.push(...apiResult.notSent.flatMap(remap));
+      if (apiResult.unmatchedKeys) {
         hasUnmatchedKeys = true;
-        unmatchedKeys.push(...(apiResult.unmatchedKeys ?? []));
+        unmatchedKeys.push(...apiResult.unmatchedKeys);
       }
-    }
-
-    // Stop progress tracking after all levels complete (Phase 2.2)
-    if (progressTracker) {
-      progressTracker.stopTracking();
+      sendError = apiResult.sendError;
     }
 
     // Build manifest with UID mappings
@@ -1683,6 +1270,7 @@ export class IssueOperations implements IssuesAPI {
       succeeded: allCreated.map(item => item.index),
       failed: [...allFailed.map(item => item.index), ...allValidationErrors.map(ve => ve.index)],
       ...(allNotConfirmed.length > 0 ? { notConfirmed: allNotConfirmed } : {}),
+      ...(allNotSent.length > 0 ? { notSent: allNotSent } : {}),
       created: createdMap,
       errors: errorsMap,
       uidMap: uidReplacer.getUidMap(), // Include UID mappings for retry
@@ -1690,20 +1278,13 @@ export class IssueOperations implements IssuesAPI {
 
     // Store manifest
     await this.manifestStorage.storeManifest(manifest);
-
-    // Clean up markers from created issues (Phase 2.2)
-    // Run in background - don't block return
-    if (markerInjector && createdIssueKeys.length > 0) {
-      markerInjector.removeMarkersFromIssues(createdIssueKeys).catch(err => {
-        console.warn('Marker cleanup failed (non-fatal):', err);
-      });
-    }
+    const sendErrorInfo = toSendError(sendError);
 
     return {
       manifest,
       total: totalIssues,
       succeeded: allCreated.length,
-      failed: allFailed.length + allValidationErrors.length + allNotConfirmed.length,
+      failed: unsuccessfulCount(manifest),
       results: [
         ...allCreated.map(item => ({
           index: item.index,
@@ -1729,8 +1310,14 @@ export class IssueOperations implements IssuesAPI {
           success: false as const,
           outcome: 'not_confirmed' as const,
         })),
+        ...allNotSent.map(index => ({
+          index,
+          success: false as const,
+          outcome: 'not_sent' as const,
+        })),
       ],
       ...(hasUnmatchedKeys ? { unmatchedKeys } : {}),
+      ...(sendErrorInfo ? { sendError: sendErrorInfo } : {}),
     };
   }
 
@@ -1945,5 +1532,23 @@ export class IssueOperations implements IssuesAPI {
       }
     }
     return '/rest/api/2/issue/bulk';
+  }
+
+  /**
+   * Send payloads in groups of `bulk.groupSize`, one request at a time,
+   * reporting progress after each group that returns.
+   * @private
+   */
+  private async sendInGroups(
+    payloads: Array<{ fields: Record<string, unknown> }>,
+    reporter?: BulkProgressReporter
+  ): Promise<GroupedBulkResult> {
+    if (payloads.length === 0) return { created: [], failed: [], notConfirmed: [], notSent: [] };
+    const endpoint = await this.resolveBulkCreateEndpoint();
+    return createBulkInGroups(this.bulkApiWrapper!, payloads, {
+      groupSize: this.bulkGroupSize,
+      endpoint,
+      onGroup: group => reporter?.report(group.created.length, group.failed.length),
+    });
   }
 }

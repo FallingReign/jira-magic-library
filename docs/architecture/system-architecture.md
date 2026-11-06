@@ -369,16 +369,25 @@ class IssueOperations {
 **Purpose**: Handle multi-record inputs with batching, concurrency control, and partial failure recovery.
 
 **Key Decisions**:
-- Batch size: 50 issues per batch (tunable)
-- Concurrency: 4 parallel batches (tunable; limited by JIRA rate limits)
-- Fail-fast: NO; process all batches and return per-row results
+- Group size: `bulk.groupSize`, default 10, allowed 1–50. Jira Cloud's
+  OpenAPI description of `POST /rest/api/3/issue/bulk` says it "Creates upto 50
+  issues"; Server/DC documents no limit.
+- Concurrency: none. Groups are sent one at a time in row order; hierarchy
+  levels run in order and each level's keys are recorded before the next level.
+- Progress: one `onProgress` update per returned group, counted from Jira's
+  real replies. No labels, searches, polling or post-create edits.
+- Never resend a create: JiraClient does not retry POST after a timeout,
+  network error or 503 (Jira may have processed it). POST retries only on 429.
+- Stop on throw: if a group request throws, its rows are `not_confirmed`
+  (or `not_sent` for 401/403, where Jira refused it and created nothing),
+  every later row (including later levels) is `not_sent`, and nothing more is sent.
 - Transaction model: NONE (JIRA has no bulk transaction API); each issue is independent
 
-**Batching Strategy**:
+**Grouping Strategy**:
 ```
-Input: 237 issues
-Split: [50, 50, 50, 50, 37] = 5 batches
-Process: 4 batches in parallel, then 1 remaining
+Input: 1 epic + 25 stories, groupSize 10
+Level 0: [1]           = 1 request
+Level 1: [10, 10, 5]   = 3 requests, sent one after another
 ```
 
 **Result Format**:
@@ -386,12 +395,13 @@ Process: 4 batches in parallel, then 1 remaining
 interface BulkResult {
   total: number;
   succeeded: number;
-  failed: number;
+  failed: number;          // failed + not_confirmed + not_sent
   unmatchedKeys?: string[];
+  sendError?: { name: string; message: string };
   results: Array<{
     index: number;
     success: boolean;
-    outcome?: 'created' | 'failed' | 'not_confirmed';
+    outcome?: 'created' | 'failed' | 'not_confirmed' | 'not_sent';
     key?: string;        // JIRA issue key if created
     error?: Error;       // Error details if failed
   }>;
@@ -399,12 +409,13 @@ interface BulkResult {
     succeeded: number[];
     failed: number[];
     notConfirmed?: number[];
+    notSent?: number[];
     created: Record<number, string>;
   };
 }
 ```
 
-Manifest retries include only confirmed failed rows; successful and
+Manifest retries resend failed and `not_sent` rows; successful and
 `not_confirmed` rows are skipped. The response mapper uses Jira's zero-based
 `failedElementNumber` positions, then consumes returned successes in request
 order among non-failed rows. The ordering is a documented implementation

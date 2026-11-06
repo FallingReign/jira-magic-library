@@ -218,6 +218,12 @@ if (manifestRun.failed > 0) {
 }
 ```
 
+Bulk rows are sent in groups (`bulk.groupSize`, default 10), one request at a
+time, with an `onProgress` update after each group. JML never resends a create
+request on its own: if a request fails, its rows are `not_confirmed` (or
+`not_sent` if Jira refused it with 401/403) and later rows are `not_sent`. See the
+[bulk guide](docs/guides/bulk-manifest-retry.md#groups-and-progress).
+
 ---
 
 ## Configuration
@@ -235,6 +241,8 @@ All configuration flows through the `JML` constructor. Required fields are marke
 | `redis.password` | Redis password for authenticated connections. Overrides `redis.url` when both are set. |
 | `cache.ttlSeconds` | Override schema cache TTL (default 900s). |
 | `manifest.ttlSeconds` | TTL for bulk manifest entries (default 86,400s). |
+| `bulk.groupSize` | Rows per bulk create request (default 10, allowed 1–50; Jira Cloud accepts up to 50). Groups are sent one at a time. |
+| `timeout.bulk` | Timeout per bulk create request, in ms (default 30,000). `onProgress` does not change it. |
 | `ambiguityPolicy.user` | Handling for ambiguous user lookups (`first` default, `error`, `score`). |
 
 ### Environment Variables
@@ -279,7 +287,7 @@ When looking up users by name or email, the library supports fuzzy matching to t
 
 **Typo tolerance examples:**
 - `"Jon Smith"` → `"John Smith"` (missing letter)
-- `"john.smtih@example.com"` → `"john.smith@example.com"` (transposition)
+- `"Jhon Smith"` → `"John Smith"` (transposition)
 - `"J Smith"` → `"John Smith"` (partial/abbreviated)
 
 Configure via code:

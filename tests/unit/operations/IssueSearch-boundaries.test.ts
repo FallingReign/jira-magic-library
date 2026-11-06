@@ -1,5 +1,4 @@
 import { IssueSearch } from '../../../src/operations/IssueSearch.js';
-import { MarkerInjector } from '../../../src/operations/bulk/MarkerInjector.js';
 
 describe('search input boundaries', () => {
   it('builds number and boolean criteria without losing zero or false', async () => {
@@ -19,14 +18,5 @@ describe('search input boundaries', () => {
     const search = new IssueSearch(client as any, {} as any, {} as any, {} as any);
     await search.search({ orderBy: 'created DESC' });
     expect(client.get.mock.calls[0][1].jql).toBe('ORDER BY created DESC');
-  });
-  it('does not duplicate an existing tracking marker', () => {
-    const injector = new MarkerInjector('job');
-    const payload = { fields: { labels: ['existing', injector.getMarker()] } };
-    expect(injector.injectMarker(payload)).toEqual(payload);
-    expect(payload.fields.labels).toHaveLength(2);
-  });
-  it('reports missing cleanup credentials without pretending markers were removed', async () => {
-    await expect(new MarkerInjector('job').removeMarkerFromIssue('TEST-1')).rejects.toThrow('JiraClient is required');
   });
 });

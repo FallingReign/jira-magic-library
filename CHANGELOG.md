@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
+## [Unreleased] - target 3.1.0
+
+### Added
+- **Grouped bulk create** — Every bulk create (flat, hierarchy and manifest retry) is sent in groups of `bulk.groupSize` rows, one request at a time, in row order. Default 10; allowed 1–50. Values outside that range, or non-integers, throw `ConfigurationError` when `JML` is constructed. Jira Cloud's OpenAPI description of `POST /rest/api/3/issue/bulk` says it "Creates upto 50 issues", so larger single requests failed on Cloud before.
+- **`not_sent` outcome** — If a group request throws, rows already answered keep `created`/`failed`, that group's rows are `not_confirmed` (Jira may have processed it: timeout, abort, network failure, 5xx) or `not_sent` (Jira refused it with 401/403, so nothing was created), and every later row (including later hierarchy levels) is `not_sent`. Nothing more is sent. The run returns a result with `manifest.notSent` and `BulkResult.sendError` instead of throwing. Manifest retry resends `failed` and `not_sent` rows.
+- **Exported types** — `ProgressUpdate`, `BulkRowOutcome` and `BulkConfig`.
+
+### Changed
+- **Progress from Jira's replies** — `onProgress` is called after each group returns, with counts from Jira's reply. `completed` counts created plus failed rows across all levels; new optional `created` and `failed` fields. `isStuck` is always `false` and deprecated.
+- **No more retries of create requests** — `JiraClient` never resends a POST after a timeout, network error or 503, because Jira may have processed it. POST retries only on 429. GET, PUT and DELETE keep their retries; the 401 OAuth refresh retry is unchanged.
+- **Timeouts** — Passing `onProgress` no longer sets the HTTP timeout to Infinity. Each group request uses `timeout.bulk` (default 30s).
+
+### Removed
+- **Label-marker progress tracking** — No `jml-job-*` labels, JQL polling or post-create label cleanup edits. Projects without Labels on the create screen, and users without edit permission, now work. `timeout.progressTimeout`, `timeout.progressPolling` and `timeout.cleanupMarkers` are deprecated no-ops kept for compatibility.
+
 ## [3.0.2] - 2026-11-06
 
 ### Fixed

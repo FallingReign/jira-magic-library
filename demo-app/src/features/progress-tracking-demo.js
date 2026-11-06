@@ -18,7 +18,7 @@ export async function runProgressTrackingDemo(config) {
   showHeader('Progress Tracking Demo (Phase 2.2)');
 
   info('Real-time progress monitoring during bulk JIRA operations.');
-  info('Watch as issues are created and tracked via marker labels.\n');
+  info('Issues are created in groups; progress updates after each group Jira answers.\n');
 
   // Prompt for project key
   const { projectKey } = await inquirer.prompt([
@@ -208,7 +208,7 @@ export async function runProgressTrackingDemo(config) {
     if (progressUpdates.length > 0) {
       console.log('📈 Progress Tracking Stats:');
       console.log(`   Updates received: ${progressUpdates.length}`);
-      console.log(`   Polling frequency: ~${(duration / progressUpdates.length / 1000).toFixed(1)}s between updates`);
+      console.log(`   Average: ~${(duration / progressUpdates.length / 1000).toFixed(1)}s between updates`);
 
       const maxTimeSinceProgress = Math.max(...progressUpdates.map(u => u.timeSinceProgress));
       console.log(`   Max time between progress: ${(maxTimeSinceProgress / 1000).toFixed(1)}s`);
@@ -243,8 +243,8 @@ export async function runProgressTrackingDemo(config) {
     info('Progress tracking features demonstrated:');
     info('  ✓ Real-time progress callbacks fired during operation');
     info('  ✓ Progress bar visualization with live updates');
-    info('  ✓ Time-since-progress monitoring (prevents false timeouts)');
-    info('  ✓ Marker label injection and automatic cleanup');
+    info('  ✓ One update per group, counted from Jira replies');
+    info('  ✓ No labels, searches or edits added to your issues');
     console.log('');
 
   } catch (err) {

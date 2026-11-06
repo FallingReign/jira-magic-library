@@ -127,6 +127,7 @@ describe('IssueOperations - Retry with Manifest (E4-S05)', () => {
         created: [{ index: 0, key: 'PROJ-1' }],
         failed: [{ index: 1, status: 400, errors: { field: 'still failing' } }],
         notConfirmed: [2],
+        notSent: [],
         unmatchedKeys: ['PROJ-999'],
       },
       [0, 1, 2, 3].map(index => ({
