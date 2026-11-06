@@ -20,6 +20,7 @@ export type {
   OAuth2AuthConfig,
   LegacyAuthConfig,
   DeploymentType,
+  BulkConfig,
 } from './types/config.js';
 export type {
   IssuesAPI,
@@ -96,7 +97,14 @@ export { preprocessCustomBlocks } from './parsers/custom-block-preprocessor.js';
 
 // Bulk Operations (E4-S02)
 export { ManifestStorage } from './operations/ManifestStorage.js';
-export type { BulkManifest, BulkResult, BulkValidationResult, ManifestUpdateData } from './types/bulk.js';
+export type {
+  BulkManifest,
+  BulkResult,
+  BulkRowOutcome,
+  BulkValidationResult,
+  ManifestUpdateData,
+  ProgressUpdate,
+} from './types/bulk.js';
 
 // Bulk Operations (E4-S03)
 export { JiraBulkApiWrapper } from './operations/JiraBulkApiWrapper.js';

@@ -364,6 +364,63 @@ describe('JiraClient', () => {
       await expect(client.get('/rest/api/2/field')).rejects.toThrow(NetworkError);
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
+
+    describe('POST is never resent after Jira may have processed it', () => {
+      const body = { issueUpdates: [] };
+
+      it('does not retry POST on timeout', async () => {
+        const abortError = new Error('The operation was aborted');
+        abortError.name = 'AbortError';
+        mockFetch.mockRejectedValue(abortError);
+
+        await expect(client.post('/rest/api/2/issue/bulk', body)).rejects.toThrow(/not retried/);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not retry POST on network error', async () => {
+        mockFetch.mockRejectedValue(new TypeError('fetch failed'));
+
+        await expect(client.post('/rest/api/2/issue/bulk', body)).rejects.toThrow(NetworkError);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not retry POST on 503', async () => {
+        mockFetch.mockResolvedValue({
+          ok: false,
+          status: 503,
+          json: async () => ({ errorMessages: ['Service unavailable'] }),
+        } as Response);
+
+        await expect(client.post('/rest/api/2/issue/bulk', body)).rejects.toThrow(JiraServerError);
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+
+      it('retries POST on 429 because Jira refused it unprocessed', async () => {
+        mockFetch
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 429,
+            json: async () => ({ errorMessages: ['Rate limit exceeded'] }),
+          } as Response)
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 201,
+            json: async () => ({ issues: [] }),
+          } as Response);
+
+        await expect(client.post('/rest/api/2/issue/bulk', body)).resolves.toEqual({ issues: [] });
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      });
+
+      it('still retries PUT on network error', async () => {
+        mockFetch
+          .mockRejectedValueOnce(new TypeError('fetch failed'))
+          .mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) } as Response);
+
+        await client.put('/rest/api/2/issue/TEST-1', { fields: {} });
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      });
+    });
   });
 
   describe('Error Normalization', () => {

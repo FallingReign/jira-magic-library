@@ -48,7 +48,13 @@ export interface BulkManifest {
 
   /** Rows whose create outcome could not be safely matched to the response */
   notConfirmed?: number[];
-  
+
+  /**
+   * Rows that were never sent because an earlier request threw.
+   * They were definitely not created and are safe to resend (retry includes them).
+   */
+  notSent?: number[];
+
   /** Map of row index to created issue key */
   created: Record<number, string>;
   
@@ -87,7 +93,7 @@ export interface BulkResult {
   /** Number of issues successfully created */
   succeeded: number;
   
-  /** Number of issues that failed */
+  /** Number of issues that failed, were not confirmed, or were not sent */
   failed: number;
   
   /** Per-row results */
@@ -96,8 +102,15 @@ export interface BulkResult {
     index: number;
     /** Whether creation succeeded */
     success: boolean;
-    /** Confirmed outcome for this row */
-    outcome?: 'created' | 'failed' | 'not_confirmed';
+    /**
+     * Outcome for this row:
+     * - `created`: Jira created it (`key` is set)
+     * - `failed`: Jira or validation rejected it (`error` is set)
+     * - `not_confirmed`: sent, but no usable reply; it may exist, check Jira before resending
+     * - `not_sent`: not created: never sent because an earlier request threw,
+     *   or Jira refused its request with 401/403; safe to resend
+     */
+    outcome?: BulkRowOutcome;
     /** Issue key if succeeded */
     key?: string;
     /** Error details if failed */
@@ -111,6 +124,39 @@ export interface BulkResult {
 
   /** Created Jira keys that could not be matched to request rows */
   unmatchedKeys?: string[];
+
+  /**
+   * Set when a bulk create request threw (network error, timeout, 5xx, 401/403, ...).
+   * Rows in that request are `not_confirmed`, or `not_sent` for 401/403
+   * (Jira refused it, nothing was created). Rows after it are `not_sent`.
+   */
+  sendError?: { name: string; message: string };
+}
+
+/** Per-row outcome of a bulk create. */
+export type BulkRowOutcome = 'created' | 'failed' | 'not_confirmed' | 'not_sent';
+
+/**
+ * Progress update passed to `onProgress` after each bulk create group returns.
+ * Counts come from Jira's bulk replies and span every hierarchy level.
+ */
+export interface ProgressUpdate {
+  /** Total rows in the operation (all levels) */
+  total: number;
+  /** Rows with a final answer so far: `created + failed` */
+  completed: number;
+  /** Rows still waiting for an answer: `total - completed` */
+  inProgress: number;
+  /** True when this update finished at least one more row */
+  progressMade: boolean;
+  /** Milliseconds since the last update that made progress (0 when this one did) */
+  timeSinceProgress: number;
+  /** @deprecated Always false since 3.1.0; there is no progress timeout. */
+  isStuck: boolean;
+  /** Rows Jira created so far */
+  created?: number;
+  /** Rows rejected so far (by Jira, validation, or a blocked parent) */
+  failed?: number;
 }
 
 /**

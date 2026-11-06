@@ -73,10 +73,7 @@ export interface FuzzyMatchConfig {
  * {
  *   timeout: {
  *     default: 15000,  // 15s default
- *     bulk: 60000,     // 60s for bulk operations
- *     progressTimeout: 120000,  // 2 minutes since last progress
- *     progressPolling: 2000,    // Poll every 2 seconds
- *     cleanupMarkers: true      // Clean up tracking labels
+ *     bulk: 60000,     // 60s per bulk create request (one group)
  *   }
  * }
  * ```
@@ -95,49 +92,50 @@ export interface TimeoutConfig {
   single?: number;
 
   /**
-   * Timeout for bulk operations in milliseconds.
-   * Takes precedence over `default` for bulk API calls.
-   *
-   * **IMPORTANT:** When `onProgress` callback is provided, this timeout is
-   * automatically disabled (set to Infinity) to allow operations to run
-   * indefinitely as long as progress is being made. The `progressTimeout`
-   * becomes the effective timeout mechanism in this case.
+   * Timeout in milliseconds for each bulk create request (one group of
+   * `bulk.groupSize` issues). Takes precedence over `default` for bulk calls.
+   * Set to `Infinity` for no time limit. Passing `onProgress` does not change it.
    *
    * @default 30000 (30 seconds)
    */
   bulk?: number;
 
   /**
-   * Progress-based timeout for bulk operations in milliseconds.
-   *
-   * Operation times out only if NO new issues are created for this duration.
-   * The timer RESETS every time progress is detected (at least one new issue).
-   *
-   * This allows operations to run indefinitely (hours or days) as long as
-   * progress continues. For example, creating 10,000 issues where each issue
-   * takes 30 seconds will run for 83+ hours without timing out, as long as
-   * at least one issue is created every 120 seconds.
-   *
-   * When `onProgress` callback is provided, this becomes the ONLY timeout
-   * mechanism (HTTP timeout is disabled automatically).
-   *
-   * @default 120000 (120 seconds / 2 minutes since last progress)
+   * @deprecated No effect since 3.1.0. Progress now comes from Jira's bulk
+   * replies after each group, so there is no progress-based timeout.
    */
   progressTimeout?: number;
 
   /**
-   * Polling interval for progress tracking in milliseconds.
-   * How often to check JIRA for newly created issues.
-   * @default 2000 (2 seconds)
+   * @deprecated No effect since 3.1.0. Progress no longer polls Jira.
    */
   progressPolling?: number;
 
   /**
-   * Whether to clean up tracking markers after bulk operations.
-   * When enabled, temporary labels are removed from created issues.
-   * @default true
+   * @deprecated No effect since 3.1.0. Bulk create no longer adds tracking
+   * labels, so there is nothing to clean up.
    */
   cleanupMarkers?: boolean;
+}
+
+/**
+ * Bulk create configuration.
+ *
+ * @example
+ * ```typescript
+ * { bulk: { groupSize: 25 } }
+ * ```
+ */
+export interface BulkConfig {
+  /**
+   * Number of issues sent per bulk create request. Each hierarchy level is
+   * split into groups of this size and sent one after another, in row order.
+   * Must be a whole number from 1 to 50 (Jira Cloud's per-request limit);
+   * other values throw a ConfigurationError.
+   *
+   * @default 10
+   */
+  groupSize?: number;
 }
 
 /**
@@ -291,6 +289,9 @@ export interface JMLConfig {
    * ```
    */
   timeout?: TimeoutConfig;
+
+  /** Bulk create settings (group size). */
+  bulk?: BulkConfig;
 }
 
 /**

@@ -1881,7 +1881,7 @@ describe('IssueOperations', () => {
   });
 
   describe('Progress Tracking HTTP Timeout Behavior', () => {
-    it('should disable HTTP timeout when onProgress callback provided', async () => {
+    it('keeps the configured bulk timeout when onProgress callback provided', async () => {
       // Arrange
       const mockBulkApiWrapper = {
         createBulk: jest.fn().mockResolvedValue({ created: [], failed: [] })
@@ -1920,10 +1920,10 @@ describe('IssueOperations', () => {
         onProgress: jest.fn()  // Progress callback provided
       });
 
-      // Assert: createBulk was called with Infinity timeout and the resolved bulk endpoint
+      // Assert: onProgress no longer overrides the timeout; timeout.bulk applies
       expect(mockBulkApiWrapper.createBulk).toHaveBeenCalledWith(
         expect.anything(),
-        Infinity,  // HTTP timeout should be disabled
+        undefined,
         '/rest/api/2/issue/bulk'  // Resolved bulk-create endpoint
       );
     });

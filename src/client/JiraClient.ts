@@ -174,8 +174,7 @@ export class JiraClientImpl implements JiraClient {
           // Create abort controller for timeout
           const controller = new AbortController();
 
-          // Only set timeout if not Infinity (Phase 2.2 Hotfix)
-          // When timeout is Infinity, we rely on progress-based timeout instead
+          // Infinity means no time limit for this request
           const timeoutId = timeout !== Infinity
             ? setTimeout(() => controller.abort(), timeout)
             : undefined;
@@ -224,8 +223,10 @@ export class JiraClientImpl implements JiraClient {
             errorMessages: ['Unknown error'],
           }))) as JiraErrorResponse;
 
-          // Retry on 429 (rate limit) or 503 (service unavailable)
-          if (response.status === 429 || response.status === 503) {
+          // Retry on 429 (rate limit) or 503 (service unavailable).
+          // A 503 may come from a proxy after Jira received the request, so POST
+          // only retries 429, where Jira refused the request without processing it.
+          if (response.status === 429 || (response.status === 503 && method !== 'POST')) {
             if (attempt < this.maxRetries - 1) {
               // Rate limiting retry
               const delay = this.retryDelays[attempt]!;
@@ -265,6 +266,14 @@ export class JiraClientImpl implements JiraClient {
             error.message.includes('fetch') ||
             error.message.includes('network')
           )) {
+            // Never resend a POST: Jira may already have processed it, so a
+            // resend could create duplicate issues.
+            if (method === 'POST') {
+              throw new NetworkError(
+                'POST request failed and was not retried (Jira may have processed it)',
+                { url, attempt: attempt + 1, originalError: error.message }
+              );
+            }
             if (attempt < this.maxRetries - 1) {
               const delay = this.retryDelays[attempt]!;
               // Network error retry
