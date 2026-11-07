@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Only tagged releases are listed.
 
-## [Unreleased] - target 3.1.0
+## [3.1.0] - 2026-11-07
 
 ### Added
 - **Grouped bulk create** — Every bulk create (flat, hierarchy and manifest retry) is sent in groups of `bulk.groupSize` rows, one request at a time, in row order. Default 10; allowed 1–50. Values outside that range, or non-integers, throw `ConfigurationError` when `JML` is constructed. Jira Cloud's OpenAPI description of `POST /rest/api/3/issue/bulk` says it "Creates upto 50 issues", so larger single requests failed on Cloud before.
